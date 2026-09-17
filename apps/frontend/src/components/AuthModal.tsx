@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { LogIn, UserPlus, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react';
-import { api, setMockMode } from '../api/client';
+import { LogIn, UserPlus, AlertCircle, CheckCircle2, User as UserIcon, ShieldCheck } from 'lucide-react';
+import { api, loginAsDemoUser } from '../api/client';
 import { User } from '../types';
 
 interface Props {
@@ -37,11 +37,9 @@ export function AuthModal({ onSuccess }: Props) {
     }
   };
 
-  const handleDemoMockLogin = () => {
-    setMockMode(true);
-    api.getMe().then((user) => {
-      onSuccess(user);
-    });
+  const handleDemoLogin = async (demoUsername: string) => {
+    const user = await loginAsDemoUser(demoUsername);
+    onSuccess(user);
   };
 
   return (
@@ -142,16 +140,31 @@ export function AuthModal({ onSuccess }: Props) {
           </button>
         </form>
 
-        {/* Demo Mode / Toggle */}
-        <div className="mt-6 pt-5 border-t border-[#1C3945]/80 flex flex-col space-y-3">
-          <button
-            onClick={handleDemoMockLogin}
-            type="button"
-            className="w-full flex items-center justify-center space-x-2 bg-[#102833]/80 hover:bg-[#102833] text-[#F0D48D] border border-[#D9B96E]/30 hover:border-[#D9B96E]/60 font-medium py-2.5 px-4 rounded-xl text-xs transition shadow-sm"
-          >
-            <Sparkles className="w-4 h-4 text-[#D9B96E]" />
-            <span>Демо-вход без сервера (Forve Admin)</span>
-          </button>
+        {/* Demo Mode / Quick Logins */}
+        <div className="mt-6 pt-5 border-t border-[#1C3945]/80 flex flex-col space-y-2.5">
+          <div className="text-[10px] text-center font-mono uppercase tracking-widest text-[#718187] mb-1">
+            Быстрый демо-вход (Mock-режим)
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              onClick={() => handleDemoLogin('alice')}
+              type="button"
+              className="flex items-center justify-center space-x-1.5 bg-[#102833]/80 hover:bg-[#102833] text-[#6EA8C4] hover:text-[#9cd0e6] border border-[#6EA8C4]/30 hover:border-[#6EA8C4]/60 font-medium py-2.5 px-3 rounded-xl text-xs transition shadow-sm font-mono"
+            >
+              <UserIcon className="w-3.5 h-3.5 text-[#6EA8C4]" />
+              <span>Клиент (Alice)</span>
+            </button>
+
+            <button
+              onClick={() => handleDemoLogin('Forve')}
+              type="button"
+              className="flex items-center justify-center space-x-1.5 bg-[#102833]/80 hover:bg-[#102833] text-[#F0D48D] hover:text-white border border-[#D9B96E]/30 hover:border-[#D9B96E]/60 font-medium py-2.5 px-3 rounded-xl text-xs transition shadow-sm font-mono"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-[#D9B96E]" />
+              <span>Админ (Forve)</span>
+            </button>
+          </div>
 
           <button
             onClick={() => {
@@ -159,7 +172,7 @@ export function AuthModal({ onSuccess }: Props) {
               setError(null);
               setSuccessMsg(null);
             }}
-            className="text-xs text-[#A8B4B7] hover:text-[#F2F0E8] transition text-center font-medium"
+            className="text-xs text-[#A8B4B7] hover:text-[#F2F0E8] transition text-center font-medium pt-2"
           >
             {isRegister ? 'Уже есть учетная запись? Войти' : 'Новый пользователь? Зарегистрироваться'}
           </button>

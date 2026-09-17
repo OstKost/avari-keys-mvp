@@ -1,16 +1,14 @@
 import { User, NodePublic, AdminNode, ClientConfigSummary, ClientConfigDetail } from '../types';
 
 // In-memory mock storage for standalone FE development
-let mockCurrentUser: User = {
-  id: 1,
-  username: 'Forve',
-  role: 'admin',
-  is_active: true,
-  created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-};
-
 let mockUsers: User[] = [
-  mockCurrentUser,
+  {
+    id: 1,
+    username: 'Forve',
+    role: 'admin',
+    is_active: true,
+    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+  },
   {
     id: 2,
     username: 'alice',
@@ -26,6 +24,8 @@ let mockUsers: User[] = [
     created_at: new Date(Date.now() - 3600000 * 3).toISOString(),
   },
 ];
+
+let mockCurrentUser: User = mockUsers[0];
 
 let mockNodes: AdminNode[] = [
   {
@@ -51,9 +51,9 @@ let mockNodes: AdminNode[] = [
 let mockKeys: (ClientConfigDetail & { user_id: number })[] = [
   {
     id: 1,
-    user_id: 1,
+    user_id: 1, // Forve Admin
     client_name: 'u1_iphone15',
-    device_name: 'iPhone 15 Pro',
+    device_name: 'iphone_15_pro',
     node_id: 1,
     node_name: 'Каскад M0 (Москва) -> S1 (Амстердам)',
     node_type: 'cascade',
@@ -79,9 +79,9 @@ PersistentKeepalive = 25`,
   },
   {
     id: 2,
-    user_id: 1,
+    user_id: 1, // Forve Admin
     client_name: 'u1_macbook',
-    device_name: 'MacBook M3 Max',
+    device_name: 'macbook_m3_max',
     node_id: 2,
     node_name: 'Прямой туннель S2 (Франкфурт)',
     node_type: 'direct',
@@ -105,6 +105,34 @@ AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25`,
     created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
   },
+  {
+    id: 3,
+    user_id: 2, // Alice User
+    client_name: 'u2_alice_phone',
+    device_name: 'alice_iphone14',
+    node_id: 1,
+    node_name: 'Каскад M0 (Москва) -> S1 (Амстердам)',
+    node_type: 'cascade',
+    config: `[Interface]
+Address = 10.7.0.5/32
+PrivateKey = aMockAlicePrivateKeyCascade99887766=
+Jc = 4
+Jmin = 40
+Jmax = 70
+S1 = 15
+S2 = 25
+H1 = 1
+H2 = 2
+H3 = 3
+H4 = 4
+
+[Peer]
+PublicKey = aMockServerPublicKeyForDemoPurposes8901234=
+Endpoint = 198.51.100.1:51820
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25`,
+    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+  },
 ];
 
 export const mockApi = {
@@ -119,6 +147,16 @@ export const mockApi = {
     mockCurrentUser = user;
     localStorage.setItem('token', 'mock-jwt-token-' + user.username);
     return { token: 'mock-jwt-token-' + user.username, user };
+  },
+
+  async setDemoUser(username: string): Promise<User> {
+    const user = mockUsers.find((u) => u.username.toLowerCase() === username.toLowerCase());
+    if (user) {
+      mockCurrentUser = user;
+      localStorage.setItem('token', 'mock-jwt-token-' + user.username);
+      return user;
+    }
+    return mockCurrentUser;
   },
 
   async register(username: string, _password: string): Promise<{ message: string; user: User }> {
@@ -171,7 +209,7 @@ export const mockApi = {
     const nodeName = node ? node.name : 'Unknown Node';
     const nodeType = node ? node.type : 'direct';
     const id = mockKeys.length + 1;
-    const clientName = `u${mockCurrentUser.id}_${deviceName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    const clientName = `u${mockCurrentUser.id}_${deviceName.toLowerCase().replace(/[^a-z0-9_-]/g, '_')}`;
 
     const config = `[Interface]
 Address = 10.${nodeType === 'cascade' ? '7' : '8'}.0.${id + 4}/32
