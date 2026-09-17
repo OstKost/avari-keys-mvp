@@ -11,10 +11,48 @@ body {
   display: flex;
   min-width: 320px;
   min-height: 100vh;
-  background-color: #0f172a;
-  color: #f8fafc;
+  background-color: #06141B;
+  color: #F2F0E8;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(20, 50, 65, 0.3) 0%, transparent 60%),
+    radial-gradient(circle at 100% 100%, rgba(217, 185, 110, 0.03) 0%, transparent 40%);
+  background-attachment: fixed;
 }
 
 #root {
   width: 100%;
+}
+
+/* Custom Elven Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #06141B;
+}
+::-webkit-scrollbar-thumb {
+  background: #1C3945;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #D9B96E;
+}
+
+/* Gold Text Gradient */
+.text-gold-gradient {
+  background: linear-gradient(135deg, #F0D48D 0%, #D9B96E 60%, #A98A48 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Subtle Shimmer */
+@keyframes elvenGlow {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+.animate-elven-glow {
+  animation: elvenGlow 3s ease-in-out infinite;
 }

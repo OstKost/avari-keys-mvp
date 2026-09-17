@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, LogIn, UserPlus, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react';
+import { LogIn, UserPlus, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react';
 import { api, setMockMode } from '../api/client';
 import { User } from '../types';
 
@@ -24,7 +24,7 @@ export function AuthModal({ onSuccess }: Props) {
     try {
       if (isRegister) {
         await api.register(username.trim(), password);
-        setSuccessMsg('Регистрация успешна! Ваш аккаунт ожидает подтверждения администратором Forve.');
+        setSuccessMsg('Учетная запись создана. Ожидайте подтверждения администратором Forve.');
         setIsRegister(false);
       } else {
         const data = await api.login(username.trim(), password);
@@ -45,49 +45,70 @@ export function AuthModal({ onSuccess }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4">
-      <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl relative">
-        <div className="flex flex-col items-center text-center mb-6">
-          <div className="bg-brand-600 p-3 rounded-2xl text-white shadow-xl shadow-brand-600/30 mb-3">
-            <Shield className="w-8 h-8" />
+    <div className="relative min-h-screen flex items-center justify-center p-4 bg-[#06141B] overflow-hidden">
+      {/* Fantasy Elven Background Art */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-40 mix-blend-luminosity scale-105 transition duration-1000"
+        style={{ backgroundImage: "url('/assets/background_main.png')" }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-[#06141B] via-[#06141B]/80 to-[#06141B]/60" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(217,185,110,0.08)_0%,transparent_60%)]" />
+
+      {/* Login Card */}
+      <div className="relative z-10 max-w-md w-full bg-[#0A1D26]/90 backdrop-blur-xl border border-[#1C3945] hover:border-[#D9B96E]/40 rounded-3xl p-8 sm:p-10 shadow-2xl shadow-black/80 transition-all duration-500">
+        
+        {/* Brand Logo & Header */}
+        <div className="flex flex-col items-center text-center mb-8">
+          <div className="relative mb-3 group">
+            <div className="absolute -inset-2 bg-[#D9B96E]/20 rounded-full blur-lg opacity-70 group-hover:opacity-100 transition" />
+            <img 
+              src="/assets/logo_star.png" 
+              alt="Avari Keys Star" 
+              className="relative w-14 h-14 object-contain filter drop-shadow-[0_0_12px_rgba(217,185,110,0.5)]" 
+            />
           </div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">Avari Keys MVP</h2>
-          <p className="text-xs text-slate-400 mt-1">
-            {isRegister ? 'Создание учетной записи' : 'Вход в панель управления AmneziaWG'}
+          
+          <h1 className="font-serif text-3xl font-bold tracking-wider text-gold-gradient uppercase">
+            Avari Keys
+          </h1>
+          <p className="text-xs text-[#A8B4B7] tracking-widest uppercase mt-1 font-mono">
+            {isRegister ? 'Регистрация хранителя' : 'Свобода выбора • Твои ключи'}
           </p>
         </div>
 
+        {/* Status Alerts */}
         {error && (
-          <div className="flex items-start space-x-2 bg-rose-950/50 border border-rose-800/80 text-rose-300 text-xs p-3 rounded-xl mb-4">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <div className="flex items-start space-x-2.5 bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs p-3.5 rounded-xl mb-5 shadow-lg">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-400" />
             <span>{error}</span>
           </div>
         )}
 
         {successMsg && (
-          <div className="flex items-start space-x-2 bg-emerald-950/50 border border-emerald-800/80 text-emerald-300 text-xs p-3 rounded-xl mb-4">
-            <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <div className="flex items-start space-x-2.5 bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 text-xs p-3.5 rounded-xl mb-5 shadow-lg">
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-400" />
             <span>{successMsg}</span>
           </div>
         )}
 
+        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+            <label className="block text-[11px] font-semibold text-[#A8B4B7] uppercase tracking-wider mb-1.5 font-mono">
               Имя пользователя
             </label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="например: user1 или Forve"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-brand-500 transition"
+              placeholder="например: Forve или user1"
+              className="w-full bg-[#0D222C] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-4 py-3 text-sm text-[#F2F0E8] placeholder-[#718187] focus:outline-none focus:ring-1 focus:ring-[#D9B96E]/50 transition shadow-inner font-sans"
               required
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+            <label className="block text-[11px] font-semibold text-[#A8B4B7] uppercase tracking-wider mb-1.5 font-mono">
               Пароль
             </label>
             <input
@@ -95,7 +116,7 @@ export function AuthModal({ onSuccess }: Props) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-brand-500 transition"
+              className="w-full bg-[#0D222C] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-4 py-3 text-sm text-[#F2F0E8] placeholder-[#718187] focus:outline-none focus:ring-1 focus:ring-[#D9B96E]/50 transition shadow-inner font-sans"
               required
             />
           </div>
@@ -103,32 +124,33 @@ export function AuthModal({ onSuccess }: Props) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-medium py-3 px-4 rounded-xl shadow-lg shadow-brand-600/30 transition flex items-center justify-center space-x-2"
+            className="w-full mt-3 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300 flex items-center justify-center space-x-2 text-sm uppercase tracking-wider font-mono"
           >
             {loading ? (
-              <span>Подождите...</span>
+              <span>Авторизация...</span>
             ) : isRegister ? (
               <>
                 <UserPlus className="w-4 h-4" />
-                <span>Зарегистрироваться</span>
+                <span>Создать аккаунт</span>
               </>
             ) : (
               <>
                 <LogIn className="w-4 h-4" />
-                <span>Войти в аккаунт</span>
+                <span>Войти в систему</span>
               </>
             )}
           </button>
         </form>
 
-        <div className="mt-4 pt-4 border-t border-slate-800 flex flex-col space-y-3">
+        {/* Demo Mode / Toggle */}
+        <div className="mt-6 pt-5 border-t border-[#1C3945]/80 flex flex-col space-y-3">
           <button
             onClick={handleDemoMockLogin}
             type="button"
-            className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-amber-500/10 to-brand-500/10 hover:from-amber-500/20 hover:to-brand-500/20 text-amber-300 border border-amber-500/30 font-medium py-2.5 px-4 rounded-xl text-xs transition"
+            className="w-full flex items-center justify-center space-x-2 bg-[#102833]/80 hover:bg-[#102833] text-[#F0D48D] border border-[#D9B96E]/30 hover:border-[#D9B96E]/60 font-medium py-2.5 px-4 rounded-xl text-xs transition shadow-sm"
           >
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <span>Войти в Demo / Mock режиме (Forve Admin)</span>
+            <Sparkles className="w-4 h-4 text-[#D9B96E]" />
+            <span>Демо-вход без сервера (Forve Admin)</span>
           </button>
 
           <button
@@ -137,11 +159,12 @@ export function AuthModal({ onSuccess }: Props) {
               setError(null);
               setSuccessMsg(null);
             }}
-            className="text-xs text-slate-400 hover:text-white transition font-medium text-center"
+            className="text-xs text-[#A8B4B7] hover:text-[#F2F0E8] transition text-center font-medium"
           >
-            {isRegister ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться'}
+            {isRegister ? 'Уже есть учетная запись? Войти' : 'Новый пользователь? Зарегистрироваться'}
           </button>
         </div>
+
       </div>
     </div>
   );
