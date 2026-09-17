@@ -14,21 +14,33 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const handleDeviceNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Only allow Latin letters, digits, underscore, and dash
+    const filtered = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '');
+    setDeviceName(filtered);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedNodeId) {
       setError('Пожалуйста, выберите сервер');
       return;
     }
-    if (!deviceName.trim()) {
-      setError('Пожалуйста, укажите имя устройства (например, iPhone, Ноутбук)');
+    const cleanName = deviceName.trim();
+    if (!cleanName) {
+      setError('Пожалуйста, укажите имя устройства');
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(cleanName)) {
+      setError('Имя устройства может содержать только латинские буквы, цифры, дефис и подчеркивание (a-z, 0-9, _, -)');
       return;
     }
 
     try {
       setLoading(true);
       setError(null);
-      await onCreate(selectedNodeId, deviceName.trim());
+      await onCreate(selectedNodeId, cleanName);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Ошибка создания ключа');
@@ -118,12 +130,17 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
             </label>
             <input
               type="text"
-              placeholder="например: iPhone 15, MacBook Pro, Домашний ПК"
+              placeholder="например: iphone_15, macbook-pro, home_pc"
               value={deviceName}
-              onChange={(e) => setDeviceName(e.target.value)}
-              className="w-full bg-[#0D222C] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-4 py-3 text-sm text-[#F2F0E8] placeholder-[#718187] focus:outline-none focus:ring-1 focus:ring-[#D9B96E]/50 transition shadow-inner font-sans"
+              onChange={handleDeviceNameChange}
+              pattern="^[a-zA-Z0-9_-]{1,64}$"
+              title="Только латинские буквы, цифры, дефис и знак подчеркивания"
+              className="w-full bg-[#0D222C] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-4 py-3 text-sm text-[#F2F0E8] placeholder-[#718187] focus:outline-none focus:ring-1 focus:ring-[#D9B96E]/50 transition shadow-inner font-mono"
               required
             />
+            <p className="text-[10px] text-[#718187] font-mono mt-1.5">
+              * Разрешены только латинские буквы (a-z, A-Z), цифры (0-9), дефис (-) и подчеркивание (_)
+            </p>
           </div>
 
           <button

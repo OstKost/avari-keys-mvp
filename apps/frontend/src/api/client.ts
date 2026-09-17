@@ -19,6 +19,11 @@ export const setMockMode = (enabled: boolean) => {
   }
 };
 
+export const loginAsDemoUser = async (username: string): Promise<User> => {
+  setMockMode(true);
+  return mockApi.setDemoUser(username);
+};
+
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('token');
   const headers: HeadersInit = {
@@ -186,8 +191,8 @@ const realApi = {
 export const api = new Proxy(realApi, {
   get(target, prop: keyof typeof realApi) {
     if (isMockMode()) {
-      return mockApi[prop] || target[prop];
+      return (mockApi as any)[prop] || (target as any)[prop];
     }
-    return target[prop];
+    return (target as any)[prop];
   },
 });
