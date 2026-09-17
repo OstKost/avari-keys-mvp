@@ -1,4 +1,15 @@
-import { User, NodePublic, AdminNode, ClientConfigSummary, ClientConfigDetail, PaginatedKeysResponse } from '../types';
+import {
+  User,
+  NodePublic,
+  AdminNode,
+  ClientConfigSummary,
+  ClientConfigDetail,
+  PaginatedKeysResponse,
+  AuditLog,
+  PaginatedAuditLogsResponse,
+  AuditLogFilterParams,
+  CleanupLogsResponse,
+} from '../types';
 
 // In-memory mock storage for standalone FE development
 let mockUsers: User[] = [
@@ -22,6 +33,109 @@ let mockUsers: User[] = [
     role: 'user',
     is_active: false,
     created_at: new Date(Date.now() - 3600000 * 3).toISOString(),
+  },
+];
+
+let mockLogs: AuditLog[] = [
+  {
+    id: 1,
+    user_id: 1,
+    username: 'Forve',
+    action: 'auth_login',
+    category: 'auth',
+    ip_address: '192.168.1.10',
+    details: 'Успешная авторизация в системе',
+    created_at: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+  },
+  {
+    id: 2,
+    user_id: 1,
+    username: 'Forve',
+    action: 'admin_user_activate',
+    category: 'admin',
+    ip_address: '192.168.1.10',
+    details: 'Активирован доступ для пользователя «alice» (ID #2)',
+    created_at: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+  },
+  {
+    id: 3,
+    user_id: 2,
+    username: 'alice',
+    action: 'auth_login',
+    category: 'auth',
+    ip_address: '178.62.204.15',
+    details: 'Успешная авторизация в системе',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+  },
+  {
+    id: 4,
+    user_id: 2,
+    username: 'alice',
+    action: 'key_create',
+    category: 'keys',
+    ip_address: '178.62.204.15',
+    details: 'Создан VPN-ключ «iPhone 15» (u2_iphone15) на сервере «Каскад M0 -> S1»',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
+  },
+  {
+    id: 5,
+    user_id: 2,
+    username: 'alice',
+    action: 'key_view',
+    category: 'keys',
+    ip_address: '178.62.204.15',
+    details: 'Просмотр конфигурации / QR-кода ключа «iPhone 15» (u2_iphone15)',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 3 + 1000 * 30).toISOString(),
+  },
+  {
+    id: 6,
+    user_id: 3,
+    username: 'bob_new',
+    action: 'auth_register',
+    category: 'auth',
+    ip_address: '94.25.180.44',
+    details: 'Регистрация нового аккаунта (ожидает подтверждения администратора)',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
+  },
+  {
+    id: 7,
+    user_id: 3,
+    username: 'bob_new',
+    action: 'auth_login_blocked',
+    category: 'auth',
+    ip_address: '94.25.180.44',
+    details: 'Попытка входа в неактивированный аккаунт',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 11).toISOString(),
+  },
+  {
+    id: 8,
+    user_id: 1,
+    username: 'Forve',
+    action: 'admin_node_restart',
+    category: 'admin',
+    ip_address: '192.168.1.10',
+    details: 'Перезапущен сервис AmneziaWG на узле «Каскад M0 -> S1»',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+  },
+  {
+    id: 9,
+    user_id: 1,
+    username: 'Forve',
+    action: 'admin_node_backup',
+    category: 'admin',
+    ip_address: '192.168.1.10',
+    details: 'Выгружена резервная копия конфигурации узла «Прямой S2»',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
+  },
+  {
+    id: 10,
+    user_id: 1,
+    username: 'Forve',
+    action: 'profile_update',
+    category: 'profile',
+    ip_address: '192.168.1.10',
+    details: 'Обновлены учетные данные профиля',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString(),
   },
 ];
 
@@ -437,4 +551,77 @@ PersistentKeepalive = 25`;
       total_pages: totalPages,
     };
   },
+
+  async getAdminAuditLogs(params?: AuditLogFilterParams): Promise<PaginatedAuditLogsResponse> {
+    let filtered = [...mockLogs];
+
+    if (params?.userId) {
+      filtered = filtered.filter((l) => l.user_id === params.userId);
+    }
+
+    if (params?.username) {
+      const u = params.username.toLowerCase().trim();
+      filtered = filtered.filter((l) => l.username.toLowerCase().includes(u));
+    }
+
+    if (params?.category) {
+      filtered = filtered.filter((l) => l.category === params.category);
+    }
+
+    if (params?.action) {
+      filtered = filtered.filter((l) => l.action === params.action);
+    }
+
+    if (params?.from) {
+      const fromTime = new Date(params.from).getTime();
+      filtered = filtered.filter((l) => new Date(l.created_at).getTime() >= fromTime);
+    }
+
+    if (params?.to) {
+      const toTime = new Date(params.to).getTime() + 86400000; // end of day
+      filtered = filtered.filter((l) => new Date(l.created_at).getTime() <= toTime);
+    }
+
+    const page = params?.page && params.page > 0 ? params.page : 1;
+    const limit = params?.limit && params.limit > 0 ? params.limit : 50;
+    const totalCount = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+
+    const startIndex = (page - 1) * limit;
+    const paged = filtered.slice(startIndex, startIndex + limit);
+
+    return {
+      logs: paged,
+      total_count: totalCount,
+      page,
+      limit,
+      total_pages: totalPages,
+    };
+  },
+
+  async cleanupAdminAuditLogs(days: number = 90): Promise<CleanupLogsResponse> {
+    const cutoff = Date.now() - days * 86400000;
+    const beforeCount = mockLogs.length;
+    mockLogs = mockLogs.filter((l) => new Date(l.created_at).getTime() >= cutoff);
+    const deleted = beforeCount - mockLogs.length;
+
+    // Log the cleanup action in mock
+    mockLogs.unshift({
+      id: mockLogs.length + 1,
+      user_id: mockCurrentUser.id,
+      username: mockCurrentUser.username,
+      action: 'admin_logs_cleanup',
+      category: 'admin',
+      ip_address: '127.0.0.1',
+      details: `Очищен журнал аудита старше ${days} дней (удалено записей: ${deleted})`,
+      created_at: new Date().toISOString(),
+    });
+
+    return {
+      success: true,
+      message: `Успешно удалено записей старше ${days} дней: ${deleted}`,
+      deleted_count: deleted,
+    };
+  },
 };
+

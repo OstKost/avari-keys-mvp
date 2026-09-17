@@ -94,6 +94,22 @@ func (s *Storage) migrate() error {
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
 		FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
 	);
+
+	CREATE TABLE IF NOT EXISTS audit_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER,
+		username TEXT NOT NULL,
+		action TEXT NOT NULL,
+		category TEXT NOT NULL,
+		ip_address TEXT,
+		details TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+	CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+	CREATE INDEX IF NOT EXISTS idx_audit_logs_category ON audit_logs(category);
 	`
 	_, err := s.db.Exec(schema)
 	return err
@@ -487,4 +503,159 @@ func (s *Storage) DeleteClientConfig(ctx context.Context, id int64) error {
 		return errors.New("client config not found")
 	}
 	return nil
+}
+
+// AuditLog methods
+func (s *Storage) CreateAuditLog(ctx context.Context, log *models.AuditLog) error {
+	if log.Username == "" {
+		log.Username = "anonymous"
+	}
+	if log.Category == "" {
+		log.Category = models.CategoryAuth
+	}
+
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO audit_logs (user_id, username, action, category, ip_address, details)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, log.UserID, log.Username, log.Action, string(log.Category), log.IPAddress, log.Details)
+	if err != nil {
+		return err
+	}
+	id, err := res.LastInsertId()
+	if err == nil {
+		log.ID = id
+	}
+	return nil
+}
+
+func (s *Storage) ListAuditLogs(ctx context.Context, filter models.AuditLogFilter) ([]models.AuditLog, int, error) {
+	var whereClauses []string
+	var args []any
+
+	if filter.UserID != nil && *filter.UserID > 0 {
+		whereClauses = append(whereClauses, "user_id = ?")
+		args = append(args, *filter.UserID)
+	}
+
+	if filter.Username != "" {
+		whereClauses = append(whereClauses, "username LIKE ?")
+		args = append(args, "%"+filter.Username+"%")
+	}
+
+	if filter.Category != "" {
+		whereClauses = append(whereClauses, "category = ?")
+		args = append(args, filter.Category)
+	}
+
+	if filter.Action != "" {
+		whereClauses = append(whereClauses, "action = ?")
+		args = append(args, filter.Action)
+	}
+
+	if filter.FromDate != "" {
+		// Expecting YYYY-MM-DD or full timestamp
+		fromVal := filter.FromDate
+		if len(fromVal) == 10 {
+			fromVal += " 00:00:00"
+		}
+		whereClauses = append(whereClauses, "created_at >= ?")
+		args = append(args, fromVal)
+	}
+
+	if filter.ToDate != "" {
+		toVal := filter.ToDate
+		if len(toVal) == 10 {
+			toVal += " 23:59:59"
+		}
+		whereClauses = append(whereClauses, "created_at <= ?")
+		args = append(args, toVal)
+	}
+
+	whereSQL := ""
+	if len(whereClauses) > 0 {
+		whereSQL = " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	// Count total
+	countQuery := "SELECT COUNT(*) FROM audit_logs" + whereSQL
+	var totalCount int
+	err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	limit := filter.Limit
+	if limit < 1 {
+		limit = 50
+	}
+	offset := (page - 1) * limit
+
+	query := `
+		SELECT id, user_id, username, action, category, ip_address, details, created_at
+		FROM audit_logs
+	` + whereSQL + " ORDER BY id DESC LIMIT ? OFFSET ?"
+
+	queryArgs := append(args, limit, offset)
+	rows, err := s.db.QueryContext(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var logs []models.AuditLog
+	for rows.Next() {
+		var l models.AuditLog
+		var categoryStr string
+		var rawUserID sql.NullInt64
+		var rawIP, rawDetails sql.NullString
+
+		if err := rows.Scan(
+			&l.ID,
+			&rawUserID,
+			&l.Username,
+			&l.Action,
+			&categoryStr,
+			&rawIP,
+			&rawDetails,
+			&l.CreatedAt,
+		); err != nil {
+			return nil, 0, err
+		}
+
+		if rawUserID.Valid {
+			uid := rawUserID.Int64
+			l.UserID = &uid
+		}
+		if rawIP.Valid {
+			l.IPAddress = rawIP.String
+		}
+		if rawDetails.Valid {
+			l.Details = rawDetails.String
+		}
+		l.Category = models.AuditLogCategory(categoryStr)
+		logs = append(logs, l)
+	}
+
+	if logs == nil {
+		logs = []models.AuditLog{}
+	}
+
+	return logs, totalCount, nil
+}
+
+func (s *Storage) PurgeAuditLogsOlderThan(ctx context.Context, days int) (int64, error) {
+	if days <= 0 {
+		days = 90
+	}
+
+	query := fmt.Sprintf("DELETE FROM audit_logs WHERE created_at < datetime('now', '-%d days')", days)
+	res, err := s.db.ExecContext(ctx, query)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }

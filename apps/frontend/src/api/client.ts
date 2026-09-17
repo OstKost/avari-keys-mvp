@@ -1,4 +1,14 @@
-import { User, NodePublic, AdminNode, ClientConfigSummary, ClientConfigDetail, PaginatedKeysResponse } from '../types';
+import {
+  User,
+  NodePublic,
+  AdminNode,
+  ClientConfigSummary,
+  ClientConfigDetail,
+  PaginatedKeysResponse,
+  PaginatedAuditLogsResponse,
+  AuditLogFilterParams,
+  CleanupLogsResponse,
+} from '../types';
 import { mockApi } from './mockClient';
 
 const API_BASE = '/api/v1';
@@ -242,6 +252,33 @@ const realApi = {
       headers: getAuthHeaders(),
     });
     return handleResponse<PaginatedKeysResponse>(res);
+  },
+
+  async getAdminAuditLogs(params?: AuditLogFilterParams): Promise<PaginatedAuditLogsResponse> {
+    const query = new URLSearchParams();
+    if (params?.userId) query.set('user_id', params.userId.toString());
+    if (params?.username) query.set('username', params.username);
+    if (params?.category) query.set('category', params.category);
+    if (params?.action) query.set('action', params.action);
+    if (params?.from) query.set('from', params.from);
+    if (params?.to) query.set('to', params.to);
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetch(`${API_BASE}/admin/logs${qs}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<PaginatedAuditLogsResponse>(res);
+  },
+
+  async cleanupAdminAuditLogs(days: number = 90): Promise<CleanupLogsResponse> {
+    const res = await fetch(`${API_BASE}/admin/logs/cleanup`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ days }),
+    });
+    return handleResponse<CleanupLogsResponse>(res);
   },
 };
 

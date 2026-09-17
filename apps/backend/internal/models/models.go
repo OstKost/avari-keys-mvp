@@ -122,3 +122,58 @@ type UpdateProfileRequest struct {
 type SetRoleRequest struct {
 	Role Role `json:"role"`
 }
+
+// AuditLogCategory represents the category of the logged action.
+type AuditLogCategory string
+
+const (
+	CategoryAuth    AuditLogCategory = "auth"
+	CategoryKeys    AuditLogCategory = "keys"
+	CategoryProfile AuditLogCategory = "profile"
+	CategoryAdmin   AuditLogCategory = "admin"
+)
+
+// AuditLog represents a single action performed in the system.
+type AuditLog struct {
+	ID        int64            `json:"id"`
+	UserID    *int64           `json:"user_id,omitempty"`
+	Username  string           `json:"username"`
+	Action    string           `json:"action"`
+	Category  AuditLogCategory `json:"category"`
+	IPAddress string           `json:"ip_address,omitempty"`
+	Details   string           `json:"details,omitempty"`
+	CreatedAt time.Time        `json:"created_at"`
+}
+
+// PaginatedAuditLogsResponse represents paginated audit logs for the admin UI.
+type PaginatedAuditLogsResponse struct {
+	Logs       []AuditLog `json:"logs"`
+	TotalCount int        `json:"total_count"`
+	Page       int        `json:"page"`
+	Limit      int        `json:"limit"`
+	TotalPages int        `json:"total_pages"`
+}
+
+// AuditLogFilter contains filter criteria for querying logs.
+type AuditLogFilter struct {
+	UserID   *int64
+	Username string
+	Category string
+	Action   string
+	FromDate string // YYYY-MM-DD or RFC3339
+	ToDate   string // YYYY-MM-DD or RFC3339
+	Page     int
+	Limit    int
+}
+
+// CleanupLogsRequest for pruning old logs.
+type CleanupLogsRequest struct {
+	Days int `json:"days"`
+}
+
+// CleanupLogsResponse returns number of deleted logs.
+type CleanupLogsResponse struct {
+	Success      bool   `json:"success"`
+	Message      string `json:"message"`
+	DeletedCount int64  `json:"deleted_count"`
+}

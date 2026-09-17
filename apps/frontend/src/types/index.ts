@@ -62,3 +62,42 @@ export interface ClientConfigDetail {
   qr_code?: string;
   created_at: string;
 }
+
+export type AuditLogCategory = 'auth' | 'keys' | 'profile' | 'admin';
+
+export interface AuditLog {
+  id: number;
+  user_id?: number;
+  username: string;
+  action: string;
+  category: AuditLogCategory;
+  ip_address?: string;
+  details?: string;
+  created_at: string;
+}
+
+export interface PaginatedAuditLogsResponse {
+  logs: AuditLog[];
+  total_count: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+}
+
+export interface AuditLogFilterParams {
+  userId?: number;
+  username?: string;
+  category?: string;
+  action?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CleanupLogsResponse {
+  success: boolean;
+  message: string;
+  deleted_count: number;
+}
+

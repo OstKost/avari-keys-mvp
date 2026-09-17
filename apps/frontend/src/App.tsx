@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Key, Server, Users, LogOut, Plus, QrCode as QrIcon, Trash2, Smartphone, Laptop, AlertCircle, Sparkles, ShieldCheck, User as UserIcon } from 'lucide-react';
+import { Key, Server, Users, LogOut, Plus, QrCode as QrIcon, Trash2, Smartphone, Laptop, AlertCircle, Sparkles, ShieldCheck, User as UserIcon, ScrollText } from 'lucide-react';
 import { api, isMockMode, setMockMode } from './api/client';
 import { User, NodePublic, ClientConfigSummary, ClientConfigDetail } from './types';
 import { AuthModal } from './components/AuthModal';
@@ -10,13 +10,14 @@ import { useToast } from './context/ToastContext';
 import { AdminUsers } from './components/AdminUsers';
 import { AdminNodes } from './components/AdminNodes';
 import { AdminAllKeys } from './components/AdminAllKeys';
+import { AdminAuditLogs } from './components/AdminAuditLogs';
 import { UserProfile } from './components/UserProfile';
 
 export default function App() {
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'keys' | 'nodes' | 'users' | 'all-keys' | 'profile'>('keys');
+  const [activeTab, setActiveTab] = useState<'keys' | 'nodes' | 'users' | 'all-keys' | 'logs' | 'profile'>('keys');
 
   // Keys State
   const [keys, setKeys] = useState<ClientConfigSummary[]>([]);
@@ -245,7 +246,19 @@ export default function App() {
                 }`}
               >
                 <Sparkles className="w-4 h-4" />
-                <span>Все ключи (Аудит)</span>
+                <span>Все ключи</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('logs')}
+                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-xs uppercase tracking-wider font-mono transition duration-200 ${
+                  activeTab === 'logs'
+                    ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
+                    : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
+                }`}
+              >
+                <ScrollText className="w-4 h-4" />
+                <span>Логи действий</span>
               </button>
             </>
           )}
@@ -409,6 +422,7 @@ export default function App() {
           {activeTab === 'nodes' && <AdminNodes />}
           {activeTab === 'users' && <AdminUsers />}
           {activeTab === 'all-keys' && <AdminAllKeys />}
+          {activeTab === 'logs' && <AdminAuditLogs />}
           {activeTab === 'profile' && <UserProfile user={currentUser} onUserUpdated={(u) => setCurrentUser(u)} />}
         </div>
       </main>

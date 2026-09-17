@@ -3,6 +3,7 @@ package master
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -95,6 +96,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/admin/nodes/{id}/restore", auth.RequireAdmin(s.handleAdminRestoreNode))
 
 	s.mux.HandleFunc("GET /api/v1/admin/keys", auth.RequireAdmin(s.handleAdminListAllKeys))
+	s.mux.HandleFunc("GET /api/v1/admin/logs", auth.RequireAdmin(s.handleAdminListAuditLogs))
+	s.mux.HandleFunc("POST /api/v1/admin/logs/cleanup", auth.RequireAdmin(s.handleAdminCleanupAuditLogs))
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -114,9 +117,12 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	user, err := s.storage.CreateUser(r.Context(), req.Username, req.Password)
 	if err != nil {
+		s.logActivity(r, nil, req.Username, models.CategoryAuth, "auth_register_failed", fmt.Sprintf("Ошибка регистрации: %v", err))
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+
+	s.logActivity(r, &user.ID, user.Username, models.CategoryAuth, "auth_register", "Регистрация нового аккаунта (ожидает подтверждения администратора)")
 
 	s.writeJSON(w, http.StatusCreated, map[string]any{
 		"message": "Registration successful. Please wait for administrator approval before logging in.",
@@ -139,11 +145,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	user, err := s.storage.GetUserByUsername(r.Context(), req.Username)
 	if err != nil || !auth.CheckPassword(req.Password, user.PasswordHash) {
+		s.logActivity(r, nil, req.Username, models.CategoryAuth, "auth_login_failed", "Неудачная попытка входа (неверный пароль или пользователь не найден)")
 		s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid username or password"})
 		return
 	}
 
 	if !user.IsActive {
+		s.logActivity(r, &user.ID, user.Username, models.CategoryAuth, "auth_login_blocked", "Попытка входа в неактивированный аккаунт")
 		s.writeJSON(w, http.StatusForbidden, map[string]string{
 			"error": "Your account is pending administrator approval. Please contact support/admin.",
 		})
@@ -155,6 +163,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to generate token"})
 		return
 	}
+
+	s.logActivity(r, &user.ID, user.Username, models.CategoryAuth, "auth_login", "Успешная авторизация в системе")
 
 	s.writeJSON(w, http.StatusOK, models.LoginResponse{
 		Token: token,
@@ -198,6 +208,8 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+
+	s.logActivity(r, &updatedUser.ID, updatedUser.Username, models.CategoryProfile, "profile_update", "Обновлены учетные данные профиля")
 
 	token, _ := s.jwtMgr.GenerateToken(updatedUser)
 
@@ -302,6 +314,8 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryKeys, "key_create", fmt.Sprintf("Создан VPN-ключ «%s» (%s) на сервере «%s»", req.DeviceName, clientName, node.Name))
+
 	s.writeJSON(w, http.StatusCreated, map[string]any{
 		"id":          keyRecord.ID,
 		"client_name": clientName,
@@ -349,6 +363,8 @@ func (s *Server) handleGetKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryKeys, "key_view", fmt.Sprintf("Просмотр конфигурации / QR-кода ключа «%s» (%s)", keyRecord.DeviceName, keyRecord.ClientName))
+
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"id":          keyRecord.ID,
 		"client_name": keyRecord.ClientName,
@@ -394,6 +410,8 @@ func (s *Server) handleDeleteKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryKeys, "key_delete", fmt.Sprintf("Отозван и удален VPN-ключ «%s» (%s)", keyRecord.DeviceName, keyRecord.ClientName))
+
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
 		Success: true,
 		Message: "Key successfully deleted",
@@ -411,6 +429,7 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminActivateUser(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -422,10 +441,20 @@ func (s *Server) handleAdminActivateUser(w http.ResponseWriter, r *http.Request)
 		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+
+	targetUser, _ := s.storage.GetUserByID(r.Context(), id)
+	targetUsername := ""
+	if targetUser != nil {
+		targetUsername = targetUser.Username
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_user_activate", fmt.Sprintf("Активирован доступ для пользователя «%s» (ID #%d)", targetUsername, id))
+
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{Success: true, Message: "User activated"})
 }
 
 func (s *Server) handleAdminDeactivateUser(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -437,10 +466,20 @@ func (s *Server) handleAdminDeactivateUser(w http.ResponseWriter, r *http.Reques
 		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+
+	targetUser, _ := s.storage.GetUserByID(r.Context(), id)
+	targetUsername := ""
+	if targetUser != nil {
+		targetUsername = targetUser.Username
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_user_deactivate", fmt.Sprintf("Заблокирован доступ для пользователя «%s» (ID #%d)", targetUsername, id))
+
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{Success: true, Message: "User deactivated"})
 }
 
 func (s *Server) handleAdminSetUserRole(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -459,6 +498,14 @@ func (s *Server) handleAdminSetUserRole(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	targetUser, _ := s.storage.GetUserByID(r.Context(), id)
+	targetUsername := ""
+	if targetUser != nil {
+		targetUsername = targetUser.Username
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_user_role", fmt.Sprintf("Изменена роль пользователя «%s» (ID #%d) на «%s»", targetUsername, id, req.Role))
+
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
 		Success: true,
 		Message: fmt.Sprintf("Роль пользователя изменена на %s", req.Role),
@@ -466,6 +513,7 @@ func (s *Server) handleAdminSetUserRole(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -473,10 +521,19 @@ func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	targetUser, _ := s.storage.GetUserByID(r.Context(), id)
+	targetUsername := ""
+	if targetUser != nil {
+		targetUsername = targetUser.Username
+	}
+
 	if err := s.storage.DeleteUser(r.Context(), id); err != nil {
 		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_user_delete", fmt.Sprintf("Удален пользователь «%s» (ID #%d)", targetUsername, id))
+
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{Success: true, Message: "User deleted"})
 }
 
@@ -509,6 +566,7 @@ func (s *Server) handleAdminListNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminRestartNode(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -528,6 +586,8 @@ func (s *Server) handleAdminRestartNode(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_restart", fmt.Sprintf("Перезапущен сервис AmneziaWG на узле «%s» (ID #%d)", node.Name, node.ID))
+
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
 		Success: true,
 		Message: fmt.Sprintf("Node '%s' AWG service restarted successfully", node.Name),
@@ -535,6 +595,7 @@ func (s *Server) handleAdminRestartNode(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleAdminBackupNode(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -555,10 +616,13 @@ func (s *Server) handleAdminBackupNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_backup", fmt.Sprintf("Выгружена резервная копия конфигурации узла «%s» (ID #%d)", node.Name, node.ID))
+
 	s.writeJSON(w, http.StatusOK, backup)
 }
 
 func (s *Server) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -588,6 +652,8 @@ func (s *Server) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_restore", fmt.Sprintf("Восстановлена конфигурация узла «%s» (ID #%d) из резервной копии", node.Name, node.ID))
+
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
 		Success: true,
 		Message: fmt.Sprintf("Node '%s' restored successfully from backup", node.Name),
@@ -595,6 +661,7 @@ func (s *Server) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleAdminAddNode(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
 	var req models.AddNodeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
@@ -621,10 +688,13 @@ func (s *Server) handleAdminAddNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_create", fmt.Sprintf("Добавлен новый сервер «%s» (%s, URL: %s)", node.Name, node.Type, node.APIURL))
+
 	s.writeJSON(w, http.StatusCreated, node)
 }
 
 func (s *Server) handleAdminDeleteNode(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
 	idStr := r.PathValue("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -632,10 +702,19 @@ func (s *Server) handleAdminDeleteNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	node, _ := s.storage.GetNodeByID(r.Context(), id)
+	nodeName := ""
+	if node != nil {
+		nodeName = node.Name
+	}
+
 	if err := s.storage.DeleteNode(r.Context(), id); err != nil {
 		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_delete", fmt.Sprintf("Удален сервер «%s» (ID #%d)", nodeName, id))
+
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{Success: true, Message: "Node deleted"})
 }
 
@@ -734,6 +813,114 @@ func (s *Server) handleAdminListAllKeys(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// Admin: Audit Logs
+func (s *Server) handleAdminListAuditLogs(w http.ResponseWriter, r *http.Request) {
+	var filter models.AuditLogFilter
+
+	if uidStr := strings.TrimSpace(r.URL.Query().Get("user_id")); uidStr != "" {
+		if uid, err := strconv.ParseInt(uidStr, 10, 64); err == nil && uid > 0 {
+			filter.UserID = &uid
+		}
+	}
+
+	filter.Username = strings.TrimSpace(r.URL.Query().Get("username"))
+	filter.Category = strings.TrimSpace(r.URL.Query().Get("category"))
+	filter.Action = strings.TrimSpace(r.URL.Query().Get("action"))
+	filter.FromDate = strings.TrimSpace(r.URL.Query().Get("from"))
+	filter.ToDate = strings.TrimSpace(r.URL.Query().Get("to"))
+
+	page := 1
+	limit := 50
+	if pStr := r.URL.Query().Get("page"); pStr != "" {
+		if p, err := strconv.Atoi(pStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+	if lStr := r.URL.Query().Get("limit"); lStr != "" {
+		if l, err := strconv.Atoi(lStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+	filter.Page = page
+	filter.Limit = limit
+
+	logs, totalCount, err := s.storage.ListAuditLogs(r.Context(), filter)
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	totalPages := (totalCount + limit - 1) / limit
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	s.writeJSON(w, http.StatusOK, models.PaginatedAuditLogsResponse{
+		Logs:       logs,
+		TotalCount: totalCount,
+		Page:       page,
+		Limit:      limit,
+		TotalPages: totalPages,
+	})
+}
+
+func (s *Server) handleAdminCleanupAuditLogs(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+
+	var req models.CleanupLogsRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	days := req.Days
+	if days <= 0 {
+		days = 90 // Default 3 months
+	}
+
+	deleted, err := s.storage.PurgeAuditLogsOlderThan(r.Context(), days)
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_logs_cleanup", fmt.Sprintf("Очищен журнал аудита старше %d дней (удалено записей: %d)", days, deleted))
+
+	s.writeJSON(w, http.StatusOK, models.CleanupLogsResponse{
+		Success:      true,
+		Message:      fmt.Sprintf("Успешно удалено записей старше %d дней: %d", days, deleted),
+		DeletedCount: deleted,
+	})
+}
+
+func (s *Server) logActivity(r *http.Request, userID *int64, username string, category models.AuditLogCategory, action string, details string) {
+	ip := getIPAddress(r)
+	if username == "" {
+		username = "anonymous"
+	}
+	logEntry := &models.AuditLog{
+		UserID:    userID,
+		Username:  username,
+		Action:    action,
+		Category:  category,
+		IPAddress: ip,
+		Details:   details,
+	}
+	_ = s.storage.CreateAuditLog(r.Context(), logEntry)
+}
+
+func getIPAddress(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		ips := strings.Split(xff, ",")
+		return strings.TrimSpace(ips[0])
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	ip := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(ip); err == nil {
+		return host
+	}
+	return ip
+}
+
 func formatBytes(b int64) string {
 	if b <= 0 {
 		return "0 B"
@@ -755,3 +942,4 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, data any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
 }
+

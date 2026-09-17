@@ -196,3 +196,95 @@ func TestCompleteUserAndKeyFlow(t *testing.T) {
 		t.Fatalf("expected 1 key for alice, got %+v", myKeys)
 	}
 }
+
+func TestAdminAuditLogsFlow(t *testing.T) {
+	masterSrv, _, _, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	handler := masterSrv.Handler()
+
+	// 1. Login as admin
+	adminLoginBody, _ := json.Marshal(models.LoginRequest{
+		Username: "Forve",
+		Password: "AdminPass123!",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(adminLoginBody))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for admin login, got %d", rec.Code)
+	}
+
+	var adminLoginResp models.LoginResponse
+	_ = json.NewDecoder(rec.Body).Decode(&adminLoginResp)
+	adminToken := adminLoginResp.Token
+
+	// 2. Perform user registration to generate logs
+	regBody, _ := json.Marshal(models.RegisterRequest{
+		Username: "log_user",
+		Password: "password123!",
+	})
+	req = httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewReader(regBody))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created for register, got %d", rec.Code)
+	}
+
+	// 3. Admin gets audit logs
+	req = httptest.NewRequest("GET", "/api/v1/admin/logs?limit=50", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for admin logs, got %d", rec.Code)
+	}
+
+	var logsResp models.PaginatedAuditLogsResponse
+	_ = json.NewDecoder(rec.Body).Decode(&logsResp)
+
+	if logsResp.TotalCount < 2 {
+		t.Fatalf("expected at least 2 logs (login and register), got %d", logsResp.TotalCount)
+	}
+	if len(logsResp.Logs) < 2 {
+		t.Fatalf("expected at least 2 logs returned, got %d", len(logsResp.Logs))
+	}
+
+	// 4. Admin filters by category
+	req = httptest.NewRequest("GET", "/api/v1/admin/logs?category=auth", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for category filter, got %d", rec.Code)
+	}
+
+	var filteredResp models.PaginatedAuditLogsResponse
+	_ = json.NewDecoder(rec.Body).Decode(&filteredResp)
+	for _, l := range filteredResp.Logs {
+		if l.Category != models.CategoryAuth {
+			t.Fatalf("expected category auth, got %s", l.Category)
+		}
+	}
+
+	// 5. Admin calls cleanup endpoint
+	cleanupBody, _ := json.Marshal(models.CleanupLogsRequest{Days: 90})
+	req = httptest.NewRequest("POST", "/api/v1/admin/logs/cleanup", bytes.NewReader(cleanupBody))
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for logs cleanup, got %d", rec.Code)
+	}
+
+	var cleanupResp models.CleanupLogsResponse
+	_ = json.NewDecoder(rec.Body).Decode(&cleanupResp)
+	if !cleanupResp.Success {
+		t.Fatalf("expected cleanup success")
+	}
+}
+
