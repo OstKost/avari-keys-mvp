@@ -1,0 +1,25 @@
+# Caddyfile для Master-сервера M0 (Россия)
+# Домены:
+#   m0.vpn.test    -> Frontend SPA
+#   m0api.vpn.test -> Master Backend API (:8080)
+#   s1.vpn.test    -> Cascade Slave API (:8081)
+
+m0.vpn.test {
+    # Раздача статики React SPA
+    root * /var/www/avari-keys/frontend
+    file_server
+    try_files {path} /index.html
+    encode gzip zstd
+}
+
+m0api.vpn.test {
+    # Проксирование к Master Backend API
+    reverse_proxy localhost:8080
+    encode gzip zstd
+}
+
+s1.vpn.test {
+    # Проксирование к локальному Slave API каскада
+    reverse_proxy localhost:8081
+    encode gzip zstd
+}
