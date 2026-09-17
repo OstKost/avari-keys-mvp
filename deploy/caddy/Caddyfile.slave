@@ -1,0 +1,7 @@
+# Caddyfile для Slave-сервера S2 (Зарубеж, Прямой выход)
+# Домен: s2.vpn.test -> Direct Slave API (:8081)
+
+s2.vpn.test {
+    reverse_proxy localhost:8081
+    encode gzip zstd
+}
