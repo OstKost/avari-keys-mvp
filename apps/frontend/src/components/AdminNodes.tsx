@@ -63,102 +63,104 @@ export function AdminNodes() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h3 className="text-lg font-bold text-white flex items-center space-x-2">
-            <Server className="w-5 h-5 text-brand-400" />
+          <h3 className="font-serif text-xl font-bold text-[#F2F0E8] flex items-center space-x-2">
+            <Server className="w-5 h-5 text-[#D9B96E]" />
             <span>Управление Slave-нодами AmneziaWG</span>
           </h3>
-          <p className="text-xs text-slate-400">
-            Подключение удаленных серверов AWG (Каскад M0 $\to$ S1 или автономных S2) по защищенному API ключу.
+          <p className="text-xs text-[#A8B4B7] mt-1 font-sans">
+            Подключение серверов AWG (Каскад M0 $\to$ S1 или автономных S2) по защищенному API ключу.
           </p>
         </div>
-        <div className="flex space-x-2">
+        
+        <div className="flex items-center space-x-2.5">
           <button
             onClick={fetchNodes}
-            className="flex items-center space-x-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-xl border border-slate-700 transition"
+            className="flex items-center space-x-1.5 text-xs font-mono uppercase tracking-wider bg-[#102833] hover:bg-[#1C3945] text-[#A8B4B7] hover:text-[#F2F0E8] px-3.5 py-2.5 rounded-xl border border-[#1C3945] transition"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            <span>Проверить Health</span>
+            <span>Health Check</span>
           </button>
+          
           <button
             onClick={() => setShowAddForm(!showAddForm)}
-            className="flex items-center space-x-1.5 text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white px-3.5 py-2 rounded-xl shadow-lg shadow-brand-600/20 transition"
+            className="flex items-center space-x-1.5 text-xs font-mono font-bold uppercase tracking-wider bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] px-4 py-2.5 rounded-xl shadow-lg shadow-[#D9B96E]/20 transition"
           >
             <Plus className="w-4 h-4" />
-            <span>Добавить Slave Сервер</span>
+            <span>Добавить Сервер</span>
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="bg-rose-950/50 border border-rose-800/80 text-rose-300 text-xs p-3 rounded-xl mb-4">
+        <div className="bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs p-3.5 rounded-xl mb-5 shadow-lg">
           {error}
         </div>
       )}
 
       {/* Add Form */}
       {showAddForm && (
-        <form onSubmit={handleAddNode} className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-6 shadow-xl space-y-4">
-          <h4 className="text-sm font-bold text-white">Параметры нового Slave API</h4>
+        <form onSubmit={handleAddNode} className="bg-[#102833] border border-[#D9B96E]/40 rounded-2xl p-6 mb-6 shadow-2xl space-y-4">
+          <h4 className="font-serif text-base font-bold text-[#F2F0E8]">Параметры нового Slave API</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-slate-400 mb-1 font-semibold uppercase">Название сервера</label>
+              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">Название сервера</label>
               <input
                 type="text"
-                placeholder="например: Cascade M0 (MSK) -> S1 (AMS)"
+                placeholder="например: Каскад M0 (MSK) -> S1 (AMS)"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1 font-semibold uppercase">Тип соединения</label>
+              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">Тип соединения</label>
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value as 'cascade' | 'direct')}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none"
               >
                 <option value="cascade">Каскад (Cascade M0 $\to$ S1)</option>
                 <option value="direct">Прямой туннель (Direct S2)</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1 font-semibold uppercase">API URL (Slave Endpoint)</label>
+              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">API URL (Slave Endpoint)</label>
               <input
                 type="text"
                 placeholder="например: https://s1.vpn.test или http://127.0.0.1:8081"
                 value={apiUrl}
                 onChange={(e) => setApiUrl(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono text-xs"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1 font-semibold uppercase">Секретный API Key (X-API-Key)</label>
+              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">Секретный API Key (X-API-Key)</label>
               <input
                 type="password"
                 placeholder="Сгенерированный при запуске Slave ключ"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono text-xs"
                 required
               />
             </div>
           </div>
-          <div className="flex justify-end space-x-2 pt-2">
+          <div className="flex justify-end space-x-3 pt-2">
             <button
               type="button"
               onClick={() => setShowAddForm(false)}
-              className="px-3 py-1.5 text-xs text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+              className="px-4 py-2 text-xs font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#06141B]"
             >
               Отмена
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-1.5 text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition"
+              className="px-5 py-2 text-xs font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition"
             >
               {submitting ? 'Сохранение...' : 'Сохранить и подключить'}
             </button>
@@ -167,24 +169,24 @@ export function AdminNodes() {
       )}
 
       {/* Nodes Table */}
-      <div className="overflow-x-auto border border-slate-800 rounded-xl">
-        <table className="w-full text-left text-sm text-slate-300">
-          <thead className="bg-slate-900/80 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
+      <div className="overflow-x-auto border border-[#1C3945] rounded-2xl bg-[#06141B]/60 shadow-xl">
+        <table className="w-full text-left text-sm text-[#F2F0E8]">
+          <thead className="bg-[#102833]/90 text-[10px] font-mono uppercase tracking-widest text-[#A8B4B7] border-b border-[#1C3945]">
             <tr>
-              <th className="px-4 py-3">Статус</th>
-              <th className="px-4 py-3">Название</th>
-              <th className="px-4 py-3">Тип</th>
-              <th className="px-4 py-3">API URL</th>
-              <th className="px-4 py-3">Добавлен</th>
-              <th className="px-4 py-3 text-right">Действия</th>
+              <th className="px-5 py-3.5">Статус</th>
+              <th className="px-5 py-3.5">Название</th>
+              <th className="px-5 py-3.5">Тип</th>
+              <th className="px-5 py-3.5">API URL</th>
+              <th className="px-5 py-3.5">Добавлен</th>
+              <th className="px-5 py-3.5 text-right">Действия</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+          <tbody className="divide-y divide-[#1C3945]/70 bg-[#0A1D26]/40 font-sans">
             {nodes.map((node) => (
-              <tr key={node.id} className="hover:bg-slate-900/50 transition">
-                <td className="px-4 py-3">
+              <tr key={node.id} className="hover:bg-[#102833]/50 transition duration-150">
+                <td className="px-5 py-3.5">
                   <span
-                    className={`inline-flex items-center space-x-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                    className={`inline-flex items-center space-x-1.5 text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full ${
                       node.online
                         ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
                         : 'bg-rose-950/80 text-rose-400 border border-rose-800/60'
@@ -194,27 +196,27 @@ export function AdminNodes() {
                     <span>{node.online ? 'Online' : 'Offline'}</span>
                   </span>
                 </td>
-                <td className="px-4 py-3 font-medium text-white">{node.name}</td>
-                <td className="px-4 py-3">
+                <td className="px-5 py-3.5 font-medium text-[#F2F0E8]">{node.name}</td>
+                <td className="px-5 py-3.5">
                   <span
-                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                    className={`text-[9px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
                       node.type === 'cascade'
-                        ? 'bg-amber-950/80 text-amber-400 border border-amber-800/60'
-                        : 'bg-blue-950/80 text-blue-400 border border-blue-800/60'
+                        ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40'
+                        : 'bg-[#102833] text-[#6EA8C4] border border-[#6EA8C4]/40'
                     }`}
                   >
                     {node.type === 'cascade' ? 'Каскад' : 'Прямой'}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-xs font-mono text-slate-400">{node.api_url}</td>
-                <td className="px-4 py-3 text-xs text-slate-400">
+                <td className="px-5 py-3.5 text-xs font-mono text-[#A8B4B7]">{node.api_url}</td>
+                <td className="px-5 py-3.5 text-xs text-[#718187] font-mono">
                   {new Date(node.created_at).toLocaleDateString()}
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-5 py-3.5 text-right">
                   <button
                     onClick={() => handleDelete(node.id)}
                     title="Удалить"
-                    className="p-1.5 rounded-lg border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
+                    className="p-2 rounded-xl border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -223,8 +225,8 @@ export function AdminNodes() {
             ))}
             {nodes.length === 0 && !loading && (
               <tr>
-                <td colSpan={6} className="text-center py-8 text-slate-500 text-xs">
-                  Нет подключенных Slave-серверов. Добавьте первый сервер (например, M0 Cascade или S2 Direct).
+                <td colSpan={6} className="text-center py-10 text-[#718187] text-xs font-mono uppercase tracking-wider">
+                  Нет подключенных Slave-серверов.
                 </td>
               </tr>
             )}
