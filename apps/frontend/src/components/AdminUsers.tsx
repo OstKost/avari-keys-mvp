@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { UserCheck, UserX, Trash2, Users } from 'lucide-react';
+import { UserCheck, UserX, Trash2, Users, ShieldPlus, ShieldMinus } from 'lucide-react';
 import { api } from '../api/client';
 import { User } from '../types';
 import { ConfirmModal } from './ConfirmModal';
@@ -11,6 +11,8 @@ export function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [roleChangeTarget, setRoleChangeTarget] = useState<{ user: User; newRole: 'admin' | 'user' } | null>(null);
+  const [changingRole, setChangingRole] = useState(false);
 
   const fetchUsers = async () => {
     try {
@@ -40,6 +42,25 @@ export function AdminUsers() {
       await fetchUsers();
     } catch (err: any) {
       toast.error(err.message || 'Ошибка изменения статуса пользователя');
+    }
+  };
+
+  const handleConfirmRoleChange = async () => {
+    if (!roleChangeTarget) return;
+    try {
+      setChangingRole(true);
+      await api.setUserRole(roleChangeTarget.user.id, roleChangeTarget.newRole);
+      toast.success(
+        `Роль пользователя «${roleChangeTarget.user.username}» успешно изменена на ${
+          roleChangeTarget.newRole === 'admin' ? 'Администратор' : 'Пользователь'
+        }`
+      );
+      setRoleChangeTarget(null);
+      await fetchUsers();
+    } catch (err: any) {
+      toast.error(err.message || 'Ошибка изменения роли');
+    } finally {
+      setChangingRole(false);
     }
   };
 
@@ -123,6 +144,7 @@ export function AdminUsers() {
                   {new Date(u.created_at).toLocaleDateString()}
                 </td>
                 <td className="px-5 py-3.5 text-right space-x-2">
+                  {/* Toggle Active / Deactivate */}
                   <button
                     onClick={() => handleToggleActive(u)}
                     title={u.is_active ? 'Деактивировать учетную запись' : 'Одобрить и активировать'}
@@ -135,6 +157,26 @@ export function AdminUsers() {
                     {u.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                   </button>
 
+                  {/* Promote / Demote Admin */}
+                  {u.role !== 'admin' ? (
+                    <button
+                      onClick={() => setRoleChangeTarget({ user: u, newRole: 'admin' })}
+                      title="Повысить до Администратора"
+                      className="p-2 rounded-xl border border-[#D9B96E]/40 bg-[#102833] text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition"
+                    >
+                      <ShieldPlus className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setRoleChangeTarget({ user: u, newRole: 'user' })}
+                      title="Снять права Администратора (понизить до пользователя)"
+                      className="p-2 rounded-xl border border-[#1C3945] bg-[#06141B] text-[#718187] hover:text-[#F2F0E8] hover:bg-[#102833] transition"
+                    >
+                      <ShieldMinus className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {/* Delete User */}
                   {u.role !== 'admin' && (
                     <button
                       onClick={() => setUserToDelete(u)}
@@ -150,6 +192,38 @@ export function AdminUsers() {
           </tbody>
         </table>
       </div>
+
+      {/* Role Change Confirm Modal */}
+      <ConfirmModal
+        isOpen={Boolean(roleChangeTarget)}
+        title={roleChangeTarget?.newRole === 'admin' ? 'Повысить до Администратора?' : 'Снять права Администратора?'}
+        variant={roleChangeTarget?.newRole === 'admin' ? 'warning' : 'danger'}
+        confirmText={roleChangeTarget?.newRole === 'admin' ? 'Да, назначить администратором' : 'Да, снять права'}
+        cancelText="Отмена"
+        isLoading={changingRole}
+        onConfirm={handleConfirmRoleChange}
+        onClose={() => setRoleChangeTarget(null)}
+        message={
+          roleChangeTarget && (
+            <div>
+              Вы собираетесь изменить роль пользователя{' '}
+              <strong className="text-[#F2F0E8]">«{roleChangeTarget.user.username}»</strong> на{' '}
+              <span className="text-[#D9B96E] font-semibold">
+                {roleChangeTarget.newRole === 'admin' ? 'Администратор' : 'Пользователь (Хранитель)'}
+              </span>.
+              {roleChangeTarget.newRole === 'admin' ? (
+                <p className="mt-2 text-xs text-[#A8B4B7]">
+                  Пользователь получит полный доступ к управлению узлами сети, модерации и аудиту всех ключей.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-[#A8B4B7]">
+                  Пользователь потеряет доступ к панели администрирования.
+                </p>
+              )}
+            </div>
+          )
+        }
+      />
 
       {/* Delete User Confirm Modal */}
       <ConfirmModal

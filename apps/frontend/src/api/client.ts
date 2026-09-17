@@ -80,6 +80,19 @@ const realApi = {
     return handleResponse<User>(res);
   },
 
+  async updateProfile(data: { username?: string; password?: string }): Promise<{ token: string; user: User }> {
+    const res = await fetch(`${API_BASE}/auth/profile`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    const result = await handleResponse<{ token: string; user: User }>(res);
+    if (result.token) {
+      localStorage.setItem('token', result.token);
+    }
+    return result;
+  },
+
   logout() {
     localStorage.removeItem('token');
   },
@@ -145,6 +158,15 @@ const realApi = {
       headers: getAuthHeaders(),
     });
     return handleResponse<{ success: boolean }>(res);
+  },
+
+  async setUserRole(id: number, role: 'admin' | 'user'): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/admin/users/${id}/role`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ role }),
+    });
+    return handleResponse<{ success: boolean; message: string }>(res);
   },
 
   async deleteUser(id: number): Promise<{ success: boolean }> {

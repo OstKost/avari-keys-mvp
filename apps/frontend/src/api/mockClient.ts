@@ -199,6 +199,18 @@ export const mockApi = {
     return mockCurrentUser;
   },
 
+  async updateProfile(data: { username?: string; password?: string }): Promise<{ token: string; user: User }> {
+    if (data.username) {
+      mockCurrentUser.username = data.username;
+      const found = mockUsers.find((u) => u.id === mockCurrentUser.id);
+      if (found) found.username = data.username;
+    }
+    return {
+      token: 'mock-jwt-token-' + mockCurrentUser.username,
+      user: { ...mockCurrentUser },
+    };
+  },
+
   logout() {
     localStorage.removeItem('token');
   },
@@ -301,6 +313,17 @@ PersistentKeepalive = 25`;
     const user = mockUsers.find((u) => u.id === id);
     if (user) user.is_active = false;
     return { success: true };
+  },
+
+  async setUserRole(id: number, role: 'admin' | 'user'): Promise<{ success: boolean; message: string }> {
+    const user = mockUsers.find((u) => u.id === id);
+    if (user) {
+      user.role = role;
+      if (mockCurrentUser.id === id) {
+        mockCurrentUser.role = role;
+      }
+    }
+    return { success: true, message: `Роль изменена на ${role}` };
   },
 
   async deleteUser(id: number): Promise<{ success: boolean }> {

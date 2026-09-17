@@ -73,6 +73,7 @@ func (s *Server) routes() {
 
 	// User Authenticated Routes
 	s.mux.HandleFunc("GET /api/v1/auth/me", auth.RequireAuth(s.handleMe))
+	s.mux.HandleFunc("PUT /api/v1/auth/profile", auth.RequireAuth(s.handleUpdateProfile))
 	s.mux.HandleFunc("GET /api/v1/nodes", auth.RequireAuth(s.handleListActiveNodes))
 	s.mux.HandleFunc("GET /api/v1/keys", auth.RequireAuth(s.handleListUserKeys))
 	s.mux.HandleFunc("POST /api/v1/keys", auth.RequireAuth(s.handleCreateKey))
@@ -83,6 +84,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/admin/users", auth.RequireAdmin(s.handleAdminListUsers))
 	s.mux.HandleFunc("POST /api/v1/admin/users/{id}/activate", auth.RequireAdmin(s.handleAdminActivateUser))
 	s.mux.HandleFunc("POST /api/v1/admin/users/{id}/deactivate", auth.RequireAdmin(s.handleAdminDeactivateUser))
+	s.mux.HandleFunc("POST /api/v1/admin/users/{id}/role", auth.RequireAdmin(s.handleAdminSetUserRole))
 	s.mux.HandleFunc("DELETE /api/v1/admin/users/{id}", auth.RequireAdmin(s.handleAdminDeleteUser))
 
 	s.mux.HandleFunc("GET /api/v1/admin/nodes", auth.RequireAdmin(s.handleAdminListNodes))
@@ -182,6 +184,35 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: user.CreatedAt,
 	})
 }
+
+func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	var req models.UpdateProfileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	updatedUser, err := s.storage.UpdateUserProfile(r.Context(), claims.UserID, req.Username, req.Password)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	token, _ := s.jwtMgr.GenerateToken(updatedUser)
+
+	s.writeJSON(w, http.StatusOK, models.LoginResponse{
+		Token: token,
+		User: models.UserPublic{
+			ID:        updatedUser.ID,
+			Username:  updatedUser.Username,
+			Role:      updatedUser.Role,
+			IsActive:  updatedUser.IsActive,
+			CreatedAt: updatedUser.CreatedAt,
+		},
+	})
+}
+
 
 // User: Nodes & Keys
 func (s *Server) handleListActiveNodes(w http.ResponseWriter, r *http.Request) {
@@ -407,6 +438,31 @@ func (s *Server) handleAdminDeactivateUser(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{Success: true, Message: "User deactivated"})
+}
+
+func (s *Server) handleAdminSetUserRole(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid user ID"})
+		return
+	}
+
+	var req models.SetRoleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	if err := s.storage.SetUserRole(r.Context(), id, req.Role); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: fmt.Sprintf("Роль пользователя изменена на %s", req.Role),
+	})
 }
 
 func (s *Server) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request) {

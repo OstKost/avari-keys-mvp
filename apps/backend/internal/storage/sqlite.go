@@ -252,6 +252,59 @@ func (s *Storage) SetUserActive(ctx context.Context, id int64, active bool) erro
 	return nil
 }
 
+func (s *Storage) SetUserRole(ctx context.Context, id int64, role models.Role) error {
+	if role != models.RoleAdmin && role != models.RoleUser {
+		return errors.New("invalid role")
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET role = ? WHERE id = ?`, string(role), id)
+	if err != nil {
+		return err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return errors.New("user not found")
+	}
+	return nil
+}
+
+func (s *Storage) UpdateUserProfile(ctx context.Context, id int64, username, password string) (*models.User, error) {
+	u, err := s.GetUserByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	username = strings.TrimSpace(username)
+	if username != "" {
+		if len(username) < 3 {
+			return nil, errors.New("username must be at least 3 characters")
+		}
+		u.Username = username
+	}
+
+	if strings.TrimSpace(password) != "" {
+		if len(password) < 6 {
+			return nil, errors.New("password must be at least 6 characters")
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, err
+		}
+		u.PasswordHash = string(hash)
+	}
+
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE users SET username = ?, password_hash = ? WHERE id = ?
+	`, u.Username, u.PasswordHash, id)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return nil, errors.New("username already exists")
+		}
+		return nil, err
+	}
+
+	return u, nil
+}
+
 func (s *Storage) DeleteUser(ctx context.Context, id int64) error {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id)
 	if err != nil {
@@ -263,6 +316,7 @@ func (s *Storage) DeleteUser(ctx context.Context, id int64) error {
 	}
 	return nil
 }
+
 
 // Node methods
 func (s *Storage) CreateNode(ctx context.Context, name, nodeType, apiURL, apiKey string) (*models.Node, error) {

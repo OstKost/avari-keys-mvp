@@ -113,3 +113,12 @@ type AddNodeRequest struct {
 type RestoreNodeRequest struct {
 	BackupData string `json:"backup_data"`
 }
+
+type UpdateProfileRequest struct {
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+}
+
+type SetRoleRequest struct {
+	Role Role `json:"role"`
+}
