@@ -5,6 +5,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/runner"
+	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/slave"
 )
 
 func main() {
@@ -13,21 +16,35 @@ func main() {
 		port = "8081"
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><title>System Status</title></head><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h1>System Operational</h1><p>All core services are running normally.</p></body></html>`))
-	})
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok","service":"avari-slave"}`))
-	})
+	apiKey := os.Getenv("SLAVE_API_KEY")
+	useMock := os.Getenv("AWG_USE_MOCK") == "true" || os.Getenv("AWG_USE_MOCK") == "1"
+
+	var awgRunner runner.AWGRunner
+	if useMock {
+		log.Println("[SLAVE] Running in MOCK mode (simulating manage_amneziawg.sh)")
+		awgRunner = runner.NewMockRunner(true)
+	} else {
+		scriptPath := os.Getenv("AWG_SCRIPT_PATH")
+		if scriptPath == "" {
+			scriptPath = "/root/awg/manage_amneziawg.sh"
+		}
+		configsDir := os.Getenv("AWG_CONFIGS_DIR")
+		if configsDir == "" {
+			configsDir = "/root/awg/clients"
+		}
+		awgRunner = runner.NewRealRunner(scriptPath, configsDir)
+	}
+
+	cfg := slave.Config{
+		APIKey: apiKey,
+		Port:   port,
+	}
+
+	srv := slave.NewServer(cfg, awgRunner)
 
 	addr := fmt.Sprintf(":%s", port)
-	log.Printf("Starting Avari Slave API server on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("Slave API server failed: %v", err)
+	log.Printf("[SLAVE] Server listening on http://0.0.0.0:%s", port)
+	if err := http.ListenAndServe(addr, srv.Handler()); err != nil {
+		log.Fatalf("[SLAVE] Server startup failed: %v", err)
 	}
 }

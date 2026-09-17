@@ -1,0 +1,203 @@
+package slave
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"log"
+	"net/http"
+	"strings"
+
+	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/models"
+	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/runner"
+)
+
+// Config holds configuration for the Slave API server.
+type Config struct {
+	APIKey string
+	Port   string
+}
+
+// Server is the HTTP server for Slave API.
+type Server struct {
+	cfg    Config
+	runner runner.AWGRunner
+	mux    *http.ServeMux
+}
+
+// NewServer creates a new Slave API server instance.
+func NewServer(cfg Config, r runner.AWGRunner) *Server {
+	if cfg.APIKey == "" {
+		bytes := make([]byte, 24)
+		_, _ = rand.Read(bytes)
+		cfg.APIKey = hex.EncodeToString(bytes)
+		log.Printf("\n======================================================\n[SLAVE API] Generated API Key: %s\n======================================================\n", cfg.APIKey)
+	}
+
+	s := &Server{
+		cfg:    cfg,
+		runner: r,
+		mux:    http.NewServeMux(),
+	}
+	s.routes()
+	return s
+}
+
+// APIKey returns the configured API key (useful for tests and bootstrap logging).
+func (s *Server) APIKey() string {
+	return s.cfg.APIKey
+}
+
+// Handler returns the underlying http.Handler.
+func (s *Server) Handler() http.Handler {
+	return s.mux
+}
+
+func (s *Server) routes() {
+	// 1. Decoy Root Page (neutral status page)
+	s.mux.HandleFunc("GET /{$}", s.handleDecoy)
+
+	// 2. Public Health Check
+	s.mux.HandleFunc("GET /health", s.handleHealth)
+
+	// 3. Protected API Routes
+	s.mux.Handle("POST /api/v1/clients", s.authMiddleware(http.HandlerFunc(s.handleCreateClient)))
+	s.mux.Handle("GET /api/v1/clients", s.authMiddleware(http.HandlerFunc(s.handleListClients)))
+	s.mux.Handle("GET /api/v1/clients/{name}", s.authMiddleware(http.HandlerFunc(s.handleGetClient)))
+	s.mux.Handle("DELETE /api/v1/clients/{name}", s.authMiddleware(http.HandlerFunc(s.handleDeleteClient)))
+	s.mux.Handle("GET /api/v1/stats", s.authMiddleware(http.HandlerFunc(s.handleStats)))
+}
+
+func (s *Server) authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiKey := r.Header.Get("X-API-Key")
+		if apiKey == "" {
+			authHeader := r.Header.Get("Authorization")
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				apiKey = strings.TrimPrefix(authHeader, "Bearer ")
+			}
+		}
+
+		if apiKey == "" || apiKey != s.cfg.APIKey {
+			s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized: invalid or missing API key"})
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) handleDecoy(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Server Status</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #94a3b8; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card { background: #1e293b; padding: 2rem 3rem; border-radius: 12px; border: 1px solid #334155; text-align: center; }
+        h1 { color: #f8fafc; font-size: 1.5rem; margin-bottom: 0.5rem; }
+        p { margin: 0; font-size: 0.95rem; }
+        .badge { display: inline-block; background: #065f46; color: #34d399; font-weight: 600; font-size: 0.75rem; padding: 0.25rem 0.75rem; border-radius: 9999px; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Node Gateway</h1>
+        <p>Host status: Normal operating parameters.</p>
+        <span class="badge">ONLINE</span>
+    </div>
+</body>
+</html>`))
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	healthy := s.runner.CheckHealth(r.Context())
+	s.writeJSON(w, http.StatusOK, models.HealthResponse{
+		Status:       "ok",
+		Service:      "avari-slave",
+		AWGAvailable: healthy,
+		Version:      "v0.1.0",
+	})
+}
+
+func (s *Server) handleCreateClient(w http.ResponseWriter, r *http.Request) {
+	var req models.ClientCreateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "client name is required"})
+		return
+	}
+
+	res, err := s.runner.AddClient(r.Context(), req.Name)
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.writeJSON(w, http.StatusCreated, res)
+}
+
+func (s *Server) handleListClients(w http.ResponseWriter, r *http.Request) {
+	clients, err := s.runner.ListClients(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, clients)
+}
+
+func (s *Server) handleGetClient(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "client name required"})
+		return
+	}
+
+	res, err := s.runner.GetClient(r.Context(), name)
+	if err != nil {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, res)
+}
+
+func (s *Server) handleDeleteClient(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "client name required"})
+		return
+	}
+
+	if err := s.runner.RemoveClient(r.Context(), name); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: "Client successfully removed",
+	})
+}
+
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.runner.GetStats(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) writeJSON(w http.ResponseWriter, status int, data any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(data)
+}
