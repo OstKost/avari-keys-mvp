@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Server, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, RotateCcw, Download, Upload, X } from 'lucide-react';
 import { api } from '../api/client';
 import { AdminNode } from '../types';
@@ -404,101 +405,105 @@ export function AdminNodes() {
       />
 
       {/* Backup Modal */}
-      {backupNodeState && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#06141B]/80 backdrop-blur-sm">
-          <div className="bg-[#0A1D26] border border-[#6EA8C4]/40 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3 text-[#6EA8C4]">
-                <Download className="w-6 h-6" />
-                <h3 className="font-serif text-lg font-bold text-[#F2F0E8]">Резервная копия AWG</h3>
+      {backupNodeState &&
+        createPortal(
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-[#06141B]/85 backdrop-blur-md overflow-y-auto">
+            <div className="bg-[#0A1D26] border border-[#6EA8C4]/40 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-4 my-auto">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3 text-[#6EA8C4]">
+                  <Download className="w-6 h-6" />
+                  <h3 className="font-serif text-lg font-bold text-[#F2F0E8]">Резервная копия AWG</h3>
+                </div>
+                <button onClick={() => setBackupNodeState(null)} className="text-[#A8B4B7] hover:text-[#F2F0E8] p-1 rounded-lg hover:bg-[#102833]">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button onClick={() => setBackupNodeState(null)} className="text-[#A8B4B7] hover:text-[#F2F0E8]">
-                <X className="w-5 h-5" />
-              </button>
+              <p className="text-xs text-[#A8B4B7]">
+                Архив конфигураций клиентов и ключей с ноды{' '}
+                <strong className="text-[#F2F0E8]">«{backupNodeState.node.name}»</strong> от{' '}
+                <span className="font-mono text-emerald-400">{new Date(backupNodeState.timestamp).toLocaleString()}</span>.
+              </p>
+              <div className="bg-[#06141B] p-3 rounded-xl border border-[#1C3945] font-mono text-[11px] text-[#A8B4B7] max-h-36 overflow-y-auto break-all select-all">
+                {backupNodeState.data}
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadBackupFile}
+                  className="flex items-center space-x-2 px-5 py-2.5 text-xs font-mono font-bold uppercase bg-gradient-to-r from-[#6EA8C4] to-[#407B98] text-[#06141B] rounded-xl shadow-lg transition"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Скачать файл .bak</span>
+                </button>
+              </div>
             </div>
-            <p className="text-xs text-[#A8B4B7]">
-              Архив конфигураций клиентов и ключей с ноды{' '}
-              <strong className="text-[#F2F0E8]">«{backupNodeState.node.name}»</strong> от{' '}
-              <span className="font-mono text-emerald-400">{new Date(backupNodeState.timestamp).toLocaleString()}</span>.
-            </p>
-            <div className="bg-[#06141B] p-3 rounded-xl border border-[#1C3945] font-mono text-[11px] text-[#A8B4B7] max-h-36 overflow-y-auto break-all select-all">
-              {backupNodeState.data}
-            </div>
-            <div className="flex justify-end space-x-3 pt-2">
-              <button
-                type="button"
-                onClick={handleDownloadBackupFile}
-                className="flex items-center space-x-2 px-5 py-2 text-xs font-mono font-bold uppercase bg-gradient-to-r from-[#6EA8C4] to-[#407B98] text-[#06141B] rounded-xl shadow-lg transition"
-              >
-                <Download className="w-4 h-4" />
-                <span>Скачать файл .bak</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* Restore Modal */}
-      {restoringNode && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#06141B]/80 backdrop-blur-sm">
-          <form onSubmit={handleRestoreSubmit} className="bg-[#0A1D26] border border-[#D9B96E]/40 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3 text-[#D9B96E]">
-                <Upload className="w-6 h-6" />
-                <h3 className="font-serif text-lg font-bold text-[#F2F0E8]">Восстановление AWG</h3>
+      {restoringNode &&
+        createPortal(
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-[#06141B]/85 backdrop-blur-md overflow-y-auto">
+            <form onSubmit={handleRestoreSubmit} className="bg-[#0A1D26] border border-[#D9B96E]/40 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-4 my-auto">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3 text-[#D9B96E]">
+                  <Upload className="w-6 h-6" />
+                  <h3 className="font-serif text-lg font-bold text-[#F2F0E8]">Восстановление AWG</h3>
+                </div>
+                <button type="button" onClick={() => setRestoringNode(null)} className="text-[#A8B4B7] hover:text-[#F2F0E8] p-1 rounded-lg hover:bg-[#102833]">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button type="button" onClick={() => setRestoringNode(null)} className="text-[#A8B4B7] hover:text-[#F2F0E8]">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-xs text-[#A8B4B7]">
-              Загрузите или вставьте архив резервной копии для развертывания на ноде{' '}
-              <strong className="text-[#F2F0E8]">«{restoringNode.name}»</strong>.
-            </p>
-            <div>
-              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
-                Загрузить из файла (.bak)
-              </label>
-              <input
-                type="file"
-                accept=".bak,.txt,.json"
-                onChange={handleRestoreFileUpload}
-                className="block w-full text-xs text-[#A8B4B7] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-mono file:bg-[#102833] file:text-[#D9B96E] hover:file:bg-[#1C3945]"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
-                Или вставьте данные архива:
-              </label>
-              <textarea
-                rows={4}
-                value={restoreData}
-                onChange={(e) => setRestoreData(e.target.value)}
-                placeholder="Вставьте base64 строку резервной копии..."
-                className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl p-3 text-xs text-[#F2F0E8] focus:outline-none font-mono"
-                required
-              />
-            </div>
-            <div className="flex justify-end space-x-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setRestoringNode(null)}
-                disabled={isRestoring}
-                className="px-4 py-2 text-xs font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#102833]"
-              >
-                Отмена
-              </button>
-              <button
-                type="submit"
-                disabled={isRestoring || !restoreData.trim()}
-                className="px-5 py-2 text-xs font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition disabled:opacity-50"
-              >
-                {isRestoring ? 'Восстановление...' : 'Восстановить конфигурацию'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+              <p className="text-xs text-[#A8B4B7]">
+                Загрузите или вставьте архив резервной копии для развертывания на ноде{' '}
+                <strong className="text-[#F2F0E8]">«{restoringNode.name}»</strong>.
+              </p>
+              <div>
+                <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+                  Загрузить из файла (.bak)
+                </label>
+                <input
+                  type="file"
+                  accept=".bak,.txt,.json"
+                  onChange={handleRestoreFileUpload}
+                  className="block w-full text-xs text-[#A8B4B7] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-mono file:bg-[#102833] file:text-[#D9B96E] hover:file:bg-[#1C3945]"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+                  Или вставьте данные архива:
+                </label>
+                <textarea
+                  rows={4}
+                  value={restoreData}
+                  onChange={(e) => setRestoreData(e.target.value)}
+                  placeholder="Вставьте base64 строку резервной копии..."
+                  className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl p-3 text-xs text-[#F2F0E8] focus:outline-none font-mono"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRestoringNode(null)}
+                  disabled={isRestoring}
+                  className="px-4 py-2 text-xs font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#102833]"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={isRestoring || !restoreData.trim()}
+                  className="px-5 py-2 text-xs font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition disabled:opacity-50"
+                >
+                  {isRestoring ? 'Восстановление...' : 'Восстановить конфигурацию'}
+                </button>
+              </div>
+            </form>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

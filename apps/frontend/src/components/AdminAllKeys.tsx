@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Key, Trash2, Search, Filter, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Key, Trash2, Search, Filter, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
 import { api } from '../api/client';
 import { ClientConfigSummary, AdminNode } from '../types';
 import { ConfirmModal } from './ConfirmModal';
@@ -121,11 +121,11 @@ export function AdminAllKeys() {
         </div>
 
         <div className="relative">
-          <Filter className="w-3.5 h-3.5 text-[#718187] absolute left-3.5 top-3.5" />
+          <Filter className="w-3.5 h-3.5 text-[#D9B96E] absolute left-3.5 top-3.5 pointer-events-none" />
           <select
             value={selectedNodeId || ''}
             onChange={handleNodeFilterChange}
-            className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl pl-9 pr-4 py-2.5 text-xs text-[#F2F0E8] focus:outline-none font-mono transition"
+            className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl pl-10 pr-9 py-2.5 text-xs text-[#F2F0E8] focus:outline-none font-mono transition appearance-none cursor-pointer"
           >
             <option value="">Все серверы / узлы</option>
             {nodes.map((n) => (
@@ -134,6 +134,7 @@ export function AdminAllKeys() {
               </option>
             ))}
           </select>
+          <ChevronDown className="w-3.5 h-3.5 text-[#718187] absolute right-3.5 top-3.5 pointer-events-none" />
         </div>
       </div>
 
@@ -162,15 +163,20 @@ export function AdminAllKeys() {
                 </td>
                 <td className="px-5 py-3.5 text-xs text-[#A8B4B7] font-mono">User #{k.user_id}</td>
                 <td className="px-5 py-3.5">
-                  <span
-                    className={`text-[9px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
-                      k.node_type === 'cascade'
-                        ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40'
-                        : 'bg-[#102833] text-[#6EA8C4] border border-[#6EA8C4]/40'
-                    }`}
-                  >
-                    {k.node_name || 'Node'}
-                  </span>
+                  <div className="flex flex-col items-start gap-1">
+                    <span
+                      className={`text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                        k.node_type === 'cascade'
+                          ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40'
+                          : 'bg-[#102833] text-[#6EA8C4] border border-[#6EA8C4]/40'
+                      }`}
+                    >
+                      {k.node_type === 'cascade' ? 'Каскад' : 'Прямой'}
+                    </span>
+                    <span className="text-[11px] font-mono text-[#A8B4B7] max-w-[190px] truncate" title={k.node_name}>
+                      {k.node_name || 'Node'}
+                    </span>
+                  </div>
                 </td>
                 <td className="px-5 py-3.5">
                   <div className="flex items-center space-x-1.5 text-xs font-mono text-[#A8B4B7]">

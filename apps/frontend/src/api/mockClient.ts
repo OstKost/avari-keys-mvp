@@ -224,6 +224,11 @@ export const mockApi = {
         device_name: k.device_name,
         node_name: k.node_name,
         node_type: k.node_type,
+        last_handshake: k.last_handshake || '10 минут назад',
+        total_traffic_bytes: k.total_traffic_bytes || 524288000,
+        month_traffic_bytes: k.month_traffic_bytes || 524288000,
+        total_traffic_formatted: k.total_traffic_formatted || '500.00 MB',
+        month_traffic_formatted: k.month_traffic_formatted || '500.00 MB',
         created_at: k.created_at,
       }));
   },

@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, Trash2, HelpCircle, X } from 'lucide-react';
 
 export interface ConfirmModalProps {
@@ -62,10 +63,10 @@ export function ConfirmModal({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#06141B]/85 backdrop-blur-md animate-fade-in">
+  return createPortal(
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-[#06141B]/85 backdrop-blur-md animate-fade-in overflow-y-auto">
       <div
-        className={`bg-[#0A1D26] border ${getBorderColor()} rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl shadow-black/90 relative transform transition-all`}
+        className={`bg-[#0A1D26] border ${getBorderColor()} rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl shadow-black/90 relative transform transition-all my-auto`}
       >
         <button
           type="button"
@@ -110,6 +111,7 @@ export function ConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

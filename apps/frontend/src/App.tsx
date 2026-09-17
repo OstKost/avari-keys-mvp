@@ -130,7 +130,7 @@ export default function App() {
     <div className="min-h-screen bg-[#06141B] text-[#F2F0E8] flex flex-col selection:bg-[#D9B96E]/30 selection:text-[#F0D48D]">
       {/* Header */}
       <header className="border-b border-[#1C3945]/80 bg-[#0A1D26]/80 backdrop-blur-md sticky top-0 z-40 transition-all">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+        <div className="max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-10 h-20 flex items-center justify-between">
           
           {/* Logo & Subtitle */}
           <div className="flex items-center space-x-3.5">
@@ -156,7 +156,7 @@ export default function App() {
                 )}
               </div>
               <p className="text-[11px] text-[#A8B4B7] tracking-wider font-mono">
-                Каскадный & Прямой доступ
+                Кооперативная виртуальная сеть
               </p>
             </div>
           </div>
@@ -185,9 +185,9 @@ export default function App() {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+      <main className="flex-1 max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-10 py-8 w-full">
         
-        {/* Navigation Tabs (Current convenient layout with Elven styling) */}
+        {/* Navigation Tabs */}
         <div className="flex flex-wrap gap-2 border-b border-[#1C3945]/80 pb-4 mb-8">
           <button
             onClick={() => setActiveTab('keys')}
@@ -198,7 +198,7 @@ export default function App() {
             }`}
           >
             <Key className="w-4 h-4" />
-            <span>Мои VPN Ключи</span>
+            <span>Мои устройства</span>
           </button>
 
           {currentUser.role === 'admin' && (
@@ -340,10 +340,20 @@ export default function App() {
                           </span>
                         </div>
 
-                        <div className="text-xs text-[#A8B4B7] space-y-1.5 mb-5 bg-[#06141B]/70 p-3 rounded-xl border border-[#1C3945]/70 font-sans">
+                        <div className="text-xs text-[#A8B4B7] space-y-1.5 mb-5 bg-[#06141B]/70 p-3.5 rounded-xl border border-[#1C3945]/70 font-sans">
                           <div className="flex justify-between items-center">
                             <span className="text-[11px] text-[#718187]">Сервер:</span>
                             <span className="text-[#F2F0E8] font-medium truncate max-w-[180px]">{k.node_name || 'Node'}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[11px] text-[#718187]">Трафик:</span>
+                            <span className="text-[#F2F0E8] font-mono text-[11px]">
+                              {k.total_traffic_formatted || '0 B'} <span className="text-[#718187]">({k.month_traffic_formatted || '0 B'}/мес)</span>
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[11px] text-[#718187]">Срок действия:</span>
+                            <span className="text-emerald-400 font-mono text-[11px]">∞ Бессрочный</span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span className="text-[11px] text-[#718187]">Создан:</span>
@@ -415,7 +425,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="border-t border-[#1C3945]/60 py-6 text-center text-xs text-[#718187] font-mono tracking-wider">
-        Avari Keys &copy; 2026 — «Свобода выбора • Твои ключи — твои правила»
+        Avari Keys &copy; 2026 — «Добровольный кооператив • Частная виртуальная сеть»
       </footer>
     </div>
   );

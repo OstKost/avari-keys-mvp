@@ -200,6 +200,30 @@ func (s *Server) handleListUserKeys(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+
+	// Fetch node stats to enrich traffic and handshake for user devices
+	nodes, _ := s.storage.ListNodes(r.Context())
+	statsMap := make(map[int64]*models.StatsSummaryResponse)
+	for _, n := range nodes {
+		slaveCli := client.NewSlaveClient(n.APIURL, n.APIKey)
+		stats, sErr := slaveCli.GetStats(r.Context())
+		if sErr == nil && stats != nil {
+			statsMap[n.ID] = stats
+		}
+	}
+
+	for i := range keys {
+		if stats, ok := statsMap[keys[i].NodeID]; ok && stats.Peers != nil {
+			if p, found := stats.Peers[keys[i].ClientName]; found {
+				keys[i].LastHandshake = p.LastHandshake
+				keys[i].TotalTrafficBytes = p.RxBytes + p.TxBytes
+				keys[i].MonthTrafficBytes = p.MonthBytes
+				keys[i].TotalTrafficFormatted = formatBytes(keys[i].TotalTrafficBytes)
+				keys[i].MonthTrafficFormatted = formatBytes(keys[i].MonthTrafficBytes)
+			}
+		}
+	}
+
 	s.writeJSON(w, http.StatusOK, keys)
 }
 

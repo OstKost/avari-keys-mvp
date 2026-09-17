@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Copy, Check, Download, QrCode as QrIcon } from 'lucide-react';
 import QRCode from 'qrcode';
 import { ClientConfigDetail } from '../types';
@@ -46,9 +47,9 @@ export function KeyModal({ keyData, onClose }: Props) {
     toast.success(`Файл ${keyData.client_name}.conf скачан`);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-[#06141B]/85 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-[#0A1D26] border border-[#1C3945] hover:border-[#D9B96E]/50 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl shadow-black/90 relative">
+  return createPortal(
+    <div className="fixed inset-0 z-[999] bg-[#06141B]/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-[#0A1D26] border border-[#1C3945] hover:border-[#D9B96E]/50 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl shadow-black/90 relative my-auto">
         <button
           onClick={onClose}
           className="absolute top-5 right-5 text-[#A8B4B7] hover:text-[#F2F0E8] p-1.5 rounded-xl hover:bg-[#102833] border border-transparent hover:border-[#1C3945] transition"
@@ -115,6 +116,7 @@ export function KeyModal({ keyData, onClose }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
