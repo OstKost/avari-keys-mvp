@@ -66,6 +66,9 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/v1/clients/{name}", s.authMiddleware(http.HandlerFunc(s.handleGetClient)))
 	s.mux.Handle("DELETE /api/v1/clients/{name}", s.authMiddleware(http.HandlerFunc(s.handleDeleteClient)))
 	s.mux.Handle("GET /api/v1/stats", s.authMiddleware(http.HandlerFunc(s.handleStats)))
+	s.mux.Handle("POST /api/v1/restart", s.authMiddleware(http.HandlerFunc(s.handleRestart)))
+	s.mux.Handle("GET /api/v1/backup", s.authMiddleware(http.HandlerFunc(s.handleBackup)))
+	s.mux.Handle("POST /api/v1/restore", s.authMiddleware(http.HandlerFunc(s.handleRestore)))
 }
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
@@ -194,6 +197,48 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleRestart(w http.ResponseWriter, r *http.Request) {
+	if err := s.runner.RestartAWG(r.Context()); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: "AmneziaWG service successfully restarted",
+	})
+}
+
+func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
+	backup, err := s.runner.BackupAWG(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, backup)
+}
+
+func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
+	var req models.RestoreNodeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if req.BackupData == "" {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "backup_data is required"})
+		return
+	}
+
+	if err := s.runner.RestoreAWG(r.Context(), req.BackupData); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: "AmneziaWG configuration successfully restored",
+	})
 }
 
 func (s *Server) writeJSON(w http.ResponseWriter, status int, data any) {

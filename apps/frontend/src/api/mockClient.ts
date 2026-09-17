@@ -1,4 +1,4 @@
-import { User, NodePublic, AdminNode, ClientConfigSummary, ClientConfigDetail } from '../types';
+import { User, NodePublic, AdminNode, ClientConfigSummary, ClientConfigDetail, PaginatedKeysResponse } from '../types';
 
 // In-memory mock storage for standalone FE development
 let mockUsers: User[] = [
@@ -35,6 +35,7 @@ let mockNodes: AdminNode[] = [
     api_url: 'http://127.0.0.1:8081',
     is_active: true,
     online: true,
+    latency_ms: 24,
     created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
   },
   {
@@ -44,11 +45,19 @@ let mockNodes: AdminNode[] = [
     api_url: 'http://127.0.0.1:8082',
     is_active: true,
     online: true,
+    latency_ms: 38,
     created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
   },
 ];
 
-let mockKeys: (ClientConfigDetail & { user_id: number })[] = [
+let mockKeys: (ClientConfigDetail & {
+  user_id: number;
+  last_handshake?: string;
+  total_traffic_bytes?: number;
+  month_traffic_bytes?: number;
+  total_traffic_formatted?: string;
+  month_traffic_formatted?: string;
+})[] = [
   {
     id: 1,
     user_id: 1, // Forve Admin
@@ -57,6 +66,11 @@ let mockKeys: (ClientConfigDetail & { user_id: number })[] = [
     node_id: 1,
     node_name: 'Каскад M0 (Москва) -> S1 (Амстердам)',
     node_type: 'cascade',
+    last_handshake: '3 минуты назад',
+    total_traffic_bytes: 1520435200,
+    month_traffic_bytes: 1520435200,
+    total_traffic_formatted: '1.42 GB',
+    month_traffic_formatted: '1.42 GB',
     config: `[Interface]
 Address = 10.7.0.3/32
 PrivateKey = aMockPrivateKeyForDemoPurposesOnly1234567=
@@ -85,6 +99,11 @@ PersistentKeepalive = 25`,
     node_id: 2,
     node_name: 'Прямой туннель S2 (Франкфурт)',
     node_type: 'direct',
+    last_handshake: '42 минуты назад',
+    total_traffic_bytes: 471859200,
+    month_traffic_bytes: 471859200,
+    total_traffic_formatted: '450.00 MB',
+    month_traffic_formatted: '450.00 MB',
     config: `[Interface]
 Address = 10.8.0.4/32
 PrivateKey = aMockPrivateKeyDirectTunnelMacBook7654321=
@@ -113,6 +132,11 @@ PersistentKeepalive = 25`,
     node_id: 1,
     node_name: 'Каскад M0 (Москва) -> S1 (Амстердам)',
     node_type: 'cascade',
+    last_handshake: '2 часа назад',
+    total_traffic_bytes: 93323264,
+    month_traffic_bytes: 93323264,
+    total_traffic_formatted: '89.00 MB',
+    month_traffic_formatted: '89.00 MB',
     config: `[Interface]
 Address = 10.7.0.5/32
 PrivateKey = aMockAlicePrivateKeyCascade99887766=
@@ -280,7 +304,11 @@ PersistentKeepalive = 25`;
   },
 
   async getAdminNodes(): Promise<AdminNode[]> {
-    return [...mockNodes];
+    // Simulate minor ping variance
+    return mockNodes.map((n) => ({
+      ...n,
+      latency_ms: n.online ? Math.floor(20 + Math.random() * 25) : undefined,
+    }));
   },
 
   async addAdminNode(name: string, type: 'cascade' | 'direct', apiUrl: string, _apiKey: string): Promise<AdminNode> {
@@ -291,6 +319,7 @@ PersistentKeepalive = 25`;
       api_url: apiUrl,
       is_active: true,
       online: true,
+      latency_ms: Math.floor(20 + Math.random() * 20),
       created_at: new Date().toISOString(),
     };
     mockNodes.push(newNode);
@@ -302,8 +331,61 @@ PersistentKeepalive = 25`;
     return { success: true };
   },
 
-  async getAdminKeys(): Promise<ClientConfigSummary[]> {
-    return mockKeys.map((k) => ({
+  async restartNode(id: number): Promise<{ success: boolean; message: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 800)); // simulate brief restart time
+    const node = mockNodes.find((n) => n.id === id);
+    return {
+      success: true,
+      message: `Сервис AmneziaWG на ноде "${node?.name || id}" успешно перезапущен`,
+    };
+  },
+
+  async backupNode(id: number): Promise<{ timestamp: string; backup_data: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return {
+      timestamp: new Date().toISOString(),
+      backup_data: `UEsDBBQAAAAIAAWG...mock_tar_gz_backup_data_for_node_${id}...`,
+    };
+  },
+
+  async restoreNode(id: number, _backupData: string): Promise<{ success: boolean; message: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const node = mockNodes.find((n) => n.id === id);
+    return {
+      success: true,
+      message: `Конфигурация ноды "${node?.name || id}" успешно восстановлена из резервной копии`,
+    };
+  },
+
+  async getAdminKeys(params?: {
+    search?: string;
+    nodeId?: number;
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedKeysResponse> {
+    let filtered = [...mockKeys];
+
+    if (params?.nodeId) {
+      filtered = filtered.filter((k) => k.node_id === params.nodeId);
+    }
+
+    if (params?.search) {
+      const q = params.search.toLowerCase().trim();
+      filtered = filtered.filter(
+        (k) =>
+          k.device_name.toLowerCase().includes(q) ||
+          k.client_name.toLowerCase().includes(q) ||
+          (k.node_name && k.node_name.toLowerCase().includes(q))
+      );
+    }
+
+    const page = params?.page && params.page > 0 ? params.page : 1;
+    const limit = params?.limit && params.limit > 0 ? params.limit : 10;
+    const totalCount = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+
+    const startIndex = (page - 1) * limit;
+    const paged = filtered.slice(startIndex, startIndex + limit).map((k) => ({
       id: k.id,
       user_id: k.user_id,
       node_id: k.node_id,
@@ -311,7 +393,20 @@ PersistentKeepalive = 25`;
       device_name: k.device_name,
       node_name: k.node_name,
       node_type: k.node_type,
+      last_handshake: k.last_handshake || '5 минут назад',
+      total_traffic_bytes: k.total_traffic_bytes || 524288000,
+      month_traffic_bytes: k.month_traffic_bytes || 524288000,
+      total_traffic_formatted: k.total_traffic_formatted || '500.00 MB',
+      month_traffic_formatted: k.month_traffic_formatted || '500.00 MB',
       created_at: k.created_at,
     }));
+
+    return {
+      keys: paged,
+      total_count: totalCount,
+      page,
+      limit,
+      total_pages: totalPages,
+    };
   },
 };

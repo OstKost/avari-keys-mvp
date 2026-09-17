@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"sync"
 	"time"
@@ -117,14 +118,57 @@ func (m *MockRunner) ListClients(ctx context.Context) ([]models.ClientListItem, 
 	return list, nil
 }
 
-func (m *MockRunner) GetStats(ctx context.Context) (map[string]any, error) {
+func (m *MockRunner) GetStats(ctx context.Context) (*models.StatsSummaryResponse, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	return map[string]any{
-		"active_peers": len(m.clients),
-		"uptime":       "3d 12h 4m",
-		"rx_bytes":     104857600,
-		"tx_bytes":     524288000,
+	peers := make(map[string]models.PeerStats)
+	idx := 1
+	for name := range m.clients {
+		rx := int64(idx * 450 * 1024 * 1024)
+		tx := int64(idx * 1200 * 1024 * 1024)
+		peers[name] = models.PeerStats{
+			ClientName:    name,
+			LastHandshake: "2 minutes ago",
+			RxBytes:       rx,
+			TxBytes:       tx,
+			MonthBytes:    rx + tx,
+		}
+		idx++
+	}
+
+	return &models.StatsSummaryResponse{
+		ActivePeers: len(m.clients),
+		Uptime:      "3d 12h 4m",
+		TotalRx:     1048576000,
+		TotalTx:     5242880000,
+		Peers:       peers,
 	}, nil
+}
+
+func (m *MockRunner) RestartAWG(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// simulate restart
+	return nil
+}
+
+func (m *MockRunner) BackupAWG(ctx context.Context) (*models.BackupResponse, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	dummyContent := fmt.Sprintf("# Mock AWG Backup (%d clients)\nGenerated at: %s", len(m.clients), time.Now().Format(time.RFC3339))
+	return &models.BackupResponse{
+		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+		BackupData: base64.StdEncoding.EncodeToString([]byte(dummyContent)),
+	}, nil
+}
+
+func (m *MockRunner) RestoreAWG(ctx context.Context, backupData string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if backupData == "" {
+		return fmt.Errorf("backup data is empty")
+	}
+	return nil
 }

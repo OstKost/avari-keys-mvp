@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/auth"
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/client"
@@ -87,6 +88,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/admin/nodes", auth.RequireAdmin(s.handleAdminListNodes))
 	s.mux.HandleFunc("POST /api/v1/admin/nodes", auth.RequireAdmin(s.handleAdminAddNode))
 	s.mux.HandleFunc("DELETE /api/v1/admin/nodes/{id}", auth.RequireAdmin(s.handleAdminDeleteNode))
+	s.mux.HandleFunc("POST /api/v1/admin/nodes/{id}/restart", auth.RequireAdmin(s.handleAdminRestartNode))
+	s.mux.HandleFunc("GET /api/v1/admin/nodes/{id}/backup", auth.RequireAdmin(s.handleAdminBackupNode))
+	s.mux.HandleFunc("POST /api/v1/admin/nodes/{id}/restore", auth.RequireAdmin(s.handleAdminRestoreNode))
 
 	s.mux.HandleFunc("GET /api/v1/admin/keys", auth.RequireAdmin(s.handleAdminListAllKeys))
 }
@@ -404,24 +408,110 @@ func (s *Server) handleAdminListNodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Add live health status check
-	type NodeWithStatus struct {
-		models.Node
-		Online bool `json:"online"`
-	}
-
-	var res []NodeWithStatus
+	var res []models.NodeWithStatus
 	for _, n := range nodes {
 		slaveCli := client.NewSlaveClient(n.APIURL, n.APIKey)
+		start := time.Now()
 		health, hErr := slaveCli.CheckHealth(r.Context())
+		latency := time.Since(start).Milliseconds()
 		isOnline := hErr == nil && health != nil && health.Status == "ok"
-		res = append(res, NodeWithStatus{
-			Node:   n,
-			Online: isOnline,
+		if !isOnline {
+			latency = 0
+		}
+		res = append(res, models.NodeWithStatus{
+			Node:      n,
+			Online:    isOnline,
+			LatencyMs: latency,
 		})
 	}
 
 	s.writeJSON(w, http.StatusOK, res)
+}
+
+func (s *Server) handleAdminRestartNode(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid node ID"})
+		return
+	}
+
+	node, err := s.storage.GetNodeByID(r.Context(), id)
+	if err != nil {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "Node not found"})
+		return
+	}
+
+	slaveCli := client.NewSlaveClient(node.APIURL, node.APIKey)
+	if err := slaveCli.Restart(r.Context()); err != nil {
+		s.writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("Restart failed: %v", err)})
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: fmt.Sprintf("Node '%s' AWG service restarted successfully", node.Name),
+	})
+}
+
+func (s *Server) handleAdminBackupNode(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid node ID"})
+		return
+	}
+
+	node, err := s.storage.GetNodeByID(r.Context(), id)
+	if err != nil {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "Node not found"})
+		return
+	}
+
+	slaveCli := client.NewSlaveClient(node.APIURL, node.APIKey)
+	backup, err := slaveCli.Backup(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("Backup failed: %v", err)})
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, backup)
+}
+
+func (s *Server) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid node ID"})
+		return
+	}
+
+	var req models.RestoreNodeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
+		return
+	}
+	if req.BackupData == "" {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "backup_data is required"})
+		return
+	}
+
+	node, err := s.storage.GetNodeByID(r.Context(), id)
+	if err != nil {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "Node not found"})
+		return
+	}
+
+	slaveCli := client.NewSlaveClient(node.APIURL, node.APIKey)
+	if err := slaveCli.Restore(r.Context(), req.BackupData); err != nil {
+		s.writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("Restore failed: %v", err)})
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: fmt.Sprintf("Node '%s' restored successfully from backup", node.Name),
+	})
 }
 
 func (s *Server) handleAdminAddNode(w http.ResponseWriter, r *http.Request) {
@@ -475,7 +565,109 @@ func (s *Server) handleAdminListAllKeys(w http.ResponseWriter, r *http.Request) 
 		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.writeJSON(w, http.StatusOK, keys)
+
+	// Filter by search and node_id
+	search := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("search")))
+	nodeIDStr := strings.TrimSpace(r.URL.Query().Get("node_id"))
+	var filterNodeID int64
+	if nodeIDStr != "" {
+		filterNodeID, _ = strconv.ParseInt(nodeIDStr, 10, 64)
+	}
+
+	// Fetch node stats cache to enrich traffic and handshake
+	nodes, _ := s.storage.ListNodes(r.Context())
+	statsMap := make(map[int64]*models.StatsSummaryResponse)
+	for _, n := range nodes {
+		slaveCli := client.NewSlaveClient(n.APIURL, n.APIKey)
+		stats, sErr := slaveCli.GetStats(r.Context())
+		if sErr == nil && stats != nil {
+			statsMap[n.ID] = stats
+		}
+	}
+
+	var filtered []models.ClientConfig
+	for _, k := range keys {
+		if filterNodeID > 0 && k.NodeID != filterNodeID {
+			continue
+		}
+		if search != "" {
+			matchDevice := strings.Contains(strings.ToLower(k.DeviceName), search)
+			matchClient := strings.Contains(strings.ToLower(k.ClientName), search)
+			matchNode := strings.Contains(strings.ToLower(k.NodeName), search)
+			if !matchDevice && !matchClient && !matchNode {
+				continue
+			}
+		}
+
+		// Enrich stats if available
+		if stats, ok := statsMap[k.NodeID]; ok && stats.Peers != nil {
+			if p, found := stats.Peers[k.ClientName]; found {
+				k.LastHandshake = p.LastHandshake
+				k.TotalTrafficBytes = p.RxBytes + p.TxBytes
+				k.MonthTrafficBytes = p.MonthBytes
+				k.TotalTrafficFormatted = formatBytes(k.TotalTrafficBytes)
+				k.MonthTrafficFormatted = formatBytes(k.MonthTrafficBytes)
+			}
+		}
+
+		filtered = append(filtered, k)
+	}
+
+	// Pagination
+	page := 1
+	limit := 10
+	if pStr := r.URL.Query().Get("page"); pStr != "" {
+		if p, pErr := strconv.Atoi(pStr); pErr == nil && p > 0 {
+			page = p
+		}
+	}
+	if lStr := r.URL.Query().Get("limit"); lStr != "" {
+		if l, lErr := strconv.Atoi(lStr); lErr == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	totalCount := len(filtered)
+	totalPages := (totalCount + limit - 1) / limit
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	startIndex := (page - 1) * limit
+	var pagedKeys []models.ClientConfig
+	if startIndex < totalCount {
+		endIndex := startIndex + limit
+		if endIndex > totalCount {
+			endIndex = totalCount
+		}
+		pagedKeys = filtered[startIndex:endIndex]
+	} else {
+		pagedKeys = []models.ClientConfig{}
+	}
+
+	s.writeJSON(w, http.StatusOK, models.PaginatedKeysResponse{
+		Keys:       pagedKeys,
+		TotalCount: totalCount,
+		Page:       page,
+		Limit:      limit,
+		TotalPages: totalPages,
+	})
+}
+
+func formatBytes(b int64) string {
+	if b <= 0 {
+		return "0 B"
+	}
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.2f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
 func (s *Server) writeJSON(w http.ResponseWriter, status int, data any) {

@@ -23,6 +23,7 @@ export interface AdminNode {
   api_url: string;
   is_active: boolean;
   online: boolean;
+  latency_ms?: number;
   created_at: string;
 }
 
@@ -34,7 +35,20 @@ export interface ClientConfigSummary {
   device_name: string;
   node_name?: string;
   node_type?: 'cascade' | 'direct';
+  last_handshake?: string;
+  total_traffic_bytes?: number;
+  month_traffic_bytes?: number;
+  total_traffic_formatted?: string;
+  month_traffic_formatted?: string;
   created_at: string;
+}
+
+export interface PaginatedKeysResponse {
+  keys: ClientConfigSummary[];
+  total_count: number;
+  page: number;
+  limit: number;
+  total_pages: number;
 }
 
 export interface ClientConfigDetail {

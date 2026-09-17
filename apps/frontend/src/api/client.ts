@@ -1,4 +1,4 @@
-import { User, NodePublic, AdminNode, ClientConfigSummary, ClientConfigDetail } from '../types';
+import { User, NodePublic, AdminNode, ClientConfigSummary, ClientConfigDetail, PaginatedKeysResponse } from '../types';
 import { mockApi } from './mockClient';
 
 const API_BASE = '/api/v1';
@@ -179,11 +179,47 @@ const realApi = {
     return handleResponse<{ success: boolean }>(res);
   },
 
-  async getAdminKeys(): Promise<ClientConfigSummary[]> {
-    const res = await fetch(`${API_BASE}/admin/keys`, {
+  async restartNode(id: number): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/admin/nodes/${id}/restart`, {
+      method: 'POST',
       headers: getAuthHeaders(),
     });
-    return handleResponse<ClientConfigSummary[]>(res);
+    return handleResponse<{ success: boolean; message: string }>(res);
+  },
+
+  async backupNode(id: number): Promise<{ timestamp: string; backup_data: string }> {
+    const res = await fetch(`${API_BASE}/admin/nodes/${id}/backup`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<{ timestamp: string; backup_data: string }>(res);
+  },
+
+  async restoreNode(id: number, backupData: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/admin/nodes/${id}/restore`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ backup_data: backupData }),
+    });
+    return handleResponse<{ success: boolean; message: string }>(res);
+  },
+
+  async getAdminKeys(params?: {
+    search?: string;
+    nodeId?: number;
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedKeysResponse> {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    if (params?.nodeId) query.set('node_id', params.nodeId.toString());
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetch(`${API_BASE}/admin/keys${qs}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<PaginatedKeysResponse>(res);
   },
 };
 

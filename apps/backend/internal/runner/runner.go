@@ -24,6 +24,9 @@ type AWGRunner interface {
 	RemoveClient(ctx context.Context, name string) error
 	GetClient(ctx context.Context, name string) (*models.ClientResponse, error)
 	ListClients(ctx context.Context) ([]models.ClientListItem, error)
-	GetStats(ctx context.Context) (map[string]any, error)
+	GetStats(ctx context.Context) (*models.StatsSummaryResponse, error)
+	RestartAWG(ctx context.Context) error
+	BackupAWG(ctx context.Context) (*models.BackupResponse, error)
+	RestoreAWG(ctx context.Context, backupData string) error
 	CheckHealth(ctx context.Context) bool
 }

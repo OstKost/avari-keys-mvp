@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Server, Plus, Trash2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
+import { Server, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, RotateCcw, Download, Upload, AlertTriangle, X, Check } from 'lucide-react';
 import { api } from '../api/client';
 import { AdminNode } from '../types';
 
 export function AdminNodes() {
   const [nodes, setNodes] = useState<AdminNode[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isChecking, setIsChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Form state
+  // Form state for adding node
   const [showAddForm, setShowAddForm] = useState(false);
   const [name, setName] = useState('');
   const [type, setType] = useState<'cascade' | 'direct'>('cascade');
@@ -16,9 +18,21 @@ export function AdminNodes() {
   const [apiKey, setApiKey] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchNodes = async () => {
+  // Action modals state
+  const [restartingNode, setRestartingNode] = useState<AdminNode | null>(null);
+  const [isRestarting, setIsRestarting] = useState(false);
+
+  const [backupNodeState, setBackupNodeState] = useState<{ node: AdminNode; data: string; timestamp: string } | null>(null);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+
+  const [restoringNode, setRestoringNode] = useState<AdminNode | null>(null);
+  const [restoreData, setRestoreData] = useState('');
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  const fetchNodes = async (showSpin = false) => {
     try {
-      setLoading(true);
+      if (showSpin) setIsChecking(true);
+      else setLoading(true);
       const data = await api.getAdminNodes();
       setNodes(data);
       setError(null);
@@ -26,11 +40,12 @@ export function AdminNodes() {
       setError(err.message || 'Ошибка загрузки серверов');
     } finally {
       setLoading(false);
+      setIsChecking(false);
     }
   };
 
   useEffect(() => {
-    fetchNodes();
+    fetchNodes(false);
   }, []);
 
   const handleAddNode = async (e: React.FormEvent) => {
@@ -43,7 +58,9 @@ export function AdminNodes() {
       setApiUrl('');
       setApiKey('');
       setShowAddForm(false);
-      await fetchNodes();
+      setSuccessMsg('Новый сервер успешно подключен');
+      await fetchNodes(false);
+      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
       setError(err.message || 'Ошибка добавления сервера');
     } finally {
@@ -55,10 +72,88 @@ export function AdminNodes() {
     if (!confirm('Вы уверены, что хотите удалить эту ноду? Все выданные на ней ключи будут удалены из базы.')) return;
     try {
       await api.deleteAdminNode(id);
-      await fetchNodes();
+      setSuccessMsg('Сервер успешно удален');
+      await fetchNodes(false);
+      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
-      alert(err.message || 'Ошибка удаления ноды');
+      setError(err.message || 'Ошибка удаления ноды');
     }
+  };
+
+  const handleRestartConfirm = async () => {
+    if (!restartingNode) return;
+    try {
+      setIsRestarting(true);
+      const res = await api.restartNode(restartingNode.id);
+      setSuccessMsg(res.message || `Служба AWG на сервере "${restartingNode.name}" успешно перезапущена`);
+      setRestartingNode(null);
+      await fetchNodes(false);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setError(err.message || 'Ошибка перезапуска службы AWG');
+    } finally {
+      setIsRestarting(false);
+    }
+  };
+
+  const handleBackupClick = async (node: AdminNode) => {
+    try {
+      setIsBackingUp(true);
+      setError(null);
+      const res = await api.backupNode(node.id);
+      setBackupNodeState({
+        node,
+        data: res.backup_data,
+        timestamp: res.timestamp,
+      });
+    } catch (err: any) {
+      setError(err.message || 'Ошибка создания резервной копии');
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
+  const handleDownloadBackupFile = () => {
+    if (!backupNodeState) return;
+    const blob = new Blob([backupNodeState.data], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `backup_node_${backupNodeState.node.id}_${new Date().toISOString().slice(0, 10)}.bak`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRestoreSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!restoringNode || !restoreData.trim()) return;
+    try {
+      setIsRestoring(true);
+      setError(null);
+      const res = await api.restoreNode(restoringNode.id, restoreData.trim());
+      setSuccessMsg(res.message || `Конфигурация сервера "${restoringNode.name}" успешно восстановлена`);
+      setRestoringNode(null);
+      setRestoreData('');
+      await fetchNodes(false);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setError(err.message || 'Ошибка восстановления из резервной копии');
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  const handleRestoreFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) setRestoreData(content);
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -70,17 +165,18 @@ export function AdminNodes() {
             <span>Управление Slave-нодами AmneziaWG</span>
           </h3>
           <p className="text-xs text-[#A8B4B7] mt-1 font-sans">
-            Подключение серверов AWG (Каскад M0 $\to$ S1 или автономных S2) по защищенному API ключу.
+            Подключение серверов AWG (Каскад M0 $\to$ S1 или автономных S2) с измерением сетевой задержки и сервисными командами.
           </p>
         </div>
         
         <div className="flex items-center space-x-2.5">
           <button
-            onClick={fetchNodes}
-            className="flex items-center space-x-1.5 text-xs font-mono uppercase tracking-wider bg-[#102833] hover:bg-[#1C3945] text-[#A8B4B7] hover:text-[#F2F0E8] px-3.5 py-2.5 rounded-xl border border-[#1C3945] transition"
+            onClick={() => fetchNodes(true)}
+            disabled={isChecking}
+            className="flex items-center space-x-1.5 text-xs font-mono uppercase tracking-wider bg-[#102833] hover:bg-[#1C3945] text-[#A8B4B7] hover:text-[#F2F0E8] px-3.5 py-2.5 rounded-xl border border-[#1C3945] transition disabled:opacity-50"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Health Check</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin text-[#D9B96E]' : ''}`} />
+            <span>{isChecking ? 'Проверка...' : 'Health Check'}</span>
           </button>
           
           <button
@@ -94,8 +190,26 @@ export function AdminNodes() {
       </div>
 
       {error && (
-        <div className="bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs p-3.5 rounded-xl mb-5 shadow-lg">
-          {error}
+        <div className="bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs p-3.5 rounded-xl mb-5 shadow-lg flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button onClick={() => setError(null)} className="text-rose-400 hover:text-rose-200">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {successMsg && (
+        <div className="bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 text-xs p-3.5 rounded-xl mb-5 shadow-lg flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{successMsg}</span>
+          </div>
+          <button onClick={() => setSuccessMsg(null)} className="text-emerald-400 hover:text-emerald-200">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -173,28 +287,35 @@ export function AdminNodes() {
         <table className="w-full text-left text-sm text-[#F2F0E8]">
           <thead className="bg-[#102833]/90 text-[10px] font-mono uppercase tracking-widest text-[#A8B4B7] border-b border-[#1C3945]">
             <tr>
-              <th className="px-5 py-3.5">Статус</th>
+              <th className="px-5 py-3.5">Статус / Ping</th>
               <th className="px-5 py-3.5">Название</th>
               <th className="px-5 py-3.5">Тип</th>
               <th className="px-5 py-3.5">API URL</th>
               <th className="px-5 py-3.5">Добавлен</th>
-              <th className="px-5 py-3.5 text-right">Действия</th>
+              <th className="px-5 py-3.5 text-right">Действия & Сервис</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1C3945]/70 bg-[#0A1D26]/40 font-sans">
             {nodes.map((node) => (
               <tr key={node.id} className="hover:bg-[#102833]/50 transition duration-150">
                 <td className="px-5 py-3.5">
-                  <span
-                    className={`inline-flex items-center space-x-1.5 text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full ${
-                      node.online
-                        ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
-                        : 'bg-rose-950/80 text-rose-400 border border-rose-800/60'
-                    }`}
-                  >
-                    {node.online ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                    <span>{node.online ? 'Online' : 'Offline'}</span>
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <span
+                      className={`inline-flex items-center space-x-1.5 text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full ${
+                        node.online
+                          ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
+                          : 'bg-rose-950/80 text-rose-400 border border-rose-800/60'
+                      }`}
+                    >
+                      {node.online ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                      <span>{node.online ? 'Online' : 'Offline'}</span>
+                    </span>
+                    {node.online && typeof node.latency_ms === 'number' && (
+                      <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-[#102833] text-emerald-300 border border-[#1C3945]">
+                        {node.latency_ms} ms
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-5 py-3.5 font-medium text-[#F2F0E8]">{node.name}</td>
                 <td className="px-5 py-3.5">
@@ -213,13 +334,37 @@ export function AdminNodes() {
                   {new Date(node.created_at).toLocaleDateString()}
                 </td>
                 <td className="px-5 py-3.5 text-right">
-                  <button
-                    onClick={() => handleDelete(node.id)}
-                    title="Удалить"
-                    className="p-2 rounded-xl border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center justify-end space-x-1.5">
+                    <button
+                      onClick={() => setRestartingNode(node)}
+                      title="Перезапустить службу AmneziaWG"
+                      className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleBackupClick(node)}
+                      disabled={isBackingUp}
+                      title="Экспорт резервной копии (Backup)"
+                      className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#6EA8C4] hover:bg-[#1C3945] hover:text-[#A8B4B7] transition"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setRestoringNode(node)}
+                      title="Восстановить из копии (Restore)"
+                      className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#A8B4B7] hover:bg-[#1C3945] hover:text-[#F2F0E8] transition"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(node.id)}
+                      title="Удалить ноду"
+                      className="p-2 rounded-xl border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -233,6 +378,139 @@ export function AdminNodes() {
           </tbody>
         </table>
       </div>
+
+      {/* Restart Confirmation Modal */}
+      {restartingNode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#06141B]/80 backdrop-blur-sm">
+          <div className="bg-[#0A1D26] border border-[#D9B96E]/40 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center space-x-3 text-[#D9B96E]">
+              <RotateCcw className="w-6 h-6" />
+              <h3 className="font-serif text-lg font-bold text-[#F2F0E8]">Перезапуск AmneziaWG</h3>
+            </div>
+            <p className="text-xs text-[#A8B4B7] leading-relaxed">
+              Вы собираетесь перезапустить сервис AmneziaWG на ноде{' '}
+              <strong className="text-[#F2F0E8]">«{restartingNode.name}»</strong>. 
+              Текущие сетевые сессии клиентов будут кратковременно разорваны (~1-2 сек) и возобновлены.
+            </p>
+            <div className="flex justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setRestartingNode(null)}
+                disabled={isRestarting}
+                className="px-4 py-2 text-xs font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#102833]"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleRestartConfirm}
+                disabled={isRestarting}
+                className="px-5 py-2 text-xs font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition disabled:opacity-50"
+              >
+                {isRestarting ? 'Перезапуск...' : 'Подтвердить перезапуск'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Backup Modal */}
+      {backupNodeState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#06141B]/80 backdrop-blur-sm">
+          <div className="bg-[#0A1D26] border border-[#6EA8C4]/40 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3 text-[#6EA8C4]">
+                <Download className="w-6 h-6" />
+                <h3 className="font-serif text-lg font-bold text-[#F2F0E8]">Резервная копия AWG</h3>
+              </div>
+              <button onClick={() => setBackupNodeState(null)} className="text-[#A8B4B7] hover:text-[#F2F0E8]">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-xs text-[#A8B4B7]">
+              Архив конфигураций клиентов и ключей с ноды{' '}
+              <strong className="text-[#F2F0E8]">«{backupNodeState.node.name}»</strong> от{' '}
+              <span className="font-mono text-emerald-400">{new Date(backupNodeState.timestamp).toLocaleString()}</span>.
+            </p>
+            <div className="bg-[#06141B] p-3 rounded-xl border border-[#1C3945] font-mono text-[11px] text-[#A8B4B7] max-h-36 overflow-y-auto break-all select-all">
+              {backupNodeState.data}
+            </div>
+            <div className="flex justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={handleDownloadBackupFile}
+                className="flex items-center space-x-2 px-5 py-2 text-xs font-mono font-bold uppercase bg-gradient-to-r from-[#6EA8C4] to-[#407B98] text-[#06141B] rounded-xl shadow-lg transition"
+              >
+                <Download className="w-4 h-4" />
+                <span>Скачать файл .bak</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Restore Modal */}
+      {restoringNode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#06141B]/80 backdrop-blur-sm">
+          <form onSubmit={handleRestoreSubmit} className="bg-[#0A1D26] border border-[#D9B96E]/40 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3 text-[#D9B96E]">
+                <Upload className="w-6 h-6" />
+                <h3 className="font-serif text-lg font-bold text-[#F2F0E8]">Восстановление AWG</h3>
+              </div>
+              <button type="button" onClick={() => setRestoringNode(null)} className="text-[#A8B4B7] hover:text-[#F2F0E8]">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-xs text-[#A8B4B7]">
+              Загрузите или вставьте архив резервной копии для развертывания на ноде{' '}
+              <strong className="text-[#F2F0E8]">«{restoringNode.name}»</strong>.
+            </p>
+            <div>
+              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+                Загрузить из файла (.bak)
+              </label>
+              <input
+                type="file"
+                accept=".bak,.txt,.json"
+                onChange={handleRestoreFileUpload}
+                className="block w-full text-xs text-[#A8B4B7] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-mono file:bg-[#102833] file:text-[#D9B96E] hover:file:bg-[#1C3945]"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+                Или вставьте данные архива:
+              </label>
+              <textarea
+                rows={4}
+                value={restoreData}
+                onChange={(e) => setRestoreData(e.target.value)}
+                placeholder="Вставьте base64 строку резервной копии..."
+                className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl p-3 text-xs text-[#F2F0E8] focus:outline-none font-mono"
+                required
+              />
+            </div>
+            <div className="flex justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setRestoringNode(null)}
+                disabled={isRestoring}
+                className="px-4 py-2 text-xs font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#102833]"
+              >
+                Отмена
+              </button>
+              <button
+                type="submit"
+                disabled={isRestoring || !restoreData.trim()}
+                className="px-5 py-2 text-xs font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition disabled:opacity-50"
+              >
+                {isRestoring ? 'Восстановление...' : 'Восстановить конфигурацию'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
+
