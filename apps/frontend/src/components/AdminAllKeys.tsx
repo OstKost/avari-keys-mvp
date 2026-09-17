@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Key, Trash2, Search, Filter, ChevronLeft, ChevronRight, X, AlertTriangle, Check } from 'lucide-react';
+import { Key, Trash2, Search, Filter, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { api } from '../api/client';
 import { ClientConfigSummary, AdminNode } from '../types';
+import { ConfirmModal } from './ConfirmModal';
+import { useToast } from '../context/ToastContext';
 
 export function AdminAllKeys() {
+  const { toast } = useToast();
   const [keys, setKeys] = useState<ClientConfigSummary[]>([]);
   const [nodes, setNodes] = useState<AdminNode[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Filters & Pagination
   const [search, setSearch] = useState('');
@@ -17,6 +18,10 @@ export function AdminAllKeys() {
   const [limit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+
+  // Confirm delete modal state
+  const [keyToDelete, setKeyToDelete] = useState<ClientConfigSummary | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchNodes = async () => {
     try {
@@ -39,13 +44,12 @@ export function AdminAllKeys() {
       setKeys(res.keys);
       setTotalPages(res.total_pages);
       setTotalCount(res.total_count);
-      setError(null);
     } catch (err: any) {
-      setError(err.message || 'Ошибка загрузки реестра ключей');
+      toast.error(err.message || 'Ошибка загрузки реестра ключей');
     } finally {
       setLoading(false);
     }
-  }, [search, selectedNodeId, page, limit]);
+  }, [search, selectedNodeId, page, limit, toast]);
 
   useEffect(() => {
     fetchNodes();
@@ -55,15 +59,18 @@ export function AdminAllKeys() {
     fetchKeys();
   }, [fetchKeys]);
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Вы уверены, что хотите отозвать и удалить этот ключ? Конфигурация клиента перестанет работать.')) return;
+  const handleConfirmDelete = async () => {
+    if (!keyToDelete) return;
     try {
-      await api.deleteKey(id);
-      setSuccessMsg('Ключ успешно отозван и удален');
+      setIsDeleting(true);
+      await api.deleteKey(keyToDelete.id);
+      toast.success(`Ключ «${keyToDelete.device_name}» (${keyToDelete.client_name}) отозван`);
+      setKeyToDelete(null);
       await fetchKeys();
-      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
-      setError(err.message || 'Ошибка удаления ключа');
+      toast.error(err.message || 'Ошибка удаления ключа');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -91,30 +98,6 @@ export function AdminAllKeys() {
           </p>
         </div>
       </div>
-
-      {error && (
-        <div className="bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs p-3.5 rounded-xl mb-5 shadow-lg flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span>{error}</span>
-          </div>
-          <button onClick={() => setError(null)} className="text-rose-400 hover:text-rose-200">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {successMsg && (
-        <div className="bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 text-xs p-3.5 rounded-xl mb-5 shadow-lg flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{successMsg}</span>
-          </div>
-          <button onClick={() => setSuccessMsg(null)} className="text-emerald-400 hover:text-emerald-200">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Filters Bar */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
@@ -208,7 +191,7 @@ export function AdminAllKeys() {
                 </td>
                 <td className="px-5 py-3.5 text-right">
                   <button
-                    onClick={() => handleDelete(k.id)}
+                    onClick={() => setKeyToDelete(k)}
                     title="Отозвать и удалить ключ"
                     className="p-2 rounded-xl border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
                   >
@@ -260,6 +243,28 @@ export function AdminAllKeys() {
           </div>
         </div>
       )}
+
+      {/* Revoke Key Confirm Modal */}
+      <ConfirmModal
+        isOpen={Boolean(keyToDelete)}
+        title="Отозвать и удалить ключ?"
+        variant="danger"
+        confirmText="Да, отозвать ключ"
+        cancelText="Отмена"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onClose={() => setKeyToDelete(null)}
+        message={
+          keyToDelete && (
+            <div>
+              Вы собираетесь безвозвратно отозвать ключ устройства{' '}
+              <strong className="text-[#F2F0E8]">«{keyToDelete.device_name}»</strong> (клиент{' '}
+              <code className="text-[#D9B96E] font-mono">{keyToDelete.client_name}</code>, User #{keyToDelete.user_id}).
+              Конфигурация на стороне пользователя и на ноде будет аннулирована.
+            </div>
+          )
+        }
+      />
     </div>
   );
 }

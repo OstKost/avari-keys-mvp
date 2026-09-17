@@ -5,11 +5,14 @@ import { User, NodePublic, ClientConfigSummary, ClientConfigDetail } from './typ
 import { AuthModal } from './components/AuthModal';
 import { KeyModal } from './components/KeyModal';
 import { CreateKeyModal } from './components/CreateKeyModal';
+import { ConfirmModal } from './components/ConfirmModal';
+import { useToast } from './context/ToastContext';
 import { AdminUsers } from './components/AdminUsers';
 import { AdminNodes } from './components/AdminNodes';
 import { AdminAllKeys } from './components/AdminAllKeys';
 
 export default function App() {
+  const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'keys' | 'nodes' | 'users' | 'all-keys'>('keys');
@@ -23,6 +26,8 @@ export default function App() {
   // Modals
   const [viewingKey, setViewingKey] = useState<ClientConfigDetail | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [keyToDelete, setKeyToDelete] = useState<ClientConfigSummary | null>(null);
+  const [deletingKey, setDeletingKey] = useState(false);
 
   // Check existing session
   useEffect(() => {
@@ -68,12 +73,18 @@ export default function App() {
     api.logout();
     setMockMode(false);
     setCurrentUser(null);
+    toast.info('Вы успешно вышли из системы');
   };
 
   const handleCreateKey = async (nodeId: number, deviceName: string) => {
-    const newKey = await api.createKey(nodeId, deviceName);
-    setViewingKey(newKey);
-    await loadDashboardData();
+    try {
+      const newKey = await api.createKey(nodeId, deviceName);
+      setViewingKey(newKey);
+      toast.success(`Ключ «${deviceName}» успешно создан`);
+      await loadDashboardData();
+    } catch (err: any) {
+      toast.error(err.message || 'Не удалось создать ключ');
+    }
   };
 
   const handleViewKey = async (id: number) => {
@@ -81,17 +92,22 @@ export default function App() {
       const keyDetail = await api.getKey(id);
       setViewingKey(keyDetail);
     } catch (err: any) {
-      alert(err.message || 'Ошибка получения конфигурации');
+      toast.error(err.message || 'Ошибка получения конфигурации');
     }
   };
 
-  const handleDeleteKey = async (id: number) => {
-    if (!confirm('Вы уверены, что хотите отозвать и удалить этот VPN ключ?')) return;
+  const handleConfirmDeleteKey = async () => {
+    if (!keyToDelete) return;
     try {
-      await api.deleteKey(id);
+      setDeletingKey(true);
+      await api.deleteKey(keyToDelete.id);
+      toast.success(`Ключ «${keyToDelete.device_name}» успешно отозван`);
+      setKeyToDelete(null);
       await loadDashboardData();
     } catch (err: any) {
-      alert(err.message || 'Ошибка удаления ключа');
+      toast.error(err.message || 'Ошибка удаления ключа');
+    } finally {
+      setDeletingKey(false);
     }
   };
 
@@ -345,7 +361,7 @@ export default function App() {
                           <span>QR & Конфиг</span>
                         </button>
                         <button
-                          onClick={() => handleDeleteKey(k.id)}
+                          onClick={() => setKeyToDelete(k)}
                           title="Отозвать ключ"
                           className="p-2.5 text-[#718187] hover:text-rose-400 bg-[#06141B] hover:bg-rose-950/30 rounded-xl border border-[#1C3945] hover:border-rose-800/60 transition"
                         >
@@ -374,6 +390,28 @@ export default function App() {
           onCreate={handleCreateKey}
         />
       )}
+
+      {/* Confirm Delete Key Modal */}
+      <ConfirmModal
+        isOpen={Boolean(keyToDelete)}
+        title="Отозвать VPN-ключ?"
+        variant="danger"
+        confirmText="Да, отозвать ключ"
+        cancelText="Отмена"
+        isLoading={deletingKey}
+        onConfirm={handleConfirmDeleteKey}
+        onClose={() => setKeyToDelete(null)}
+        message={
+          keyToDelete && (
+            <div>
+              Вы собираетесь отозвать и удалить ключ для устройства{' '}
+              <strong className="text-[#F2F0E8]">«{keyToDelete.device_name}»</strong> (узел{' '}
+              <span className="text-[#D9B96E]">{keyToDelete.node_name || 'Node'}</span>).
+              Конфигурация на устройстве перестанет подключаться к сети.
+            </div>
+          )
+        }
+      />
 
       {/* Footer */}
       <footer className="border-t border-[#1C3945]/60 py-6 text-center text-xs text-[#718187] font-mono tracking-wider">

@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Server, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, RotateCcw, Download, Upload, AlertTriangle, X, Check } from 'lucide-react';
+import { Server, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, RotateCcw, Download, Upload, X } from 'lucide-react';
 import { api } from '../api/client';
 import { AdminNode } from '../types';
+import { ConfirmModal } from './ConfirmModal';
+import { useToast } from '../context/ToastContext';
 
 export function AdminNodes() {
+  const { toast } = useToast();
   const [nodes, setNodes] = useState<AdminNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Form state for adding node
   const [showAddForm, setShowAddForm] = useState(false);
@@ -21,6 +22,9 @@ export function AdminNodes() {
   // Action modals state
   const [restartingNode, setRestartingNode] = useState<AdminNode | null>(null);
   const [isRestarting, setIsRestarting] = useState(false);
+
+  const [nodeToDelete, setNodeToDelete] = useState<AdminNode | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [backupNodeState, setBackupNodeState] = useState<{ node: AdminNode; data: string; timestamp: string } | null>(null);
   const [isBackingUp, setIsBackingUp] = useState(false);
@@ -35,9 +39,12 @@ export function AdminNodes() {
       else setLoading(true);
       const data = await api.getAdminNodes();
       setNodes(data);
-      setError(null);
+      if (showSpin) {
+        const onlineCount = data.filter((n) => n.online).length;
+        toast.success(`Health Check завершен: доступно ${onlineCount} из ${data.length} серверов`);
+      }
     } catch (err: any) {
-      setError(err.message || 'Ошибка загрузки серверов');
+      toast.error(err.message || 'Ошибка загрузки серверов');
     } finally {
       setLoading(false);
       setIsChecking(false);
@@ -52,31 +59,32 @@ export function AdminNodes() {
     e.preventDefault();
     try {
       setSubmitting(true);
-      setError(null);
       await api.addAdminNode(name.trim(), type, apiUrl.trim(), apiKey.trim());
       setName('');
       setApiUrl('');
       setApiKey('');
       setShowAddForm(false);
-      setSuccessMsg('Новый сервер успешно подключен');
+      toast.success(`Сервер «${name}» успешно подключен`);
       await fetchNodes(false);
-      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
-      setError(err.message || 'Ошибка добавления сервера');
+      toast.error(err.message || 'Ошибка добавления сервера');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Вы уверены, что хотите удалить эту ноду? Все выданные на ней ключи будут удалены из базы.')) return;
+  const handleConfirmDelete = async () => {
+    if (!nodeToDelete) return;
     try {
-      await api.deleteAdminNode(id);
-      setSuccessMsg('Сервер успешно удален');
+      setIsDeleting(true);
+      await api.deleteAdminNode(nodeToDelete.id);
+      toast.success(`Сервер «${nodeToDelete.name}» удален`);
+      setNodeToDelete(null);
       await fetchNodes(false);
-      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
-      setError(err.message || 'Ошибка удаления ноды');
+      toast.error(err.message || 'Ошибка удаления ноды');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -85,12 +93,11 @@ export function AdminNodes() {
     try {
       setIsRestarting(true);
       const res = await api.restartNode(restartingNode.id);
-      setSuccessMsg(res.message || `Служба AWG на сервере "${restartingNode.name}" успешно перезапущена`);
+      toast.success(res.message || `Служба AWG на сервере «${restartingNode.name}» успешно перезапущена`);
       setRestartingNode(null);
       await fetchNodes(false);
-      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
-      setError(err.message || 'Ошибка перезапуска службы AWG');
+      toast.error(err.message || 'Ошибка перезапуска службы AWG');
     } finally {
       setIsRestarting(false);
     }
@@ -99,15 +106,15 @@ export function AdminNodes() {
   const handleBackupClick = async (node: AdminNode) => {
     try {
       setIsBackingUp(true);
-      setError(null);
       const res = await api.backupNode(node.id);
       setBackupNodeState({
         node,
         data: res.backup_data,
         timestamp: res.timestamp,
       });
+      toast.info(`Резервная копия для «${node.name}» подготовлена`);
     } catch (err: any) {
-      setError(err.message || 'Ошибка создания резервной копии');
+      toast.error(err.message || 'Ошибка создания резервной копии');
     } finally {
       setIsBackingUp(false);
     }
@@ -124,6 +131,7 @@ export function AdminNodes() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    toast.success('Файл резервной копии скачан');
   };
 
   const handleRestoreSubmit = async (e: React.FormEvent) => {
@@ -131,15 +139,13 @@ export function AdminNodes() {
     if (!restoringNode || !restoreData.trim()) return;
     try {
       setIsRestoring(true);
-      setError(null);
       const res = await api.restoreNode(restoringNode.id, restoreData.trim());
-      setSuccessMsg(res.message || `Конфигурация сервера "${restoringNode.name}" успешно восстановлена`);
+      toast.success(res.message || `Конфигурация сервера «${restoringNode.name}» успешно восстановлена`);
       setRestoringNode(null);
       setRestoreData('');
       await fetchNodes(false);
-      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
-      setError(err.message || 'Ошибка восстановления из резервной копии');
+      toast.error(err.message || 'Ошибка восстановления из резервной копии');
     } finally {
       setIsRestoring(false);
     }
@@ -188,30 +194,6 @@ export function AdminNodes() {
           </button>
         </div>
       </div>
-
-      {error && (
-        <div className="bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs p-3.5 rounded-xl mb-5 shadow-lg flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span>{error}</span>
-          </div>
-          <button onClick={() => setError(null)} className="text-rose-400 hover:text-rose-200">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {successMsg && (
-        <div className="bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 text-xs p-3.5 rounded-xl mb-5 shadow-lg flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{successMsg}</span>
-          </div>
-          <button onClick={() => setSuccessMsg(null)} className="text-emerald-400 hover:text-emerald-200">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Add Form */}
       {showAddForm && (
@@ -358,7 +340,7 @@ export function AdminNodes() {
                       <Upload className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => handleDelete(node.id)}
+                      onClick={() => setNodeToDelete(node)}
                       title="Удалить ноду"
                       className="p-2 rounded-xl border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
                     >
@@ -379,40 +361,47 @@ export function AdminNodes() {
         </table>
       </div>
 
-      {/* Restart Confirmation Modal */}
-      {restartingNode && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#06141B]/80 backdrop-blur-sm">
-          <div className="bg-[#0A1D26] border border-[#D9B96E]/40 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center space-x-3 text-[#D9B96E]">
-              <RotateCcw className="w-6 h-6" />
-              <h3 className="font-serif text-lg font-bold text-[#F2F0E8]">Перезапуск AmneziaWG</h3>
+      {/* Restart Confirm Modal */}
+      <ConfirmModal
+        isOpen={Boolean(restartingNode)}
+        title="Перезапустить AmneziaWG?"
+        variant="gold"
+        confirmText="Да, перезапустить"
+        cancelText="Отмена"
+        isLoading={isRestarting}
+        onConfirm={handleRestartConfirm}
+        onClose={() => setRestartingNode(null)}
+        message={
+          restartingNode && (
+            <div>
+              Вы собираетесь перезапустить сервис AmneziaWG на сервере{' '}
+              <strong className="text-[#F2F0E8]">«{restartingNode.name}»</strong>.
+              Текущие сетевые сессии клиентов будут кратковременно перезапущены (~1-2 сек).
             </div>
-            <p className="text-xs text-[#A8B4B7] leading-relaxed">
-              Вы собираетесь перезапустить сервис AmneziaWG на ноде{' '}
-              <strong className="text-[#F2F0E8]">«{restartingNode.name}»</strong>. 
-              Текущие сетевые сессии клиентов будут кратковременно разорваны (~1-2 сек) и возобновлены.
-            </p>
-            <div className="flex justify-end space-x-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setRestartingNode(null)}
-                disabled={isRestarting}
-                className="px-4 py-2 text-xs font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#102833]"
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                onClick={handleRestartConfirm}
-                disabled={isRestarting}
-                className="px-5 py-2 text-xs font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition disabled:opacity-50"
-              >
-                {isRestarting ? 'Перезапуск...' : 'Подтвердить перезапуск'}
-              </button>
+          )
+        }
+      />
+
+      {/* Delete Node Confirm Modal */}
+      <ConfirmModal
+        isOpen={Boolean(nodeToDelete)}
+        title="Удалить Slave-сервер?"
+        variant="danger"
+        confirmText="Да, удалить сервер"
+        cancelText="Отмена"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onClose={() => setNodeToDelete(null)}
+        message={
+          nodeToDelete && (
+            <div>
+              Вы собираетесь удалить сервер{' '}
+              <strong className="text-[#F2F0E8]">«{nodeToDelete.name}»</strong>.
+              Все выданные на этом сервере ключи клиентов будут также удалены из базы данных.
             </div>
-          </div>
-        </div>
-      )}
+          )
+        }
+      />
 
       {/* Backup Modal */}
       {backupNodeState && (

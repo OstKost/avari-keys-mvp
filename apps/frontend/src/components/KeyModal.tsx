@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Copy, Check, Download, QrCode as QrIcon } from 'lucide-react';
 import QRCode from 'qrcode';
 import { ClientConfigDetail } from '../types';
+import { useToast } from '../context/ToastContext';
 
 interface Props {
   keyData: ClientConfigDetail;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function KeyModal({ keyData, onClose }: Props) {
+  const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [qrUrl, setQrUrl] = useState<string>('');
 
@@ -27,6 +29,7 @@ export function KeyModal({ keyData, onClose }: Props) {
   const handleCopy = () => {
     navigator.clipboard.writeText(keyData.config);
     setCopied(true);
+    toast.success('Конфигурация AmneziaWG скопирована в буфер обмена');
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -40,6 +43,7 @@ export function KeyModal({ keyData, onClose }: Props) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    toast.success(`Файл ${keyData.client_name}.conf скачан`);
   };
 
   return (
