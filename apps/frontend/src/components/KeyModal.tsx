@@ -17,9 +17,9 @@ export function KeyModal({ keyData, onClose }: Props) {
       setQrUrl(keyData.qr_code);
     } else if (keyData.config) {
       QRCode.toDataURL(keyData.config, {
-        width: 300,
+        width: 320,
         margin: 2,
-        color: { dark: '#000000', light: '#ffffff' },
+        color: { dark: '#06141B', light: '#FFFFFF' },
       }).then(setQrUrl).catch(console.error);
     }
   }, [keyData]);
@@ -43,61 +43,68 @@ export function KeyModal({ keyData, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+    <div className="fixed inset-0 z-50 bg-[#06141B]/85 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="bg-[#0A1D26] border border-[#1C3945] hover:border-[#D9B96E]/50 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl shadow-black/90 relative">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+          className="absolute top-5 right-5 text-[#A8B4B7] hover:text-[#F2F0E8] p-1.5 rounded-xl hover:bg-[#102833] border border-transparent hover:border-[#1C3945] transition"
         >
           <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center space-x-3 mb-4">
-          <div className="bg-brand-600/20 p-2.5 rounded-xl text-brand-400 border border-brand-500/20">
+        {/* Modal Title */}
+        <div className="flex items-center space-x-3.5 mb-6">
+          <div className="bg-[#102833] p-3 rounded-2xl text-[#D9B96E] border border-[#1C3945]">
             <QrIcon className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white">{keyData.device_name}</h3>
-            <p className="text-xs text-slate-400">
-              Сервер: <span className="text-slate-200 font-medium">{keyData.node_name}</span> ({keyData.node_type === 'cascade' ? 'Каскад' : 'Прямой'})
+            <h3 className="font-serif text-xl font-bold text-[#F2F0E8] tracking-wide">{keyData.device_name}</h3>
+            <p className="text-xs text-[#A8B4B7] mt-0.5 font-sans">
+              Сервер: <strong className="text-[#D9B96E] font-medium">{keyData.node_name}</strong> ({keyData.node_type === 'cascade' ? 'Каскад' : 'Прямой'})
             </p>
           </div>
         </div>
 
-        {/* QR Code */}
+        {/* High contrast QR Container */}
         {qrUrl ? (
-          <div className="flex flex-col items-center justify-center bg-white p-4 rounded-xl mb-4 border border-slate-700 shadow-inner">
-            <img src={qrUrl} alt="AmneziaWG QR Code" className="w-56 h-56 object-contain" />
-            <span className="text-xs text-slate-600 mt-2 font-medium">Отсканируйте в приложении AmneziaWG</span>
+          <div className="flex flex-col items-center justify-center bg-white p-4 rounded-2xl mb-5 shadow-2xl border-4 border-[#102833]">
+            <img src={qrUrl} alt="AmneziaWG QR Code" className="w-56 h-56 object-contain rounded-lg" />
+            <span className="text-[11px] text-slate-700 font-mono tracking-wider font-semibold mt-2.5">
+              Сканируйте в приложении AmneziaWG
+            </span>
           </div>
         ) : (
-          <div className="flex items-center justify-center h-48 bg-slate-800 rounded-xl mb-4 text-slate-400 text-sm">
-            Генерация QR-кода...
+          <div className="flex items-center justify-center h-56 bg-[#06141B] rounded-2xl mb-5 text-[#718187] text-xs font-mono">
+            Генерация AmneziaWG QR...
           </div>
         )}
 
         {/* Config text box */}
-        <div className="mb-4">
-          <div className="flex justify-between items-center mb-1">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Файл конфигурации (.conf)</span>
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-1.5">
+            <span className="text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase tracking-wider">
+              Конфигурационный файл (.conf)
+            </span>
+            <span className="text-[10px] text-[#D9B96E] font-mono">AmneziaWG Protocol</span>
           </div>
-          <pre className="bg-slate-950 border border-slate-800 text-slate-300 text-xs p-3 rounded-lg overflow-x-auto max-h-32 font-mono scrollbar-thin">
+          <pre className="bg-[#06141B] border border-[#1C3945] text-[#A8B4B7] text-xs p-3.5 rounded-xl overflow-x-auto max-h-32 font-mono scrollbar-thin">
             {keyData.config}
           </pre>
         </div>
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3.5">
           <button
             onClick={handleCopy}
-            className="flex items-center justify-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium py-2.5 px-4 rounded-xl border border-slate-700 transition"
+            className="flex items-center justify-center space-x-2 bg-[#102833] hover:bg-[#1C3945] text-[#F2F0E8] font-mono text-xs uppercase tracking-wider py-3 px-4 rounded-xl border border-[#1C3945] hover:border-[#D9B96E]/50 transition"
           >
-            {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+            {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-[#D9B96E]" />}
             <span>{copied ? 'Скопировано!' : 'Скопировать'}</span>
           </button>
+          
           <button
             onClick={handleDownload}
-            className="flex items-center justify-center space-x-2 bg-brand-600 hover:bg-brand-500 text-white font-medium py-2.5 px-4 rounded-xl shadow-lg shadow-brand-600/20 transition"
+            className="flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold font-mono text-xs uppercase tracking-wider py-3 px-4 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 transition"
           >
             <Download className="w-4 h-4" />
             <span>Скачать .conf</span>
