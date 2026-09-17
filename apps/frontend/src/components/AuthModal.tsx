@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Shield, LogIn, UserPlus, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { api } from '../api/client';
+import { Shield, LogIn, UserPlus, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react';
+import { api, setMockMode } from '../api/client';
 import { User } from '../types';
 
 interface Props {
@@ -35,6 +35,13 @@ export function AuthModal({ onSuccess }: Props) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDemoMockLogin = () => {
+    setMockMode(true);
+    api.getMe().then((user) => {
+      onSuccess(user);
+    });
   };
 
   return (
@@ -114,14 +121,23 @@ export function AuthModal({ onSuccess }: Props) {
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-slate-800 text-center">
+        <div className="mt-4 pt-4 border-t border-slate-800 flex flex-col space-y-3">
+          <button
+            onClick={handleDemoMockLogin}
+            type="button"
+            className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-amber-500/10 to-brand-500/10 hover:from-amber-500/20 hover:to-brand-500/20 text-amber-300 border border-amber-500/30 font-medium py-2.5 px-4 rounded-xl text-xs transition"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span>Войти в Demo / Mock режиме (Forve Admin)</span>
+          </button>
+
           <button
             onClick={() => {
               setIsRegister(!isRegister);
               setError(null);
               setSuccessMsg(null);
             }}
-            className="text-xs text-brand-400 hover:text-brand-300 transition font-medium"
+            className="text-xs text-slate-400 hover:text-white transition font-medium text-center"
           >
             {isRegister ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться'}
           </button>

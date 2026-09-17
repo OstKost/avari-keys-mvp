@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Shield, Key, Server, Users, LogOut, Plus, QrCode as QrIcon, Trash2, Smartphone, Laptop, AlertCircle } from 'lucide-react';
-import { api } from './api/client';
+import { api, isMockMode, setMockMode } from './api/client';
 import { User, NodePublic, ClientConfigSummary, ClientConfigDetail } from './types';
 import { AuthModal } from './components/AuthModal';
 import { KeyModal } from './components/KeyModal';
@@ -27,14 +27,18 @@ export default function App() {
   // Check existing session
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token) {
+    const mock = isMockMode();
+    if (!token && !mock) {
       setAuthLoading(false);
       return;
     }
 
     api.getMe()
       .then((user) => setCurrentUser(user))
-      .catch(() => api.logout())
+      .catch(() => {
+        api.logout();
+        setMockMode(false);
+      })
       .finally(() => setAuthLoading(false));
   }, []);
 
@@ -62,6 +66,7 @@ export default function App() {
 
   const handleLogout = () => {
     api.logout();
+    setMockMode(false);
     setCurrentUser(null);
   };
 
@@ -118,6 +123,11 @@ export default function App() {
               <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded bg-brand-900/60 text-brand-300 border border-brand-700/50">
                 AWG Cascade & Direct
               </span>
+              {isMockMode() && (
+                <span className="ml-2 text-xs font-bold px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-600/50 shadow-sm">
+                  ⚡ Demo Mock Data
+                </span>
+              )}
             </div>
           </div>
 

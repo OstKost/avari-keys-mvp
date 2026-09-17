@@ -1,6 +1,23 @@
 import { User, NodePublic, AdminNode, ClientConfigSummary, ClientConfigDetail } from '../types';
+import { mockApi } from './mockClient';
 
 const API_BASE = '/api/v1';
+
+// Check if Mock mode is active (via env var or localStorage)
+export const isMockMode = (): boolean => {
+  return (
+    import.meta.env.VITE_USE_MOCK === 'true' ||
+    localStorage.getItem('use_mock_mode') === 'true'
+  );
+};
+
+export const setMockMode = (enabled: boolean) => {
+  if (enabled) {
+    localStorage.setItem('use_mock_mode', 'true');
+  } else {
+    localStorage.removeItem('use_mock_mode');
+  }
+};
 
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('token');
@@ -22,14 +39,14 @@ async function handleResponse<T>(res: Response): Promise<T> {
         errorMsg = data.error;
       }
     } catch {
-      // fallback to status text
+      // fallback
     }
     throw new Error(errorMsg);
   }
   return res.json();
 }
 
-export const api = {
+const realApi = {
   // Auth
   async login(username: string, password: string): Promise<{ token: string; user: User }> {
     const res = await fetch(`${API_BASE}/auth/login`, {
@@ -164,3 +181,13 @@ export const api = {
     return handleResponse<ClientConfigSummary[]>(res);
   },
 };
+
+// Dispatcher API: delegates to mockApi or realApi
+export const api = new Proxy(realApi, {
+  get(target, prop: keyof typeof realApi) {
+    if (isMockMode()) {
+      return mockApi[prop] || target[prop];
+    }
+    return target[prop];
+  },
+});
