@@ -1,0 +1,20 @@
+[Unit]
+Description=Avari Keys Master Backend Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/avari-keys
+Environment="MASTER_PORT=8080"
+Environment="DB_PATH=/opt/avari-keys/data/avari-master.db"
+Environment="ADMIN_USER=Forve"
+# Опционально: Environment="ADMIN_PASSWORD=YourStrongPasswordHere"
+# Опционально: Environment="JWT_SECRET=YourSecretKey"
+ExecStart=/usr/local/bin/avari-master
+Restart=always
+RestartSec=5s
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
