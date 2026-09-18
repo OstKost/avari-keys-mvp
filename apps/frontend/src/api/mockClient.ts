@@ -360,12 +360,13 @@ export const mockApi = {
       }));
   },
 
-  async createKey(nodeId: number, deviceName: string): Promise<ClientConfigDetail> {
+  async createKey(nodeId: number, deviceName: string, psk?: boolean): Promise<ClientConfigDetail> {
     const node = mockNodes.find((n) => n.id === nodeId);
     const nodeName = node ? node.name : 'Unknown Node';
     const nodeType = node ? node.type : 'direct';
     const id = mockKeys.length + 1;
     const clientName = `u${mockCurrentUser.id}_${deviceName.toLowerCase().replace(/[^a-z0-9_-]/g, '_')}`;
+    const pskLine = psk ? '\nPresharedKey = aMockPresharedKeyForShadowrocket12345=' : '';
 
     const config = `[Interface]
 Address = 10.${nodeType === 'cascade' ? '7' : '8'}.0.${id + 4}/32
@@ -381,7 +382,7 @@ H3 = 3
 H4 = 4
 
 [Peer]
-PublicKey = aMockServerPublicKeyForNode_${nodeId}=
+PublicKey = aMockServerPublicKeyForNode_${nodeId}=${pskLine}
 Endpoint = 198.51.100.${nodeId}:51820
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25`;

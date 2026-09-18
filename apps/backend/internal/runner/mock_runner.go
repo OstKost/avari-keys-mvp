@@ -31,13 +31,18 @@ func (m *MockRunner) CheckHealth(ctx context.Context) bool {
 	return m.healthy
 }
 
-func (m *MockRunner) AddClient(ctx context.Context, name string) (*models.ClientResponse, error) {
+func (m *MockRunner) AddClient(ctx context.Context, name string, psk bool) (*models.ClientResponse, error) {
 	if err := ValidateClientName(name); err != nil {
 		return nil, err
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	pskLine := ""
+	if psk {
+		pskLine = "\nPresharedKey = aMockPresharedKeyForShadowrocket12345="
+	}
 
 	config := fmt.Sprintf(`[Interface]
 Address = 10.7.0.%d/32
@@ -53,11 +58,11 @@ H3 = 3
 H4 = 4
 
 [Peer]
-PublicKey = aMockServerPublicKeyForTestingPurposes67890=
+PublicKey = aMockServerPublicKeyForTestingPurposes67890=%s
 Endpoint = 198.51.100.1:51820
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25
-`, len(m.clients)+3)
+`, len(m.clients)+3, pskLine)
 
 	mockQR := fmt.Sprintf("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100' height='100' fill='black'/><text x='10' y='50' fill='white'>QR:%s</text></svg>", name)
 

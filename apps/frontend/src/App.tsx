@@ -79,9 +79,9 @@ export default function App() {
     toast.info('Вы успешно вышли из системы');
   };
 
-  const handleCreateKey = async (nodeId: number, deviceName: string) => {
+  const handleCreateKey = async (nodeId: number, deviceName: string, psk: boolean) => {
     try {
-      const newKey = await api.createKey(nodeId, deviceName);
+      const newKey = await api.createKey(nodeId, deviceName, psk);
       setViewingKey(newKey);
       toast.success(`Ключ «${deviceName}» успешно создан`);
       await loadDashboardData();

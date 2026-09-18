@@ -13,6 +13,7 @@ type HealthResponse struct {
 // ClientCreateRequest payload for creating an AWG client key.
 type ClientCreateRequest struct {
 	Name string `json:"name"`
+	PSK  bool   `json:"psk,omitempty"`
 }
 
 // ClientResponse represents the output when a client is created or retrieved.

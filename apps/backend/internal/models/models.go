@@ -101,6 +101,7 @@ type LoginResponse struct {
 type CreateKeyRequest struct {
 	NodeID     int64  `json:"node_id"`
 	DeviceName string `json:"device_name"`
+	PSK        bool   `json:"psk,omitempty"`
 }
 
 type AddNodeRequest struct {

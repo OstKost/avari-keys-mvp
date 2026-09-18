@@ -1,17 +1,18 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Plus, Zap } from 'lucide-react';
+import { X, Plus, Zap, ShieldCheck } from 'lucide-react';
 import { NodePublic } from '../types';
 
 interface Props {
   nodes: NodePublic[];
   onClose: () => void;
-  onCreate: (nodeId: number, deviceName: string) => Promise<void>;
+  onCreate: (nodeId: number, deviceName: string, psk: boolean) => Promise<void>;
 }
 
 export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
   const [selectedNodeId, setSelectedNodeId] = useState<number>(nodes[0]?.id || 0);
   const [deviceName, setDeviceName] = useState<string>('');
+  const [psk, setPsk] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +42,7 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
     try {
       setLoading(true);
       setError(null);
-      await onCreate(selectedNodeId, cleanName);
+      await onCreate(selectedNodeId, cleanName, psk);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Ошибка создания ключа');
@@ -142,6 +143,43 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
             <p className="text-[10px] text-[#718187] font-mono mt-1.5">
               * Разрешены только латинские буквы (a-z, A-Z), цифры (0-9), дефис (-) и подчеркивание (_)
             </p>
+          </div>
+
+          {/* PSK / Shadowrocket Option */}
+          <div
+            onClick={() => setPsk(!psk)}
+            className={`p-3.5 rounded-2xl border cursor-pointer transition-all duration-200 ${
+              psk
+                ? 'border-[#D9B96E] bg-[#102833] shadow-lg shadow-[#D9B96E]/10'
+                : 'border-[#1C3945] bg-[#0D222C] hover:border-[#1C3945]/80 hover:bg-[#0D222C]/80'
+            }`}
+          >
+            <div className="flex items-start">
+              <input
+                type="checkbox"
+                id="psk-toggle"
+                checked={psk}
+                onChange={(e) => setPsk(e.target.checked)}
+                onClick={(e) => e.stopPropagation()}
+                className="mt-1 w-4 h-4 rounded text-[#D9B96E] bg-[#06141B] border-[#1C3945] focus:ring-[#D9B96E] focus:ring-offset-0 accent-[#D9B96E] cursor-pointer"
+              />
+              <div className="ml-3 flex-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5">
+                    <ShieldCheck className={`w-4 h-4 ${psk ? 'text-[#D9B96E]' : 'text-[#718187]'}`} />
+                    <span className="font-serif font-bold text-xs text-[#F2F0E8]">
+                      PresharedKey (PSK)
+                    </span>
+                  </div>
+                  <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#06141B] text-[#D9B96E] border border-[#D9B96E]/30">
+                    Shadowrocket iOS/macOS
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#A8B4B7] mt-1 font-sans leading-relaxed">
+                  Добавляет ключ <code className="text-[#D9B96E] font-mono text-[10px]">PresharedKey</code> (<code className="text-[#D9B96E] font-mono text-[10px]">--psk</code>). Обязательно для подключения клиентов Shadowrocket на iPhone, iPad и Mac.
+                </p>
+              </div>
+            </div>
           </div>
 
           <button

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/master"
@@ -164,10 +165,11 @@ func TestCompleteUserAndKeyFlow(t *testing.T) {
 	}
 	nodeID := nodes[0].ID
 
-	// 7. Alice creates a key on the node
+	// 7. Alice creates a key on the node with PSK enabled (Shadowrocket)
 	keyReqBody, _ := json.Marshal(models.CreateKeyRequest{
 		NodeID:     nodeID,
 		DeviceName: "iPad-Pro",
+		PSK:        true,
 	})
 	req = httptest.NewRequest("POST", "/api/v1/keys", bytes.NewReader(keyReqBody))
 	req.Header.Set("Authorization", "Bearer "+aliceToken)
@@ -182,6 +184,10 @@ func TestCompleteUserAndKeyFlow(t *testing.T) {
 	_ = json.NewDecoder(rec.Body).Decode(&createdKey)
 	if createdKey["qr_code"] == nil || createdKey["config"] == nil {
 		t.Fatalf("expected config and qr_code in response, got %+v", createdKey)
+	}
+	configStr, ok := createdKey["config"].(string)
+	if !ok || !strings.Contains(configStr, "PresharedKey") {
+		t.Fatalf("expected config to contain PresharedKey for Shadowrocket, got: %v", createdKey["config"])
 	}
 
 	// 8. Alice lists her keys

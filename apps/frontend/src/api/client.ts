@@ -123,11 +123,11 @@ const realApi = {
     return handleResponse<ClientConfigSummary[]>(res);
   },
 
-  async createKey(nodeId: number, deviceName: string): Promise<ClientConfigDetail> {
+  async createKey(nodeId: number, deviceName: string, psk?: boolean): Promise<ClientConfigDetail> {
     const res = await fetch(`${API_BASE}/keys`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ node_id: nodeId, device_name: deviceName }),
+      body: JSON.stringify({ node_id: nodeId, device_name: deviceName, psk: psk || false }),
     });
     return handleResponse<ClientConfigDetail>(res);
   },
