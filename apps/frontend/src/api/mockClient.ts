@@ -9,6 +9,7 @@ import {
   PaginatedAuditLogsResponse,
   AuditLogFilterParams,
   CleanupLogsResponse,
+  DashboardStats,
 } from '../types';
 
 // In-memory mock storage for standalone FE development
@@ -623,5 +624,92 @@ PersistentKeepalive = 25`;
       deleted_count: deleted,
     };
   },
+
+  async getDashboardStats(): Promise<DashboardStats> {
+    const totalUsers = mockUsers.length;
+    const activeUsers = mockUsers.filter((u) => u.is_active).length;
+    const pendingUsers = mockUsers.filter((u) => !u.is_active).length;
+    const totalKeys = mockKeys.length;
+    const activeDevicesOnline = mockKeys.filter(
+      (k) => k.last_handshake && !k.last_handshake.includes('Не')
+    ).length;
+
+    let totalTrafficBytes = 0;
+    let monthTrafficBytes = 0;
+    let cascadeTrafficBytes = 0;
+    let directTrafficBytes = 0;
+
+    for (const k of mockKeys) {
+      const bytes = k.total_traffic_bytes || 524288000;
+      const mBytes = k.month_traffic_bytes || 524288000;
+      totalTrafficBytes += bytes;
+      monthTrafficBytes += mBytes;
+      if (k.node_type === 'cascade') {
+        cascadeTrafficBytes += bytes;
+      } else {
+        directTrafficBytes += bytes;
+      }
+    }
+
+    const combined = cascadeTrafficBytes + directTrafficBytes;
+    const cascadePercentage = combined > 0 ? Math.round((cascadeTrafficBytes * 100) / combined) : 50;
+    const directPercentage = 100 - cascadePercentage;
+
+    const onlineNodes = mockNodes.filter((n) => n.online).length;
+    const avgLatencyMs =
+      onlineNodes > 0
+        ? Math.round(
+            mockNodes.reduce((acc, n) => acc + (n.latency_ms || 25), 0) / mockNodes.length
+          )
+        : 0;
+
+    const nodesOverview = mockNodes.map((n) => {
+      const nodeKeys = mockKeys.filter((k) => k.node_id === n.id);
+      const nodeTraffic = nodeKeys.reduce((acc, k) => acc + (k.total_traffic_bytes || 0), 0);
+      return {
+        id: n.id,
+        name: n.name,
+        type: n.type,
+        online: n.online,
+        latency_ms: n.latency_ms || 25,
+        peer_count: nodeKeys.length,
+        total_traffic_formatted: (nodeTraffic / (1024 * 1024 * 1024)).toFixed(2) + ' GB',
+      };
+    });
+
+    const formatB = (b: number) => {
+      if (b >= 1024 * 1024 * 1024 * 1024) {
+        return (b / (1024 * 1024 * 1024 * 1024)).toFixed(2) + ' TB';
+      }
+      return (b / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+    };
+
+    return {
+      total_users: totalUsers,
+      active_users: activeUsers,
+      pending_users: mockCurrentUser.role === 'admin' ? pendingUsers : undefined,
+      total_keys: totalKeys,
+      active_devices_online: activeDevicesOnline,
+      total_traffic_bytes: totalTrafficBytes,
+      month_traffic_bytes: monthTrafficBytes,
+      total_traffic_formatted: formatB(totalTrafficBytes),
+      month_traffic_formatted: formatB(monthTrafficBytes),
+      total_nodes: mockNodes.length,
+      online_nodes: onlineNodes,
+      avg_latency_ms: avgLatencyMs,
+      system_status: onlineNodes === mockNodes.length ? 'operational' : 'degraded',
+      topology_breakdown: {
+        cascade_traffic_bytes: cascadeTrafficBytes,
+        direct_traffic_bytes: directTrafficBytes,
+        cascade_traffic_formatted: formatB(cascadeTrafficBytes),
+        direct_traffic_formatted: formatB(directTrafficBytes),
+        cascade_percentage: cascadePercentage,
+        direct_percentage: directPercentage,
+      },
+      nodes: nodesOverview,
+      generated_at: new Date().toISOString(),
+    };
+  },
 };
+
 

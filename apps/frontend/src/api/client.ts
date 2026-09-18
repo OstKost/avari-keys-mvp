@@ -8,6 +8,7 @@ import {
   PaginatedAuditLogsResponse,
   AuditLogFilterParams,
   CleanupLogsResponse,
+  DashboardStats,
 } from '../types';
 import { mockApi } from './mockClient';
 
@@ -279,6 +280,13 @@ const realApi = {
       body: JSON.stringify({ days }),
     });
     return handleResponse<CleanupLogsResponse>(res);
+  },
+
+  async getDashboardStats(): Promise<DashboardStats> {
+    const res = await fetch(`${API_BASE}/stats/dashboard`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<DashboardStats>(res);
   },
 };
 

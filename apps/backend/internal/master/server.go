@@ -98,6 +98,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/admin/keys", auth.RequireAdmin(s.handleAdminListAllKeys))
 	s.mux.HandleFunc("GET /api/v1/admin/logs", auth.RequireAdmin(s.handleAdminListAuditLogs))
 	s.mux.HandleFunc("POST /api/v1/admin/logs/cleanup", auth.RequireAdmin(s.handleAdminCleanupAuditLogs))
+
+	// Shared / Dashboard Routes
+	s.mux.HandleFunc("GET /api/v1/stats/dashboard", auth.RequireAuth(s.handleGetDashboardStats))
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -937,9 +940,164 @@ func formatBytes(b int64) string {
 	return fmt.Sprintf("%.2f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
+func (s *Server) handleGetDashboardStats(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+
+	// 1. Users metrics
+	users, err := s.storage.ListUsers(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	totalUsers := len(users)
+	activeUsers := 0
+	pendingUsers := 0
+	for _, u := range users {
+		if u.IsActive {
+			activeUsers++
+		} else {
+			pendingUsers++
+		}
+	}
+
+	// 2. Client configs (total keys)
+	allConfigs, err := s.storage.ListAllClientConfigs(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	totalKeys := len(allConfigs)
+
+	// 3. Nodes stats & latency
+	nodes, err := s.storage.ListNodes(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	totalNodes := len(nodes)
+	onlineNodes := 0
+	var totalLatencySum int64
+	var latencyCount int64
+
+	var totalTrafficBytes int64
+	var monthTrafficBytes int64
+	var cascadeTrafficBytes int64
+	var directTrafficBytes int64
+	activeDevicesOnline := 0
+
+	var nodeDashboardList []models.NodeDashboardInfo
+
+	for _, n := range nodes {
+		slaveCli := client.NewSlaveClient(n.APIURL, n.APIKey)
+		start := time.Now()
+		health, hErr := slaveCli.CheckHealth(r.Context())
+		latency := time.Since(start).Milliseconds()
+
+		isOnline := hErr == nil && health != nil && health.Status == "ok"
+		if isOnline {
+			onlineNodes++
+			totalLatencySum += latency
+			latencyCount++
+		} else {
+			latency = 0
+		}
+
+		var nodePeerCount int
+		var nodeTrafficBytes int64
+
+		stats, sErr := slaveCli.GetStats(r.Context())
+		if sErr == nil && stats != nil && stats.Peers != nil {
+			nodePeerCount = len(stats.Peers)
+			for _, peer := range stats.Peers {
+				peerTotal := peer.RxBytes + peer.TxBytes
+				nodeTrafficBytes += peerTotal
+				totalTrafficBytes += peerTotal
+				monthTrafficBytes += peer.MonthBytes
+
+				if n.Type == "cascade" {
+					cascadeTrafficBytes += peerTotal
+				} else {
+					directTrafficBytes += peerTotal
+				}
+
+				// Check active handshake
+				if peer.LastHandshake != "" && !strings.Contains(strings.ToLower(peer.LastHandshake), "never") && !strings.Contains(strings.ToLower(peer.LastHandshake), "не") {
+					activeDevicesOnline++
+				}
+			}
+		}
+
+		nodeDashboardList = append(nodeDashboardList, models.NodeDashboardInfo{
+			ID:                    n.ID,
+			Name:                  n.Name,
+			Type:                  n.Type,
+			Online:                isOnline,
+			LatencyMs:             latency,
+			PeerCount:             nodePeerCount,
+			TotalTrafficFormatted: formatBytes(nodeTrafficBytes),
+		})
+	}
+
+	var avgLatencyMs int64
+	if latencyCount > 0 {
+		avgLatencyMs = totalLatencySum / latencyCount
+	}
+
+	// Calculate topology breakdown percentages
+	cascadePct := 50
+	directPct := 50
+	combinedTraffic := cascadeTrafficBytes + directTrafficBytes
+	if combinedTraffic > 0 {
+		cascadePct = int((cascadeTrafficBytes * 100) / combinedTraffic)
+		directPct = 100 - cascadePct
+	}
+
+	systemStatus := "operational"
+	if totalNodes > 0 && onlineNodes == 0 {
+		systemStatus = "outage"
+	} else if totalNodes > 0 && onlineNodes < totalNodes {
+		systemStatus = "degraded"
+	}
+
+	resp := models.DashboardStatsResponse{
+		TotalUsers:            totalUsers,
+		ActiveUsers:           activeUsers,
+		TotalKeys:             totalKeys,
+		ActiveDevicesOnline:   activeDevicesOnline,
+		TotalTrafficBytes:     totalTrafficBytes,
+		MonthTrafficBytes:     monthTrafficBytes,
+		TotalTrafficFormatted: formatBytes(totalTrafficBytes),
+		MonthTrafficFormatted: formatBytes(monthTrafficBytes),
+		TotalNodes:            totalNodes,
+		OnlineNodes:           onlineNodes,
+		AvgLatencyMs:          avgLatencyMs,
+		SystemStatus:          systemStatus,
+		TopologyBreakdown: models.TopologyTrafficBreakdown{
+			CascadeTrafficBytes:     cascadeTrafficBytes,
+			DirectTrafficBytes:      directTrafficBytes,
+			CascadeTrafficFormatted: formatBytes(cascadeTrafficBytes),
+			DirectTrafficFormatted:  formatBytes(directTrafficBytes),
+			CascadePercentage:       cascadePct,
+			DirectPercentage:        directPct,
+		},
+		Nodes:       nodeDashboardList,
+		GeneratedAt: time.Now(),
+	}
+
+	// Admin-only insights
+	if claims != nil && claims.Role == models.RoleAdmin {
+		resp.PendingUsers = pendingUsers
+	}
+
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
 func (s *Server) writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
 }
+
 

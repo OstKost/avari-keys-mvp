@@ -177,3 +177,45 @@ type CleanupLogsResponse struct {
 	Message      string `json:"message"`
 	DeletedCount int64  `json:"deleted_count"`
 }
+
+// TopologyTrafficBreakdown represents traffic share by node type.
+type TopologyTrafficBreakdown struct {
+	CascadeTrafficBytes     int64  `json:"cascade_traffic_bytes"`
+	DirectTrafficBytes      int64  `json:"direct_traffic_bytes"`
+	CascadeTrafficFormatted string `json:"cascade_traffic_formatted"`
+	DirectTrafficFormatted  string `json:"direct_traffic_formatted"`
+	CascadePercentage       int    `json:"cascade_percentage"`
+	DirectPercentage        int    `json:"direct_percentage"`
+}
+
+// NodeDashboardInfo represents individual node status in the dashboard overview.
+type NodeDashboardInfo struct {
+	ID                    int64  `json:"id"`
+	Name                  string `json:"name"`
+	Type                  string `json:"type"`
+	Online                bool   `json:"online"`
+	LatencyMs             int64  `json:"latency_ms"`
+	PeerCount             int    `json:"peer_count"`
+	TotalTrafficFormatted string `json:"total_traffic_formatted"`
+}
+
+// DashboardStatsResponse represents aggregated public & admin status metrics.
+type DashboardStatsResponse struct {
+	TotalUsers            int                      `json:"total_users"`
+	ActiveUsers           int                      `json:"active_users"`
+	PendingUsers          int                      `json:"pending_users,omitempty"` // Only populated for admin
+	TotalKeys             int                      `json:"total_keys"`
+	ActiveDevicesOnline   int                      `json:"active_devices_online"`
+	TotalTrafficBytes     int64                    `json:"total_traffic_bytes"`
+	MonthTrafficBytes     int64                    `json:"month_traffic_bytes"`
+	TotalTrafficFormatted string                   `json:"total_traffic_formatted"`
+	MonthTrafficFormatted string                   `json:"month_traffic_formatted"`
+	TotalNodes            int                      `json:"total_nodes"`
+	OnlineNodes           int                      `json:"online_nodes"`
+	AvgLatencyMs          int64                    `json:"avg_latency_ms"`
+	SystemStatus          string                   `json:"system_status"` // "operational", "degraded", "maintenance"
+	TopologyBreakdown     TopologyTrafficBreakdown `json:"topology_breakdown"`
+	Nodes                 []NodeDashboardInfo      `json:"nodes"`
+	GeneratedAt           time.Time                `json:"generated_at"`
+}
+

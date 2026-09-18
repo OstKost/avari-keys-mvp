@@ -288,3 +288,47 @@ func TestAdminAuditLogsFlow(t *testing.T) {
 	}
 }
 
+func TestDashboardStatsEndpoint(t *testing.T) {
+	masterSrv, _, _, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	handler := masterSrv.Handler()
+
+	// 1. Admin login
+	adminLoginBody, _ := json.Marshal(models.LoginRequest{
+		Username: "Forve",
+		Password: "AdminPass123!",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(adminLoginBody))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	var adminLoginResp models.LoginResponse
+	_ = json.NewDecoder(rec.Body).Decode(&adminLoginResp)
+	adminToken := adminLoginResp.Token
+
+	// 2. Query Dashboard Stats as Admin
+	req = httptest.NewRequest("GET", "/api/v1/stats/dashboard", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for dashboard stats, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	var statsResp models.DashboardStatsResponse
+	_ = json.NewDecoder(rec.Body).Decode(&statsResp)
+
+	if statsResp.TotalUsers < 1 {
+		t.Fatalf("expected at least 1 user (admin), got %d", statsResp.TotalUsers)
+	}
+	if statsResp.TotalNodes < 1 {
+		t.Fatalf("expected at least 1 node, got %d", statsResp.TotalNodes)
+	}
+	if statsResp.SystemStatus == "" {
+		t.Fatalf("expected system status to be non-empty")
+	}
+}
+
+
