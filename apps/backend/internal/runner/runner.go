@@ -20,7 +20,7 @@ func ValidateClientName(name string) error {
 
 // AWGRunner defines the abstraction for interacting with AmneziaWG via manage_amneziawg.sh.
 type AWGRunner interface {
-	AddClient(ctx context.Context, name string) (*models.ClientResponse, error)
+	AddClient(ctx context.Context, name string, psk bool) (*models.ClientResponse, error)
 	RemoveClient(ctx context.Context, name string) error
 	GetClient(ctx context.Context, name string) (*models.ClientResponse, error)
 	ListClients(ctx context.Context) ([]models.ClientListItem, error)

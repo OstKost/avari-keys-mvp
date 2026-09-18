@@ -43,12 +43,17 @@ func (r *RealRunner) CheckHealth(ctx context.Context) bool {
 	return cmd.Run() == nil
 }
 
-func (r *RealRunner) AddClient(ctx context.Context, name string) (*models.ClientResponse, error) {
+func (r *RealRunner) AddClient(ctx context.Context, name string, psk bool) (*models.ClientResponse, error) {
 	if err := ValidateClientName(name); err != nil {
 		return nil, err
 	}
 
-	cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "add", name)
+	args := []string{r.scriptPath, "add", name}
+	if psk {
+		args = append(args, "--psk")
+	}
+
+	cmd := exec.CommandContext(ctx, "bash", args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

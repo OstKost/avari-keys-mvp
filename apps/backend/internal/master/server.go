@@ -304,7 +304,7 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 
 	// Call Slave API
 	slaveCli := client.NewSlaveClient(node.APIURL, node.APIKey)
-	slaveResp, err := slaveCli.CreateClient(r.Context(), clientName)
+	slaveResp, err := slaveCli.CreateClient(r.Context(), clientName, req.PSK)
 	if err != nil {
 		s.writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("Slave node failed: %v", err)})
 		return
@@ -317,7 +317,11 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryKeys, "key_create", fmt.Sprintf("Создан VPN-ключ «%s» (%s) на сервере «%s»", req.DeviceName, clientName, node.Name))
+	pskDetails := ""
+	if req.PSK {
+		pskDetails = " [PSK / Shadowrocket]"
+	}
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryKeys, "key_create", fmt.Sprintf("Создан VPN-ключ «%s» (%s)%s на сервере «%s»", req.DeviceName, clientName, pskDetails, node.Name))
 
 	s.writeJSON(w, http.StatusCreated, map[string]any{
 		"id":          keyRecord.ID,

@@ -139,7 +139,7 @@ func (s *Server) handleCreateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := s.runner.AddClient(r.Context(), req.Name)
+	res, err := s.runner.AddClient(r.Context(), req.Name, req.PSK)
 	if err != nil {
 		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
