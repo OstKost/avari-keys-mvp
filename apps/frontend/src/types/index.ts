@@ -12,6 +12,7 @@ export interface NodePublic {
   id: number;
   name: string;
   type: 'cascade' | 'direct';
+  is_mobile_optimized?: boolean;
   is_active: boolean;
   created_at: string;
 }
@@ -21,6 +22,7 @@ export interface AdminNode {
   name: string;
   type: 'cascade' | 'direct';
   api_url: string;
+  is_mobile_optimized?: boolean;
   is_active: boolean;
   online: boolean;
   latency_ms?: number;

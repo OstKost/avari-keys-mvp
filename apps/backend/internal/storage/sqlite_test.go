@@ -90,13 +90,19 @@ func TestNodesAndConfigsStorage(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Create nodes
-	node1, err := store.CreateNode(ctx, "Cascade Node", "cascade", "http://127.0.0.1:8081", "token1")
+	node1, err := store.CreateNode(ctx, "Cascade Node", "cascade", "http://127.0.0.1:8081", "token1", true)
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
 	}
-	node2, err := store.CreateNode(ctx, "Direct Node", "direct", "http://127.0.0.1:8082", "token2")
+	if !node1.IsMobileOptimized {
+		t.Fatalf("expected node1 to have IsMobileOptimized = true")
+	}
+	node2, err := store.CreateNode(ctx, "Direct Node", "direct", "http://127.0.0.1:8082", "token2", false)
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
+	}
+	if node2.IsMobileOptimized {
+		t.Fatalf("expected node2 to have IsMobileOptimized = false")
 	}
 
 	nodes, err := store.ListNodes(ctx)

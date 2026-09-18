@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Plus, Zap, ShieldCheck } from 'lucide-react';
+import { X, Plus, Zap, ShieldCheck, Smartphone } from 'lucide-react';
 import { NodePublic } from '../types';
 
 interface Props {
@@ -104,20 +104,33 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
                   <div className="ml-3 flex-1">
                     <div className="flex items-center justify-between">
                       <span className="font-serif font-bold text-sm text-[#F2F0E8]">{node.name}</span>
-                      <span
-                        className={`text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                          node.type === 'cascade'
-                            ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40'
-                            : 'bg-[#06141B] text-[#6EA8C4] border border-[#6EA8C4]/40'
-                        }`}
-                      >
-                        {node.type === 'cascade' ? 'Каскад M0->S1' : 'Прямой S2'}
-                      </span>
+                      <div className="flex items-center space-x-1.5">
+                        {node.is_mobile_optimized && (
+                          <span className="inline-flex items-center space-x-1 text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#06141B] text-[#D9B96E] border border-[#D9B96E]/40" title="Оптимизирован для мобильных сетей (порт 443/UDP)">
+                            <Smartphone className="w-2.5 h-2.5" />
+                            <span>LTE / 443</span>
+                          </span>
+                        )}
+                        <span
+                          className={`text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                            node.type === 'cascade'
+                              ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40'
+                              : 'bg-[#06141B] text-[#6EA8C4] border border-[#6EA8C4]/40'
+                          }`}
+                        >
+                          {node.type === 'cascade' ? 'Каскад M0->S1' : 'Прямой S2'}
+                        </span>
+                      </div>
                     </div>
                     <p className="text-xs text-[#A8B4B7] mt-1 font-sans leading-relaxed">
                       {node.type === 'cascade'
                         ? 'Вход через РФ, выход за рубежом (максимальная защита от DPI и блокировок)'
                         : 'Прямой туннель к зарубежному серверу'}
+                      {node.is_mobile_optimized && (
+                        <span className="block text-[11px] text-[#D9B96E] mt-0.5 font-medium">
+                          ⭐ Рекомендуется для смартфонов и мобильных сетей (443/UDP).
+                        </span>
+                      )}
                     </p>
                   </div>
                 </label>

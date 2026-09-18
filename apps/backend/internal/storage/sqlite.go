@@ -80,6 +80,7 @@ func (s *Storage) migrate() error {
 		type TEXT NOT NULL, -- 'cascade' or 'direct'
 		api_url TEXT NOT NULL,
 		api_key TEXT NOT NULL,
+		is_mobile_optimized INTEGER NOT NULL DEFAULT 0,
 		is_active INTEGER NOT NULL DEFAULT 1,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -111,8 +112,12 @@ func (s *Storage) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_category ON audit_logs(category);
 	`
-	_, err := s.db.Exec(schema)
-	return err
+	if _, err := s.db.Exec(schema); err != nil {
+		return err
+	}
+	// Migrate existing nodes table if is_mobile_optimized is missing
+	_, _ = s.db.Exec(`ALTER TABLE nodes ADD COLUMN is_mobile_optimized INTEGER NOT NULL DEFAULT 0;`)
+	return nil
 }
 
 func (s *Storage) ensureAdminUser() error {
@@ -335,11 +340,15 @@ func (s *Storage) DeleteUser(ctx context.Context, id int64) error {
 
 
 // Node methods
-func (s *Storage) CreateNode(ctx context.Context, name, nodeType, apiURL, apiKey string) (*models.Node, error) {
+func (s *Storage) CreateNode(ctx context.Context, name, nodeType, apiURL, apiKey string, isMobileOptimized bool) (*models.Node, error) {
+	isMobileVal := 0
+	if isMobileOptimized {
+		isMobileVal = 1
+	}
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO nodes (name, type, api_url, api_key, is_active)
-		VALUES (?, ?, ?, ?, 1)
-	`, name, nodeType, apiURL, apiKey)
+		INSERT INTO nodes (name, type, api_url, api_key, is_mobile_optimized, is_active)
+		VALUES (?, ?, ?, ?, ?, 1)
+	`, name, nodeType, apiURL, apiKey, isMobileVal)
 	if err != nil {
 		return nil, err
 	}
@@ -349,21 +358,22 @@ func (s *Storage) CreateNode(ctx context.Context, name, nodeType, apiURL, apiKey
 
 func (s *Storage) GetNodeByID(ctx context.Context, id int64) (*models.Node, error) {
 	var n models.Node
-	var isActive int
+	var isActive, isMobile int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, name, type, api_url, api_key, is_active, created_at
+		SELECT id, name, type, api_url, api_key, is_mobile_optimized, is_active, created_at
 		FROM nodes WHERE id = ?
-	`, id).Scan(&n.ID, &n.Name, &n.Type, &n.APIURL, &n.APIKey, &isActive, &n.CreatedAt)
+	`, id).Scan(&n.ID, &n.Name, &n.Type, &n.APIURL, &n.APIKey, &isMobile, &isActive, &n.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	n.IsMobileOptimized = isMobile == 1
 	n.IsActive = isActive == 1
 	return &n, nil
 }
 
 func (s *Storage) ListNodes(ctx context.Context) ([]models.Node, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, type, api_url, api_key, is_active, created_at
+		SELECT id, name, type, api_url, api_key, is_mobile_optimized, is_active, created_at
 		FROM nodes ORDER BY id ASC
 	`)
 	if err != nil {
@@ -374,10 +384,11 @@ func (s *Storage) ListNodes(ctx context.Context) ([]models.Node, error) {
 	var list []models.Node
 	for rows.Next() {
 		var n models.Node
-		var isActive int
-		if err := rows.Scan(&n.ID, &n.Name, &n.Type, &n.APIURL, &n.APIKey, &isActive, &n.CreatedAt); err != nil {
+		var isActive, isMobile int
+		if err := rows.Scan(&n.ID, &n.Name, &n.Type, &n.APIURL, &n.APIKey, &isMobile, &isActive, &n.CreatedAt); err != nil {
 			return nil, err
 		}
+		n.IsMobileOptimized = isMobile == 1
 		n.IsActive = isActive == 1
 		list = append(list, n)
 	}
@@ -386,7 +397,7 @@ func (s *Storage) ListNodes(ctx context.Context) ([]models.Node, error) {
 
 func (s *Storage) ListActiveNodesPublic(ctx context.Context) ([]models.NodePublic, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, type, is_active, created_at
+		SELECT id, name, type, is_mobile_optimized, is_active, created_at
 		FROM nodes WHERE is_active = 1 ORDER BY id ASC
 	`)
 	if err != nil {
@@ -397,10 +408,11 @@ func (s *Storage) ListActiveNodesPublic(ctx context.Context) ([]models.NodePubli
 	var list []models.NodePublic
 	for rows.Next() {
 		var n models.NodePublic
-		var isActive int
-		if err := rows.Scan(&n.ID, &n.Name, &n.Type, &isActive, &n.CreatedAt); err != nil {
+		var isActive, isMobile int
+		if err := rows.Scan(&n.ID, &n.Name, &n.Type, &isMobile, &isActive, &n.CreatedAt); err != nil {
 			return nil, err
 		}
+		n.IsMobileOptimized = isMobile == 1
 		n.IsActive = isActive == 1
 		list = append(list, n)
 	}

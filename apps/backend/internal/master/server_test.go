@@ -44,7 +44,7 @@ func setupTestEnvironment(t *testing.T) (*master.Server, *httptest.Server, *stor
 	slaveHttpSrv := httptest.NewServer(slaveSrv.Handler())
 
 	// Add mock slave node to DB
-	_, err = store.CreateNode(context.Background(), "Mock Cascade Node", "cascade", slaveHttpSrv.URL, slaveToken)
+	_, err = store.CreateNode(context.Background(), "Mock Cascade Node", "cascade", slaveHttpSrv.URL, slaveToken, true)
 	if err != nil {
 		t.Fatalf("failed to create mock node: %v", err)
 	}
