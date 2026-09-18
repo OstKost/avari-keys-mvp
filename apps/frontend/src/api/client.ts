@@ -195,11 +195,11 @@ const realApi = {
     return handleResponse<AdminNode[]>(res);
   },
 
-  async addAdminNode(name: string, type: 'cascade' | 'direct', apiUrl: string, apiKey: string): Promise<AdminNode> {
+  async addAdminNode(name: string, type: 'cascade' | 'direct', apiUrl: string, apiKey: string, isMobileOptimized?: boolean): Promise<AdminNode> {
     const res = await fetch(`${API_BASE}/admin/nodes`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ name, type, api_url: apiUrl, api_key: apiKey }),
+      body: JSON.stringify({ name, type, api_url: apiUrl, api_key: apiKey, is_mobile_optimized: isMobileOptimized || false }),
     });
     return handleResponse<AdminNode>(res);
   },

@@ -689,13 +689,17 @@ func (s *Server) handleAdminAddNode(w http.ResponseWriter, r *http.Request) {
 		req.Type = "direct"
 	}
 
-	node, err := s.storage.CreateNode(r.Context(), req.Name, req.Type, req.APIURL, req.APIKey)
+	node, err := s.storage.CreateNode(r.Context(), req.Name, req.Type, req.APIURL, req.APIKey, req.IsMobileOptimized)
 	if err != nil {
 		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_create", fmt.Sprintf("Добавлен новый сервер «%s» (%s, URL: %s)", node.Name, node.Type, node.APIURL))
+	mobileTag := ""
+	if node.IsMobileOptimized {
+		mobileTag = " [Mobile 443/UDP]"
+	}
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_create", fmt.Sprintf("Добавлен новый сервер «%s» (%s%s, URL: %s)", node.Name, node.Type, mobileTag, node.APIURL))
 
 	s.writeJSON(w, http.StatusCreated, node)
 }

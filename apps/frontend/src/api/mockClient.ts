@@ -148,6 +148,7 @@ let mockNodes: AdminNode[] = [
     name: 'Каскад M0 (Москва) -> S1 (Амстердам)',
     type: 'cascade',
     api_url: 'http://127.0.0.1:8081',
+    is_mobile_optimized: true,
     is_active: true,
     online: true,
     latency_ms: 24,
@@ -158,6 +159,7 @@ let mockNodes: AdminNode[] = [
     name: 'Прямой туннель S2 (Франкфурт)',
     type: 'direct',
     api_url: 'http://127.0.0.1:8082',
+    is_mobile_optimized: false,
     is_active: true,
     online: true,
     latency_ms: 38,
@@ -455,12 +457,13 @@ PersistentKeepalive = 25`;
     }));
   },
 
-  async addAdminNode(name: string, type: 'cascade' | 'direct', apiUrl: string, _apiKey: string): Promise<AdminNode> {
+  async addAdminNode(name: string, type: 'cascade' | 'direct', apiUrl: string, _apiKey: string, isMobileOptimized?: boolean): Promise<AdminNode> {
     const newNode: AdminNode = {
       id: mockNodes.length + 1,
       name,
       type,
       api_url: apiUrl,
+      is_mobile_optimized: Boolean(isMobileOptimized),
       is_active: true,
       online: true,
       latency_ms: Math.floor(20 + Math.random() * 20),

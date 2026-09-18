@@ -31,22 +31,24 @@ type UserPublic struct {
 
 // Node represents a managed Slave API node (Cascade or Direct).
 type Node struct {
-	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
-	Type      string    `json:"type"` // "cascade" or "direct"
-	APIURL    string    `json:"api_url"`
-	APIKey    string    `json:"-"` // Hidden in public responses
-	IsActive  bool      `json:"is_active"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                int64     `json:"id"`
+	Name              string    `json:"name"`
+	Type              string    `json:"type"` // "cascade" or "direct"
+	APIURL            string    `json:"api_url"`
+	APIKey            string    `json:"-"` // Hidden in public responses
+	IsMobileOptimized bool      `json:"is_mobile_optimized"`
+	IsActive          bool      `json:"is_active"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 // NodePublic represents safe node info for regular users.
 type NodePublic struct {
-	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
-	Type      string    `json:"type"`
-	IsActive  bool      `json:"is_active"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                int64     `json:"id"`
+	Name              string    `json:"name"`
+	Type              string    `json:"type"`
+	IsMobileOptimized bool      `json:"is_mobile_optimized"`
+	IsActive          bool      `json:"is_active"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 // NodeWithStatus represents node with live connectivity & ping.
@@ -105,10 +107,11 @@ type CreateKeyRequest struct {
 }
 
 type AddNodeRequest struct {
-	Name   string `json:"name"`
-	Type   string `json:"type"` // "cascade" or "direct"
-	APIURL string `json:"api_url"`
-	APIKey string `json:"api_key"`
+	Name              string `json:"name"`
+	Type              string `json:"type"` // "cascade" or "direct"
+	APIURL            string `json:"api_url"`
+	APIKey            string `json:"api_key"`
+	IsMobileOptimized bool   `json:"is_mobile_optimized"`
 }
 
 type RestoreNodeRequest struct {

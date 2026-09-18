@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Server, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, RotateCcw, Download, Upload, X } from 'lucide-react';
+import { Server, Plus, Trash2, CheckCircle2, XCircle, RefreshCw, RotateCcw, Download, Upload, X, Smartphone } from 'lucide-react';
 import { api } from '../api/client';
 import { AdminNode } from '../types';
 import { ConfirmModal } from './ConfirmModal';
@@ -18,6 +18,7 @@ export function AdminNodes() {
   const [type, setType] = useState<'cascade' | 'direct'>('cascade');
   const [apiUrl, setApiUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
+  const [isMobileOptimized, setIsMobileOptimized] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Action modals state
@@ -60,10 +61,11 @@ export function AdminNodes() {
     e.preventDefault();
     try {
       setSubmitting(true);
-      await api.addAdminNode(name.trim(), type, apiUrl.trim(), apiKey.trim());
+      await api.addAdminNode(name.trim(), type, apiUrl.trim(), apiKey.trim(), isMobileOptimized);
       setName('');
       setApiUrl('');
       setApiKey('');
+      setIsMobileOptimized(false);
       setShowAddForm(false);
       toast.success(`Сервер «${name}» успешно подключен`);
       await fetchNodes(false);
@@ -246,6 +248,40 @@ export function AdminNodes() {
               />
             </div>
           </div>
+
+          {/* Mobile Optimization Checkbox */}
+          <div
+            onClick={() => setIsMobileOptimized(!isMobileOptimized)}
+            className={`p-3.5 rounded-xl border cursor-pointer transition-all duration-200 ${
+              isMobileOptimized
+                ? 'border-[#D9B96E] bg-[#06141B] shadow-lg shadow-[#D9B96E]/10'
+                : 'border-[#1C3945] bg-[#06141B]/60 hover:border-[#1C3945]/80'
+            }`}
+          >
+            <div className="flex items-start">
+              <input
+                type="checkbox"
+                checked={isMobileOptimized}
+                onChange={(e) => setIsMobileOptimized(e.target.checked)}
+                onClick={(e) => e.stopPropagation()}
+                className="mt-1 w-4 h-4 rounded text-[#D9B96E] bg-[#06141B] border-[#1C3945] focus:ring-[#D9B96E] accent-[#D9B96E] cursor-pointer"
+              />
+              <div className="ml-3 flex-1">
+                <div className="flex items-center space-x-2">
+                  <span className="font-serif font-bold text-xs text-[#F2F0E8]">
+                    Оптимизирован для мобильных сетей (--mobile / 443 UDP)
+                  </span>
+                  <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#102833] text-[#D9B96E] border border-[#D9B96E]/30">
+                    LTE / 5G
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#A8B4B7] mt-1 font-sans leading-relaxed">
+                  Отмечает данный сервер как использующий порт <code className="text-[#D9B96E] font-mono text-[10px]">443/UDP</code> и мобильный пресет обфускации. Рекомендуется для обхода жестких блокировок мобильных операторов.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-end space-x-3 pt-2">
             <button
               type="button"
@@ -300,7 +336,17 @@ export function AdminNodes() {
                     )}
                   </div>
                 </td>
-                <td className="px-5 py-3.5 font-medium text-[#F2F0E8]">{node.name}</td>
+                <td className="px-5 py-3.5 font-medium text-[#F2F0E8]">
+                  <div className="flex items-center space-x-2">
+                    <span>{node.name}</span>
+                    {node.is_mobile_optimized && (
+                      <span className="inline-flex items-center space-x-1 bg-[#102833] text-[#D9B96E] border border-[#D9B96E]/30 text-[9px] font-mono px-2 py-0.5 rounded-full font-bold" title="Оптимизирован для мобильных сетей (--mobile 443/UDP)">
+                        <Smartphone className="w-2.5 h-2.5" />
+                        <span>443 LTE</span>
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-5 py-3.5">
                   <span
                     className={`text-[9px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
