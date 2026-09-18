@@ -220,7 +220,7 @@ export default function App() {
                 : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
             }`}
           >
-            <Radio className="w-4 h-4 text-[#D9B96E]" />
+            <Radio className="w-4 h-4" />
             <span>Статус сети</span>
           </button>
 

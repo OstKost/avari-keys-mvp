@@ -12,6 +12,7 @@ interface AnalogGaugeProps {
   size?: 'sm' | 'md' | 'lg';
   statusText?: string;
   statusType?: 'success' | 'warning' | 'info';
+  tickCount?: number;
 }
 
 export const AnalogGauge: React.FC<AnalogGaugeProps> = ({
@@ -25,6 +26,7 @@ export const AnalogGauge: React.FC<AnalogGaugeProps> = ({
   colorScheme = 'gold',
   statusText,
   statusType = 'success',
+  tickCount = 11,
 }) => {
   // Clamp value
   const clampedValue = Math.max(min, Math.min(max, value));
@@ -61,14 +63,15 @@ export const AnalogGauge: React.FC<AnalogGaugeProps> = ({
   const activeArc = describeArc(cx, cy, r, startAngle, activeEndAngle);
 
   // Tick marks
-  const tickCount = 9;
-  const ticks = Array.from({ length: tickCount }, (_, i) => {
-    const tickAngle = startAngle + (i / (tickCount - 1)) * totalAngle;
+  const effectiveTicks = tickCount > 1 ? tickCount : 11;
+  const ticks = Array.from({ length: effectiveTicks }, (_, i) => {
+    const tickAngle = startAngle + (i / (effectiveTicks - 1)) * totalAngle;
     const isMajor = i % 2 === 0;
     const outerP = polarToCartesian(cx, cy, r + 4, tickAngle);
     const innerP = polarToCartesian(cx, cy, r - (isMajor ? 8 : 4), tickAngle);
     const textP = polarToCartesian(cx, cy, r - 16, tickAngle);
-    const tickVal = Math.round(min + (i / (tickCount - 1)) * (max - min));
+    const rawTickVal = min + (i / (effectiveTicks - 1)) * (max - min);
+    const tickVal = max <= 10 ? (Math.round(rawTickVal * 10) / 10).toString() : Math.round(rawTickVal).toString();
     return { outerP, innerP, textP, isMajor, tickVal };
   });
 

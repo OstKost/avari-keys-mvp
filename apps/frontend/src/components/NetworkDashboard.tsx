@@ -72,9 +72,9 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
     );
   }
 
-  // Monthly traffic gauge calculation (dynamic scale up to 100 GB or 1 TB)
-  const monthGB = stats.month_traffic_bytes / (1024 * 1024 * 1024);
-  const monthGaugeMax = monthGB > 100 ? (monthGB > 500 ? 1000 : 500) : 100;
+  // Monthly traffic in TB (Scale 0 to 10 TB)
+  const monthTB = stats.month_traffic_bytes / (1024 * 1024 * 1024 * 1024);
+  const monthValue = Math.max(0, Math.round(monthTB * 100) / 100);
 
   // Active concurrency calculation
   const concurrencyPct = stats.total_keys > 0 ? Math.round((stats.active_devices_online * 100) / stats.total_keys) : 0;
@@ -150,17 +150,18 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Gauge 1: Monthly Traffic */}
+          {/* Gauge 1: Monthly Traffic (0 to 10 TB) */}
           <AnalogGauge
             title="Трафик за месяц"
-            subtitle="Объем потребления за текущий расчетный период"
-            value={Math.round(monthGB * 10) / 10}
+            subtitle="Объем пропущенного трафика с 1-го числа"
+            value={monthValue}
             min={0}
-            max={monthGaugeMax}
-            unit="GB / Месяц"
+            max={10}
+            tickCount={11}
+            unit="ТБ / Месяц"
             displayValue={stats.month_traffic_formatted}
             colorScheme="gold"
-            statusText={`Шкала 0–${monthGaugeMax} GB`}
+            statusText="Шкала 0–10 ТБ (с 1-го числа)"
             statusType="info"
           />
 
@@ -171,6 +172,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
             value={concurrencyPct}
             min={0}
             max={100}
+            tickCount={11}
             unit="% Активности"
             displayValue={`${concurrencyPct}%`}
             colorScheme="emerald"
@@ -185,6 +187,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
             value={latencyVal}
             min={0}
             max={120}
+            tickCount={13}
             unit="мс Задержка"
             displayValue={`${latencyVal} ms`}
             colorScheme={latencyVal < 50 ? 'cyan' : latencyVal < 80 ? 'gold' : 'amber'}
