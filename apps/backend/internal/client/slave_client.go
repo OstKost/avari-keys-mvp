@@ -56,8 +56,11 @@ func (c *SlaveClient) CheckHealth(ctx context.Context) (*models.HealthResponse, 
 }
 
 // CreateClient requests the Slave to create a new client config.
-func (c *SlaveClient) CreateClient(ctx context.Context, clientName string) (*models.ClientResponse, error) {
-	body, err := json.Marshal(models.ClientCreateRequest{Name: clientName})
+func (c *SlaveClient) CreateClient(ctx context.Context, clientName string, psk bool) (*models.ClientResponse, error) {
+	body, err := json.Marshal(models.ClientCreateRequest{
+		Name: clientName,
+		PSK:  psk,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +136,110 @@ func (c *SlaveClient) DeleteClient(ctx context.Context, clientName string) error
 		var errResp map[string]string
 		_ = json.NewDecoder(resp.Body).Decode(&errResp)
 		return fmt.Errorf("slave delete client failed with status %d: %s", resp.StatusCode, errResp["error"])
+	}
+	return nil
+}
+
+// GetStats fetches statistical information from the node.
+func (c *SlaveClient) GetStats(ctx context.Context) (*models.StatsSummaryResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/stats", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp map[string]string
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		return nil, fmt.Errorf("slave stats failed with status %d: %s", resp.StatusCode, errResp["error"])
+	}
+
+	var res models.StatsSummaryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// Restart requests the Slave to restart the AmneziaWG service.
+func (c *SlaveClient) Restart(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/restart", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp map[string]string
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		return fmt.Errorf("slave restart failed with status %d: %s", resp.StatusCode, errResp["error"])
+	}
+	return nil
+}
+
+// Backup requests the Slave to create and return a backup archive.
+func (c *SlaveClient) Backup(ctx context.Context) (*models.BackupResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/backup", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp map[string]string
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		return nil, fmt.Errorf("slave backup failed with status %d: %s", resp.StatusCode, errResp["error"])
+	}
+
+	var res models.BackupResponse
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// Restore sends a backup archive to the Slave to restore configurations.
+func (c *SlaveClient) Restore(ctx context.Context, backupData string) error {
+	body, err := json.Marshal(models.RestoreNodeRequest{BackupData: backupData})
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/restore", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp map[string]string
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		return fmt.Errorf("slave restore failed with status %d: %s", resp.StatusCode, errResp["error"])
 	}
 	return nil
 }

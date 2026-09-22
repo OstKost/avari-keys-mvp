@@ -80,6 +80,7 @@ func (s *Storage) migrate() error {
 		type TEXT NOT NULL, -- 'cascade' or 'direct'
 		api_url TEXT NOT NULL,
 		api_key TEXT NOT NULL,
+		is_mobile_optimized INTEGER NOT NULL DEFAULT 0,
 		is_active INTEGER NOT NULL DEFAULT 1,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -94,9 +95,29 @@ func (s *Storage) migrate() error {
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
 		FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
 	);
+
+	CREATE TABLE IF NOT EXISTS audit_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER,
+		username TEXT NOT NULL,
+		action TEXT NOT NULL,
+		category TEXT NOT NULL,
+		ip_address TEXT,
+		details TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+	CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+	CREATE INDEX IF NOT EXISTS idx_audit_logs_category ON audit_logs(category);
 	`
-	_, err := s.db.Exec(schema)
-	return err
+	if _, err := s.db.Exec(schema); err != nil {
+		return err
+	}
+	// Migrate existing nodes table if is_mobile_optimized is missing
+	_, _ = s.db.Exec(`ALTER TABLE nodes ADD COLUMN is_mobile_optimized INTEGER NOT NULL DEFAULT 0;`)
+	return nil
 }
 
 func (s *Storage) ensureAdminUser() error {
@@ -252,6 +273,59 @@ func (s *Storage) SetUserActive(ctx context.Context, id int64, active bool) erro
 	return nil
 }
 
+func (s *Storage) SetUserRole(ctx context.Context, id int64, role models.Role) error {
+	if role != models.RoleAdmin && role != models.RoleUser {
+		return errors.New("invalid role")
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET role = ? WHERE id = ?`, string(role), id)
+	if err != nil {
+		return err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return errors.New("user not found")
+	}
+	return nil
+}
+
+func (s *Storage) UpdateUserProfile(ctx context.Context, id int64, username, password string) (*models.User, error) {
+	u, err := s.GetUserByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	username = strings.TrimSpace(username)
+	if username != "" {
+		if len(username) < 3 {
+			return nil, errors.New("username must be at least 3 characters")
+		}
+		u.Username = username
+	}
+
+	if strings.TrimSpace(password) != "" {
+		if len(password) < 6 {
+			return nil, errors.New("password must be at least 6 characters")
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, err
+		}
+		u.PasswordHash = string(hash)
+	}
+
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE users SET username = ?, password_hash = ? WHERE id = ?
+	`, u.Username, u.PasswordHash, id)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return nil, errors.New("username already exists")
+		}
+		return nil, err
+	}
+
+	return u, nil
+}
+
 func (s *Storage) DeleteUser(ctx context.Context, id int64) error {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id)
 	if err != nil {
@@ -264,12 +338,17 @@ func (s *Storage) DeleteUser(ctx context.Context, id int64) error {
 	return nil
 }
 
+
 // Node methods
-func (s *Storage) CreateNode(ctx context.Context, name, nodeType, apiURL, apiKey string) (*models.Node, error) {
+func (s *Storage) CreateNode(ctx context.Context, name, nodeType, apiURL, apiKey string, isMobileOptimized bool) (*models.Node, error) {
+	isMobileVal := 0
+	if isMobileOptimized {
+		isMobileVal = 1
+	}
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO nodes (name, type, api_url, api_key, is_active)
-		VALUES (?, ?, ?, ?, 1)
-	`, name, nodeType, apiURL, apiKey)
+		INSERT INTO nodes (name, type, api_url, api_key, is_mobile_optimized, is_active)
+		VALUES (?, ?, ?, ?, ?, 1)
+	`, name, nodeType, apiURL, apiKey, isMobileVal)
 	if err != nil {
 		return nil, err
 	}
@@ -279,21 +358,22 @@ func (s *Storage) CreateNode(ctx context.Context, name, nodeType, apiURL, apiKey
 
 func (s *Storage) GetNodeByID(ctx context.Context, id int64) (*models.Node, error) {
 	var n models.Node
-	var isActive int
+	var isActive, isMobile int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, name, type, api_url, api_key, is_active, created_at
+		SELECT id, name, type, api_url, api_key, is_mobile_optimized, is_active, created_at
 		FROM nodes WHERE id = ?
-	`, id).Scan(&n.ID, &n.Name, &n.Type, &n.APIURL, &n.APIKey, &isActive, &n.CreatedAt)
+	`, id).Scan(&n.ID, &n.Name, &n.Type, &n.APIURL, &n.APIKey, &isMobile, &isActive, &n.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	n.IsMobileOptimized = isMobile == 1
 	n.IsActive = isActive == 1
 	return &n, nil
 }
 
 func (s *Storage) ListNodes(ctx context.Context) ([]models.Node, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, type, api_url, api_key, is_active, created_at
+		SELECT id, name, type, api_url, api_key, is_mobile_optimized, is_active, created_at
 		FROM nodes ORDER BY id ASC
 	`)
 	if err != nil {
@@ -304,10 +384,11 @@ func (s *Storage) ListNodes(ctx context.Context) ([]models.Node, error) {
 	var list []models.Node
 	for rows.Next() {
 		var n models.Node
-		var isActive int
-		if err := rows.Scan(&n.ID, &n.Name, &n.Type, &n.APIURL, &n.APIKey, &isActive, &n.CreatedAt); err != nil {
+		var isActive, isMobile int
+		if err := rows.Scan(&n.ID, &n.Name, &n.Type, &n.APIURL, &n.APIKey, &isMobile, &isActive, &n.CreatedAt); err != nil {
 			return nil, err
 		}
+		n.IsMobileOptimized = isMobile == 1
 		n.IsActive = isActive == 1
 		list = append(list, n)
 	}
@@ -316,7 +397,7 @@ func (s *Storage) ListNodes(ctx context.Context) ([]models.Node, error) {
 
 func (s *Storage) ListActiveNodesPublic(ctx context.Context) ([]models.NodePublic, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, type, is_active, created_at
+		SELECT id, name, type, is_mobile_optimized, is_active, created_at
 		FROM nodes WHERE is_active = 1 ORDER BY id ASC
 	`)
 	if err != nil {
@@ -327,10 +408,11 @@ func (s *Storage) ListActiveNodesPublic(ctx context.Context) ([]models.NodePubli
 	var list []models.NodePublic
 	for rows.Next() {
 		var n models.NodePublic
-		var isActive int
-		if err := rows.Scan(&n.ID, &n.Name, &n.Type, &isActive, &n.CreatedAt); err != nil {
+		var isActive, isMobile int
+		if err := rows.Scan(&n.ID, &n.Name, &n.Type, &isMobile, &isActive, &n.CreatedAt); err != nil {
 			return nil, err
 		}
+		n.IsMobileOptimized = isMobile == 1
 		n.IsActive = isActive == 1
 		list = append(list, n)
 	}
@@ -433,4 +515,159 @@ func (s *Storage) DeleteClientConfig(ctx context.Context, id int64) error {
 		return errors.New("client config not found")
 	}
 	return nil
+}
+
+// AuditLog methods
+func (s *Storage) CreateAuditLog(ctx context.Context, log *models.AuditLog) error {
+	if log.Username == "" {
+		log.Username = "anonymous"
+	}
+	if log.Category == "" {
+		log.Category = models.CategoryAuth
+	}
+
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO audit_logs (user_id, username, action, category, ip_address, details)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, log.UserID, log.Username, log.Action, string(log.Category), log.IPAddress, log.Details)
+	if err != nil {
+		return err
+	}
+	id, err := res.LastInsertId()
+	if err == nil {
+		log.ID = id
+	}
+	return nil
+}
+
+func (s *Storage) ListAuditLogs(ctx context.Context, filter models.AuditLogFilter) ([]models.AuditLog, int, error) {
+	var whereClauses []string
+	var args []any
+
+	if filter.UserID != nil && *filter.UserID > 0 {
+		whereClauses = append(whereClauses, "user_id = ?")
+		args = append(args, *filter.UserID)
+	}
+
+	if filter.Username != "" {
+		whereClauses = append(whereClauses, "username LIKE ?")
+		args = append(args, "%"+filter.Username+"%")
+	}
+
+	if filter.Category != "" {
+		whereClauses = append(whereClauses, "category = ?")
+		args = append(args, filter.Category)
+	}
+
+	if filter.Action != "" {
+		whereClauses = append(whereClauses, "action = ?")
+		args = append(args, filter.Action)
+	}
+
+	if filter.FromDate != "" {
+		// Expecting YYYY-MM-DD or full timestamp
+		fromVal := filter.FromDate
+		if len(fromVal) == 10 {
+			fromVal += " 00:00:00"
+		}
+		whereClauses = append(whereClauses, "created_at >= ?")
+		args = append(args, fromVal)
+	}
+
+	if filter.ToDate != "" {
+		toVal := filter.ToDate
+		if len(toVal) == 10 {
+			toVal += " 23:59:59"
+		}
+		whereClauses = append(whereClauses, "created_at <= ?")
+		args = append(args, toVal)
+	}
+
+	whereSQL := ""
+	if len(whereClauses) > 0 {
+		whereSQL = " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	// Count total
+	countQuery := "SELECT COUNT(*) FROM audit_logs" + whereSQL
+	var totalCount int
+	err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	limit := filter.Limit
+	if limit < 1 {
+		limit = 50
+	}
+	offset := (page - 1) * limit
+
+	query := `
+		SELECT id, user_id, username, action, category, ip_address, details, created_at
+		FROM audit_logs
+	` + whereSQL + " ORDER BY id DESC LIMIT ? OFFSET ?"
+
+	queryArgs := append(args, limit, offset)
+	rows, err := s.db.QueryContext(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var logs []models.AuditLog
+	for rows.Next() {
+		var l models.AuditLog
+		var categoryStr string
+		var rawUserID sql.NullInt64
+		var rawIP, rawDetails sql.NullString
+
+		if err := rows.Scan(
+			&l.ID,
+			&rawUserID,
+			&l.Username,
+			&l.Action,
+			&categoryStr,
+			&rawIP,
+			&rawDetails,
+			&l.CreatedAt,
+		); err != nil {
+			return nil, 0, err
+		}
+
+		if rawUserID.Valid {
+			uid := rawUserID.Int64
+			l.UserID = &uid
+		}
+		if rawIP.Valid {
+			l.IPAddress = rawIP.String
+		}
+		if rawDetails.Valid {
+			l.Details = rawDetails.String
+		}
+		l.Category = models.AuditLogCategory(categoryStr)
+		logs = append(logs, l)
+	}
+
+	if logs == nil {
+		logs = []models.AuditLog{}
+	}
+
+	return logs, totalCount, nil
+}
+
+func (s *Storage) PurgeAuditLogsOlderThan(ctx context.Context, days int) (int64, error) {
+	if days <= 0 {
+		days = 90
+	}
+
+	query := fmt.Sprintf("DELETE FROM audit_logs WHERE created_at < datetime('now', '-%d days')", days)
+	res, err := s.db.ExecContext(ctx, query)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }

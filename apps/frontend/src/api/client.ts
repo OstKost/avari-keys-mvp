@@ -1,4 +1,15 @@
-import { User, NodePublic, AdminNode, ClientConfigSummary, ClientConfigDetail } from '../types';
+import {
+  User,
+  NodePublic,
+  AdminNode,
+  ClientConfigSummary,
+  ClientConfigDetail,
+  PaginatedKeysResponse,
+  PaginatedAuditLogsResponse,
+  AuditLogFilterParams,
+  CleanupLogsResponse,
+  DashboardStats,
+} from '../types';
 import { mockApi } from './mockClient';
 
 const API_BASE = '/api/v1';
@@ -80,6 +91,19 @@ const realApi = {
     return handleResponse<User>(res);
   },
 
+  async updateProfile(data: { username?: string; password?: string }): Promise<{ token: string; user: User }> {
+    const res = await fetch(`${API_BASE}/auth/profile`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    const result = await handleResponse<{ token: string; user: User }>(res);
+    if (result.token) {
+      localStorage.setItem('token', result.token);
+    }
+    return result;
+  },
+
   logout() {
     localStorage.removeItem('token');
   },
@@ -99,11 +123,11 @@ const realApi = {
     return handleResponse<ClientConfigSummary[]>(res);
   },
 
-  async createKey(nodeId: number, deviceName: string): Promise<ClientConfigDetail> {
+  async createKey(nodeId: number, deviceName: string, psk?: boolean): Promise<ClientConfigDetail> {
     const res = await fetch(`${API_BASE}/keys`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ node_id: nodeId, device_name: deviceName }),
+      body: JSON.stringify({ node_id: nodeId, device_name: deviceName, psk: psk || false }),
     });
     return handleResponse<ClientConfigDetail>(res);
   },
@@ -147,6 +171,15 @@ const realApi = {
     return handleResponse<{ success: boolean }>(res);
   },
 
+  async setUserRole(id: number, role: 'admin' | 'user'): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/admin/users/${id}/role`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ role }),
+    });
+    return handleResponse<{ success: boolean; message: string }>(res);
+  },
+
   async deleteUser(id: number): Promise<{ success: boolean }> {
     const res = await fetch(`${API_BASE}/admin/users/${id}`, {
       method: 'DELETE',
@@ -162,11 +195,11 @@ const realApi = {
     return handleResponse<AdminNode[]>(res);
   },
 
-  async addAdminNode(name: string, type: 'cascade' | 'direct', apiUrl: string, apiKey: string): Promise<AdminNode> {
+  async addAdminNode(name: string, type: 'cascade' | 'direct', apiUrl: string, apiKey: string, isMobileOptimized?: boolean): Promise<AdminNode> {
     const res = await fetch(`${API_BASE}/admin/nodes`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ name, type, api_url: apiUrl, api_key: apiKey }),
+      body: JSON.stringify({ name, type, api_url: apiUrl, api_key: apiKey, is_mobile_optimized: isMobileOptimized || false }),
     });
     return handleResponse<AdminNode>(res);
   },
@@ -179,11 +212,81 @@ const realApi = {
     return handleResponse<{ success: boolean }>(res);
   },
 
-  async getAdminKeys(): Promise<ClientConfigSummary[]> {
-    const res = await fetch(`${API_BASE}/admin/keys`, {
+  async restartNode(id: number): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/admin/nodes/${id}/restart`, {
+      method: 'POST',
       headers: getAuthHeaders(),
     });
-    return handleResponse<ClientConfigSummary[]>(res);
+    return handleResponse<{ success: boolean; message: string }>(res);
+  },
+
+  async backupNode(id: number): Promise<{ timestamp: string; backup_data: string }> {
+    const res = await fetch(`${API_BASE}/admin/nodes/${id}/backup`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<{ timestamp: string; backup_data: string }>(res);
+  },
+
+  async restoreNode(id: number, backupData: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/admin/nodes/${id}/restore`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ backup_data: backupData }),
+    });
+    return handleResponse<{ success: boolean; message: string }>(res);
+  },
+
+  async getAdminKeys(params?: {
+    search?: string;
+    nodeId?: number;
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedKeysResponse> {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    if (params?.nodeId) query.set('node_id', params.nodeId.toString());
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetch(`${API_BASE}/admin/keys${qs}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<PaginatedKeysResponse>(res);
+  },
+
+  async getAdminAuditLogs(params?: AuditLogFilterParams): Promise<PaginatedAuditLogsResponse> {
+    const query = new URLSearchParams();
+    if (params?.userId) query.set('user_id', params.userId.toString());
+    if (params?.username) query.set('username', params.username);
+    if (params?.category) query.set('category', params.category);
+    if (params?.action) query.set('action', params.action);
+    if (params?.from) query.set('from', params.from);
+    if (params?.to) query.set('to', params.to);
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetch(`${API_BASE}/admin/logs${qs}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<PaginatedAuditLogsResponse>(res);
+  },
+
+  async cleanupAdminAuditLogs(days: number = 90): Promise<CleanupLogsResponse> {
+    const res = await fetch(`${API_BASE}/admin/logs/cleanup`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ days }),
+    });
+    return handleResponse<CleanupLogsResponse>(res);
+  },
+
+  async getDashboardStats(): Promise<DashboardStats> {
+    const res = await fetch(`${API_BASE}/stats/dashboard`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<DashboardStats>(res);
   },
 };
 

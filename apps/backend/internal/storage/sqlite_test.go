@@ -90,13 +90,19 @@ func TestNodesAndConfigsStorage(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Create nodes
-	node1, err := store.CreateNode(ctx, "Cascade Node", "cascade", "http://127.0.0.1:8081", "token1")
+	node1, err := store.CreateNode(ctx, "Cascade Node", "cascade", "http://127.0.0.1:8081", "token1", true)
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
 	}
-	node2, err := store.CreateNode(ctx, "Direct Node", "direct", "http://127.0.0.1:8082", "token2")
+	if !node1.IsMobileOptimized {
+		t.Fatalf("expected node1 to have IsMobileOptimized = true")
+	}
+	node2, err := store.CreateNode(ctx, "Direct Node", "direct", "http://127.0.0.1:8082", "token2", false)
 	if err != nil {
 		t.Fatalf("failed to create node: %v", err)
+	}
+	if node2.IsMobileOptimized {
+		t.Fatalf("expected node2 to have IsMobileOptimized = false")
 	}
 
 	nodes, err := store.ListNodes(ctx)
@@ -129,5 +135,87 @@ func TestNodesAndConfigsStorage(t *testing.T) {
 	remaining, _ := store.ListClientConfigsByUser(ctx, user.ID)
 	if len(remaining) != 1 || remaining[0].ID != cfg2.ID {
 		t.Fatalf("expected 1 remaining config, got %+v", remaining)
+	}
+}
+
+func TestAuditLogsStorageAndPurge(t *testing.T) {
+	store, cleanup := createTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// 1. Create audit logs
+	admin, err := store.GetUserByUsername(ctx, "Forve")
+	if err != nil {
+		t.Fatalf("failed to get admin user: %v", err)
+	}
+
+	alice, err := store.CreateUser(ctx, "alice", "alicepassword123")
+	if err != nil {
+		t.Fatalf("failed to create alice: %v", err)
+	}
+
+	uid1 := admin.ID
+	uid2 := alice.ID
+
+	log1 := &models.AuditLog{
+		UserID:    &uid1,
+		Username:  "Forve",
+		Action:    "auth_login",
+		Category:  models.CategoryAuth,
+		IPAddress: "127.0.0.1",
+		Details:   "Admin logged in",
+	}
+	if err := store.CreateAuditLog(ctx, log1); err != nil {
+		t.Fatalf("failed to create audit log: %v", err)
+	}
+	if log1.ID == 0 {
+		t.Fatalf("expected log ID to be set")
+	}
+
+	log2 := &models.AuditLog{
+		UserID:    &uid2,
+		Username:  "alice",
+		Action:    "key_create",
+		Category:  models.CategoryKeys,
+		IPAddress: "192.168.1.50",
+		Details:   "Created key for iPhone",
+	}
+	if err := store.CreateAuditLog(ctx, log2); err != nil {
+		t.Fatalf("failed to create audit log: %v", err)
+	}
+
+	// 2. Query all logs
+	logs, count, err := store.ListAuditLogs(ctx, models.AuditLogFilter{Limit: 50})
+	if err != nil {
+		t.Fatalf("failed to list audit logs: %v", err)
+	}
+	if count != 2 || len(logs) != 2 {
+		t.Fatalf("expected 2 logs, got %d (count: %d)", len(logs), count)
+	}
+
+	// 3. Filter by Category
+	authLogs, authCount, err := store.ListAuditLogs(ctx, models.AuditLogFilter{Category: string(models.CategoryAuth)})
+	if err != nil || authCount != 1 || len(authLogs) != 1 {
+		t.Fatalf("expected 1 auth log, got %d", authCount)
+	}
+	if authLogs[0].Username != "Forve" {
+		t.Fatalf("expected Forve, got %s", authLogs[0].Username)
+	}
+
+	// 4. Filter by UserID
+	aliceLogs, aliceCount, err := store.ListAuditLogs(ctx, models.AuditLogFilter{UserID: &uid2})
+	if err != nil || aliceCount != 1 || len(aliceLogs) != 1 {
+		t.Fatalf("expected 1 alice log, got %d", aliceCount)
+	}
+
+	// 5. Purge logs
+	deleted, err := store.PurgeAuditLogsOlderThan(ctx, 90)
+	if err != nil {
+		t.Fatalf("failed to purge logs: %v", err)
+	}
+	// Recent logs should not be purged
+	if deleted != 0 {
+		t.Fatalf("expected 0 deleted logs for fresh entries, got %d", deleted)
 	}
 }

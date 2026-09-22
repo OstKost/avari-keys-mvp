@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/master"
@@ -43,7 +44,7 @@ func setupTestEnvironment(t *testing.T) (*master.Server, *httptest.Server, *stor
 	slaveHttpSrv := httptest.NewServer(slaveSrv.Handler())
 
 	// Add mock slave node to DB
-	_, err = store.CreateNode(context.Background(), "Mock Cascade Node", "cascade", slaveHttpSrv.URL, slaveToken)
+	_, err = store.CreateNode(context.Background(), "Mock Cascade Node", "cascade", slaveHttpSrv.URL, slaveToken, true)
 	if err != nil {
 		t.Fatalf("failed to create mock node: %v", err)
 	}
@@ -164,10 +165,11 @@ func TestCompleteUserAndKeyFlow(t *testing.T) {
 	}
 	nodeID := nodes[0].ID
 
-	// 7. Alice creates a key on the node
+	// 7. Alice creates a key on the node with PSK enabled (Shadowrocket)
 	keyReqBody, _ := json.Marshal(models.CreateKeyRequest{
 		NodeID:     nodeID,
 		DeviceName: "iPad-Pro",
+		PSK:        true,
 	})
 	req = httptest.NewRequest("POST", "/api/v1/keys", bytes.NewReader(keyReqBody))
 	req.Header.Set("Authorization", "Bearer "+aliceToken)
@@ -183,6 +185,10 @@ func TestCompleteUserAndKeyFlow(t *testing.T) {
 	if createdKey["qr_code"] == nil || createdKey["config"] == nil {
 		t.Fatalf("expected config and qr_code in response, got %+v", createdKey)
 	}
+	configStr, ok := createdKey["config"].(string)
+	if !ok || !strings.Contains(configStr, "PresharedKey") {
+		t.Fatalf("expected config to contain PresharedKey for Shadowrocket, got: %v", createdKey["config"])
+	}
 
 	// 8. Alice lists her keys
 	req = httptest.NewRequest("GET", "/api/v1/keys", nil)
@@ -196,3 +202,139 @@ func TestCompleteUserAndKeyFlow(t *testing.T) {
 		t.Fatalf("expected 1 key for alice, got %+v", myKeys)
 	}
 }
+
+func TestAdminAuditLogsFlow(t *testing.T) {
+	masterSrv, _, _, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	handler := masterSrv.Handler()
+
+	// 1. Login as admin
+	adminLoginBody, _ := json.Marshal(models.LoginRequest{
+		Username: "Forve",
+		Password: "AdminPass123!",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(adminLoginBody))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for admin login, got %d", rec.Code)
+	}
+
+	var adminLoginResp models.LoginResponse
+	_ = json.NewDecoder(rec.Body).Decode(&adminLoginResp)
+	adminToken := adminLoginResp.Token
+
+	// 2. Perform user registration to generate logs
+	regBody, _ := json.Marshal(models.RegisterRequest{
+		Username: "log_user",
+		Password: "password123!",
+	})
+	req = httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewReader(regBody))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created for register, got %d", rec.Code)
+	}
+
+	// 3. Admin gets audit logs
+	req = httptest.NewRequest("GET", "/api/v1/admin/logs?limit=50", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for admin logs, got %d", rec.Code)
+	}
+
+	var logsResp models.PaginatedAuditLogsResponse
+	_ = json.NewDecoder(rec.Body).Decode(&logsResp)
+
+	if logsResp.TotalCount < 2 {
+		t.Fatalf("expected at least 2 logs (login and register), got %d", logsResp.TotalCount)
+	}
+	if len(logsResp.Logs) < 2 {
+		t.Fatalf("expected at least 2 logs returned, got %d", len(logsResp.Logs))
+	}
+
+	// 4. Admin filters by category
+	req = httptest.NewRequest("GET", "/api/v1/admin/logs?category=auth", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for category filter, got %d", rec.Code)
+	}
+
+	var filteredResp models.PaginatedAuditLogsResponse
+	_ = json.NewDecoder(rec.Body).Decode(&filteredResp)
+	for _, l := range filteredResp.Logs {
+		if l.Category != models.CategoryAuth {
+			t.Fatalf("expected category auth, got %s", l.Category)
+		}
+	}
+
+	// 5. Admin calls cleanup endpoint
+	cleanupBody, _ := json.Marshal(models.CleanupLogsRequest{Days: 90})
+	req = httptest.NewRequest("POST", "/api/v1/admin/logs/cleanup", bytes.NewReader(cleanupBody))
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for logs cleanup, got %d", rec.Code)
+	}
+
+	var cleanupResp models.CleanupLogsResponse
+	_ = json.NewDecoder(rec.Body).Decode(&cleanupResp)
+	if !cleanupResp.Success {
+		t.Fatalf("expected cleanup success")
+	}
+}
+
+func TestDashboardStatsEndpoint(t *testing.T) {
+	masterSrv, _, _, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	handler := masterSrv.Handler()
+
+	// 1. Admin login
+	adminLoginBody, _ := json.Marshal(models.LoginRequest{
+		Username: "Forve",
+		Password: "AdminPass123!",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(adminLoginBody))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	var adminLoginResp models.LoginResponse
+	_ = json.NewDecoder(rec.Body).Decode(&adminLoginResp)
+	adminToken := adminLoginResp.Token
+
+	// 2. Query Dashboard Stats as Admin
+	req = httptest.NewRequest("GET", "/api/v1/stats/dashboard", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for dashboard stats, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	var statsResp models.DashboardStatsResponse
+	_ = json.NewDecoder(rec.Body).Decode(&statsResp)
+
+	if statsResp.TotalUsers < 1 {
+		t.Fatalf("expected at least 1 user (admin), got %d", statsResp.TotalUsers)
+	}
+	if statsResp.TotalNodes < 1 {
+		t.Fatalf("expected at least 1 node, got %d", statsResp.TotalNodes)
+	}
+	if statsResp.SystemStatus == "" {
+		t.Fatalf("expected system status to be non-empty")
+	}
+}
+
+

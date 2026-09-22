@@ -1,21 +1,26 @@
 import { useState, useEffect } from 'react';
-import { UserCheck, UserX, Trash2, Users } from 'lucide-react';
+import { UserCheck, UserX, Trash2, Users, ShieldPlus, ShieldMinus } from 'lucide-react';
 import { api } from '../api/client';
 import { User } from '../types';
+import { ConfirmModal } from './ConfirmModal';
+import { useToast } from '../context/ToastContext';
 
 export function AdminUsers() {
+  const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [roleChangeTarget, setRoleChangeTarget] = useState<{ user: User; newRole: 'admin' | 'user' } | null>(null);
+  const [changingRole, setChangingRole] = useState(false);
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
       const data = await api.getAdminUsers();
       setUsers(data);
-      setError(null);
     } catch (err: any) {
-      setError(err.message || 'Ошибка загрузки пользователей');
+      toast.error(err.message || 'Ошибка загрузки пользователей');
     } finally {
       setLoading(false);
     }
@@ -29,27 +34,57 @@ export function AdminUsers() {
     try {
       if (user.is_active) {
         await api.deactivateUser(user.id);
+        toast.info(`Пользователь «${user.username}» деактивирован`);
       } else {
         await api.activateUser(user.id);
+        toast.success(`Пользователь «${user.username}» успешно одобрен и активирован`);
       }
       await fetchUsers();
     } catch (err: any) {
-      alert(err.message || 'Ошибка изменения статуса');
+      toast.error(err.message || 'Ошибка изменения статуса пользователя');
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Вы уверены, что хотите удалить этого пользователя и все его ключи?')) return;
+  const handleConfirmRoleChange = async () => {
+    if (!roleChangeTarget) return;
     try {
-      await api.deleteUser(id);
+      setChangingRole(true);
+      await api.setUserRole(roleChangeTarget.user.id, roleChangeTarget.newRole);
+      toast.success(
+        `Роль пользователя «${roleChangeTarget.user.username}» успешно изменена на ${
+          roleChangeTarget.newRole === 'admin' ? 'Администратор' : 'Пользователь'
+        }`
+      );
+      setRoleChangeTarget(null);
       await fetchUsers();
     } catch (err: any) {
-      alert(err.message || 'Ошибка удаления пользователя');
+      toast.error(err.message || 'Ошибка изменения роли');
+    } finally {
+      setChangingRole(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!userToDelete) return;
+    try {
+      setDeleting(true);
+      await api.deleteUser(userToDelete.id);
+      toast.success(`Пользователь «${userToDelete.username}» успешно удален`);
+      setUserToDelete(null);
+      await fetchUsers();
+    } catch (err: any) {
+      toast.error(err.message || 'Ошибка удаления пользователя');
+    } finally {
+      setDeleting(false);
     }
   };
 
   if (loading) {
-    return <div className="text-center py-12 text-[#A8B4B7] text-xs font-mono uppercase tracking-widest">Загрузка списка пользователей...</div>;
+    return (
+      <div className="text-center py-12 text-[#A8B4B7] text-xs font-mono uppercase tracking-widest">
+        Загрузка списка пользователей...
+      </div>
+    );
   }
 
   return (
@@ -65,12 +100,6 @@ export function AdminUsers() {
           </p>
         </div>
       </div>
-
-      {error && (
-        <div className="bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs p-3.5 rounded-xl mb-5 shadow-lg">
-          {error}
-        </div>
-      )}
 
       <div className="overflow-x-auto border border-[#1C3945] rounded-2xl bg-[#06141B]/60 shadow-xl">
         <table className="w-full text-left text-sm text-[#F2F0E8]">
@@ -115,9 +144,10 @@ export function AdminUsers() {
                   {new Date(u.created_at).toLocaleDateString()}
                 </td>
                 <td className="px-5 py-3.5 text-right space-x-2">
+                  {/* Toggle Active / Deactivate */}
                   <button
                     onClick={() => handleToggleActive(u)}
-                    title={u.is_active ? 'Деактивировать' : 'Активировать'}
+                    title={u.is_active ? 'Деактивировать учетную запись' : 'Одобрить и активировать'}
                     className={`p-2 rounded-xl border transition ${
                       u.is_active
                         ? 'border-amber-700/50 bg-amber-950/30 text-amber-400 hover:bg-amber-900/50'
@@ -127,10 +157,30 @@ export function AdminUsers() {
                     {u.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                   </button>
 
+                  {/* Promote / Demote Admin */}
+                  {u.role !== 'admin' ? (
+                    <button
+                      onClick={() => setRoleChangeTarget({ user: u, newRole: 'admin' })}
+                      title="Повысить до Администратора"
+                      className="p-2 rounded-xl border border-[#D9B96E]/40 bg-[#102833] text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition"
+                    >
+                      <ShieldPlus className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setRoleChangeTarget({ user: u, newRole: 'user' })}
+                      title="Снять права Администратора (понизить до пользователя)"
+                      className="p-2 rounded-xl border border-[#1C3945] bg-[#06141B] text-[#718187] hover:text-[#F2F0E8] hover:bg-[#102833] transition"
+                    >
+                      <ShieldMinus className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {/* Delete User */}
                   {u.role !== 'admin' && (
                     <button
-                      onClick={() => handleDelete(u.id)}
-                      title="Удалить"
+                      onClick={() => setUserToDelete(u)}
+                      title="Удалить пользователя"
                       className="p-2 rounded-xl border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -142,6 +192,60 @@ export function AdminUsers() {
           </tbody>
         </table>
       </div>
+
+      {/* Role Change Confirm Modal */}
+      <ConfirmModal
+        isOpen={Boolean(roleChangeTarget)}
+        title={roleChangeTarget?.newRole === 'admin' ? 'Повысить до Администратора?' : 'Снять права Администратора?'}
+        variant={roleChangeTarget?.newRole === 'admin' ? 'warning' : 'danger'}
+        confirmText={roleChangeTarget?.newRole === 'admin' ? 'Да, назначить администратором' : 'Да, снять права'}
+        cancelText="Отмена"
+        isLoading={changingRole}
+        onConfirm={handleConfirmRoleChange}
+        onClose={() => setRoleChangeTarget(null)}
+        message={
+          roleChangeTarget && (
+            <div>
+              Вы собираетесь изменить роль пользователя{' '}
+              <strong className="text-[#F2F0E8]">«{roleChangeTarget.user.username}»</strong> на{' '}
+              <span className="text-[#D9B96E] font-semibold">
+                {roleChangeTarget.newRole === 'admin' ? 'Администратор' : 'Пользователь (Хранитель)'}
+              </span>.
+              {roleChangeTarget.newRole === 'admin' ? (
+                <p className="mt-2 text-xs text-[#A8B4B7]">
+                  Пользователь получит полный доступ к управлению узлами сети, модерации и аудиту всех ключей.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-[#A8B4B7]">
+                  Пользователь потеряет доступ к панели администрирования.
+                </p>
+              )}
+            </div>
+          )
+        }
+      />
+
+      {/* Delete User Confirm Modal */}
+      <ConfirmModal
+        isOpen={Boolean(userToDelete)}
+        title="Удалить пользователя?"
+        variant="danger"
+        confirmText="Да, удалить аккаунт"
+        cancelText="Отмена"
+        isLoading={deleting}
+        onConfirm={handleConfirmDelete}
+        onClose={() => setUserToDelete(null)}
+        message={
+          userToDelete && (
+            <div>
+              Вы собираетесь полностью удалить аккаунт пользователя{' '}
+              <strong className="text-[#F2F0E8]">«{userToDelete.username}»</strong>.
+              Все привязанные к пользователю VPN-ключи и конфигурации будут также удалены из системы.
+            </div>
+          )
+        }
+      />
     </div>
   );
 }
+

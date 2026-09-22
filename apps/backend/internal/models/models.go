@@ -31,34 +31,57 @@ type UserPublic struct {
 
 // Node represents a managed Slave API node (Cascade or Direct).
 type Node struct {
-	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
-	Type      string    `json:"type"` // "cascade" or "direct"
-	APIURL    string    `json:"api_url"`
-	APIKey    string    `json:"-"` // Hidden in public responses
-	IsActive  bool      `json:"is_active"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                int64     `json:"id"`
+	Name              string    `json:"name"`
+	Type              string    `json:"type"` // "cascade" or "direct"
+	APIURL            string    `json:"api_url"`
+	APIKey            string    `json:"-"` // Hidden in public responses
+	IsMobileOptimized bool      `json:"is_mobile_optimized"`
+	IsActive          bool      `json:"is_active"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 // NodePublic represents safe node info for regular users.
 type NodePublic struct {
-	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
-	Type      string    `json:"type"`
-	IsActive  bool      `json:"is_active"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                int64     `json:"id"`
+	Name              string    `json:"name"`
+	Type              string    `json:"type"`
+	IsMobileOptimized bool      `json:"is_mobile_optimized"`
+	IsActive          bool      `json:"is_active"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
-// ClientConfig represents a user's VPN key reference in the database.
+// NodeWithStatus represents node with live connectivity & ping.
+type NodeWithStatus struct {
+	Node
+	Online    bool  `json:"online"`
+	LatencyMs int64 `json:"latency_ms"`
+}
+
+// ClientConfig represents a user's VPN key reference in the database and audit logs.
 type ClientConfig struct {
-	ID         int64     `json:"id"`
-	UserID     int64     `json:"user_id"`
-	NodeID     int64     `json:"node_id"`
-	ClientName string    `json:"client_name"` // e.g. "u1_iphone"
-	DeviceName string    `json:"device_name"` // e.g. "iPhone"
-	NodeName   string    `json:"node_name,omitempty"`
-	NodeType   string    `json:"node_type,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID                    int64     `json:"id"`
+	UserID                int64     `json:"user_id"`
+	NodeID                int64     `json:"node_id"`
+	ClientName            string    `json:"client_name"` // e.g. "u1_iphone"
+	DeviceName            string    `json:"device_name"` // e.g. "iPhone"
+	NodeName              string    `json:"node_name,omitempty"`
+	NodeType              string    `json:"node_type,omitempty"`
+	LastHandshake         string    `json:"last_handshake,omitempty"`
+	TotalTrafficBytes     int64     `json:"total_traffic_bytes,omitempty"`
+	MonthTrafficBytes     int64     `json:"month_traffic_bytes,omitempty"`
+	TotalTrafficFormatted string    `json:"total_traffic_formatted,omitempty"`
+	MonthTrafficFormatted string    `json:"month_traffic_formatted,omitempty"`
+	CreatedAt             time.Time `json:"created_at"`
+}
+
+// PaginatedKeysResponse for Admin key audit list.
+type PaginatedKeysResponse struct {
+	Keys       []ClientConfig `json:"keys"`
+	TotalCount int            `json:"total_count"`
+	Page       int            `json:"page"`
+	Limit      int            `json:"limit"`
+	TotalPages int            `json:"total_pages"`
 }
 
 // Auth DTOs
@@ -80,11 +103,123 @@ type LoginResponse struct {
 type CreateKeyRequest struct {
 	NodeID     int64  `json:"node_id"`
 	DeviceName string `json:"device_name"`
+	PSK        bool   `json:"psk,omitempty"`
 }
 
 type AddNodeRequest struct {
-	Name   string `json:"name"`
-	Type   string `json:"type"` // "cascade" or "direct"
-	APIURL string `json:"api_url"`
-	APIKey string `json:"api_key"`
+	Name              string `json:"name"`
+	Type              string `json:"type"` // "cascade" or "direct"
+	APIURL            string `json:"api_url"`
+	APIKey            string `json:"api_key"`
+	IsMobileOptimized bool   `json:"is_mobile_optimized"`
 }
+
+type RestoreNodeRequest struct {
+	BackupData string `json:"backup_data"`
+}
+
+type UpdateProfileRequest struct {
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+}
+
+type SetRoleRequest struct {
+	Role Role `json:"role"`
+}
+
+// AuditLogCategory represents the category of the logged action.
+type AuditLogCategory string
+
+const (
+	CategoryAuth    AuditLogCategory = "auth"
+	CategoryKeys    AuditLogCategory = "keys"
+	CategoryProfile AuditLogCategory = "profile"
+	CategoryAdmin   AuditLogCategory = "admin"
+)
+
+// AuditLog represents a single action performed in the system.
+type AuditLog struct {
+	ID        int64            `json:"id"`
+	UserID    *int64           `json:"user_id,omitempty"`
+	Username  string           `json:"username"`
+	Action    string           `json:"action"`
+	Category  AuditLogCategory `json:"category"`
+	IPAddress string           `json:"ip_address,omitempty"`
+	Details   string           `json:"details,omitempty"`
+	CreatedAt time.Time        `json:"created_at"`
+}
+
+// PaginatedAuditLogsResponse represents paginated audit logs for the admin UI.
+type PaginatedAuditLogsResponse struct {
+	Logs       []AuditLog `json:"logs"`
+	TotalCount int        `json:"total_count"`
+	Page       int        `json:"page"`
+	Limit      int        `json:"limit"`
+	TotalPages int        `json:"total_pages"`
+}
+
+// AuditLogFilter contains filter criteria for querying logs.
+type AuditLogFilter struct {
+	UserID   *int64
+	Username string
+	Category string
+	Action   string
+	FromDate string // YYYY-MM-DD or RFC3339
+	ToDate   string // YYYY-MM-DD or RFC3339
+	Page     int
+	Limit    int
+}
+
+// CleanupLogsRequest for pruning old logs.
+type CleanupLogsRequest struct {
+	Days int `json:"days"`
+}
+
+// CleanupLogsResponse returns number of deleted logs.
+type CleanupLogsResponse struct {
+	Success      bool   `json:"success"`
+	Message      string `json:"message"`
+	DeletedCount int64  `json:"deleted_count"`
+}
+
+// TopologyTrafficBreakdown represents traffic share by node type.
+type TopologyTrafficBreakdown struct {
+	CascadeTrafficBytes     int64  `json:"cascade_traffic_bytes"`
+	DirectTrafficBytes      int64  `json:"direct_traffic_bytes"`
+	CascadeTrafficFormatted string `json:"cascade_traffic_formatted"`
+	DirectTrafficFormatted  string `json:"direct_traffic_formatted"`
+	CascadePercentage       int    `json:"cascade_percentage"`
+	DirectPercentage        int    `json:"direct_percentage"`
+}
+
+// NodeDashboardInfo represents individual node status in the dashboard overview.
+type NodeDashboardInfo struct {
+	ID                    int64  `json:"id"`
+	Name                  string `json:"name"`
+	Type                  string `json:"type"`
+	Online                bool   `json:"online"`
+	LatencyMs             int64  `json:"latency_ms"`
+	PeerCount             int    `json:"peer_count"`
+	TotalTrafficFormatted string `json:"total_traffic_formatted"`
+}
+
+// DashboardStatsResponse represents aggregated public & admin status metrics.
+type DashboardStatsResponse struct {
+	TotalUsers            int                      `json:"total_users"`
+	ActiveUsers           int                      `json:"active_users"`
+	PendingUsers          int                      `json:"pending_users,omitempty"` // Only populated for admin
+	TotalKeys             int                      `json:"total_keys"`
+	ActiveDevicesOnline   int                      `json:"active_devices_online"`
+	TotalTrafficBytes     int64                    `json:"total_traffic_bytes"`
+	MonthTrafficBytes     int64                    `json:"month_traffic_bytes"`
+	TotalTrafficFormatted string                   `json:"total_traffic_formatted"`
+	MonthTrafficFormatted string                   `json:"month_traffic_formatted"`
+	TotalNodes            int                      `json:"total_nodes"`
+	OnlineNodes           int                      `json:"online_nodes"`
+	AvgLatencyMs          int64                    `json:"avg_latency_ms"`
+	SystemStatus          string                   `json:"system_status"` // "operational", "degraded", "maintenance"
+	TopologyBreakdown     TopologyTrafficBreakdown `json:"topology_breakdown"`
+	Nodes                 []NodeDashboardInfo      `json:"nodes"`
+	GeneratedAt           time.Time                `json:"generated_at"`
+}
+

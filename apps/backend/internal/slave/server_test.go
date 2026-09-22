@@ -103,7 +103,7 @@ func TestClientLifecycle(t *testing.T) {
 	clientName := "alice-phone"
 
 	// 1. Create client
-	body, _ := json.Marshal(models.ClientCreateRequest{Name: clientName})
+	body, _ := json.Marshal(models.ClientCreateRequest{Name: clientName, PSK: true})
 	req := httptest.NewRequest("POST", "/api/v1/clients", bytes.NewReader(body))
 	req.Header.Set("X-API-Key", apiKey)
 	rec := httptest.NewRecorder()
@@ -117,8 +117,8 @@ func TestClientLifecycle(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
 		t.Fatalf("failed to decode client response: %v", err)
 	}
-	if created.Name != clientName || !strings.Contains(created.Config, "[Interface]") {
-		t.Fatalf("invalid client response: %+v", created)
+	if created.Name != clientName || !strings.Contains(created.Config, "[Interface]") || !strings.Contains(created.Config, "PresharedKey") {
+		t.Fatalf("invalid client response or missing PSK: %+v", created)
 	}
 
 	// 2. Get client details
