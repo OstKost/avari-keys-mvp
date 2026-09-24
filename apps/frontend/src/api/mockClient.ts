@@ -158,6 +158,19 @@ let mockNodes: AdminNode[] = [
   },
   {
     id: 2,
+    name: 'Каскад M0 (Москва) -> S2 (Франкфурт)',
+    type: 'cascade',
+    country_code: 'DEU',
+    provider_url: 'https://hetzner.com',
+    api_url: 'http://127.0.0.1:8081',
+    is_mobile_optimized: true,
+    is_active: true,
+    online: true,
+    latency_ms: 31,
+    created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
+  },
+  {
+    id: 3,
     name: 'Прямой туннель S2 (Франкфурт)',
     type: 'direct',
     country_code: 'DEU',
@@ -279,6 +292,40 @@ Endpoint = 198.51.100.1:51820
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25`,
     vpn_uri: 'vpn://eyJob3N0TmFtZSI6IjE5OC41MS4xMDAuMSIsImRlc2NyaXB0aW9uIjoiQXZhcmkgS2V5cyBBbGljZSBQaG9uZSIsImNvbmZpZyI6IntcImRuczFcIjpcIjEuMS4xLjFcIixcInBvcnRcIjo1MTgyMCxcInByb3RvY29sXCI6XCJhd2dcIn0ifQ==',
+    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+  },
+  {
+    id: 4,
+    user_id: 1, // Forve Admin
+    client_name: 'u1_ipad_pro',
+    device_name: 'ipad_pro_13',
+    node_id: 2,
+    node_name: 'Каскад M0 (Москва) -> S2 (Франкфурт)',
+    node_type: 'cascade',
+    last_handshake: '15 минут назад',
+    total_traffic_bytes: 754974720,
+    month_traffic_bytes: 754974720,
+    total_traffic_formatted: '720.00 MB',
+    month_traffic_formatted: '720.00 MB',
+    config: `[Interface]
+Address = 10.7.0.8/32
+PrivateKey = aMockPrivateKeyForDemoIPadProCascade123=
+Jc = 4
+Jmin = 40
+Jmax = 70
+S1 = 15
+S2 = 25
+H1 = 1
+H2 = 2
+H3 = 3
+H4 = 4
+
+[Peer]
+PublicKey = aMockServerPublicKeyForDemoPurposes8901234=
+Endpoint = 198.51.100.1:51820
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25`,
+    vpn_uri: 'vpn://eyJob3N0TmFtZSI6IjE5OC41MS4xMDAuMSIsImRlc2NyaXB0aW9uIjoiQXZhcmkgS2V5cyBDYXNjYWRlIE0wLT5TMiIsImNvbmZpZyI6IntcImRuczFcIjpcIjEuMS4xLjFcIixcInBvcnRcIjo1MTgyMCxcInByb3RvY29sXCI6XCJhd2dcIn0ifQ==',
     created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
   },
 ];
