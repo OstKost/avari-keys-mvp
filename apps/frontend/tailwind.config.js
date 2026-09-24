@@ -11,9 +11,9 @@ export default {
         xs: ['0.875rem', { lineHeight: '1.25rem' }],
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        serif: ['Cinzel', 'Cormorant Garamond', 'Georgia', 'serif'],
-        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        sans: ['Onest', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        serif: ['Philosopher', 'Georgia', 'serif'],
+        mono: ['"Victor Mono"', '"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       colors: {
         avari: {

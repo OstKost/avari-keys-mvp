@@ -35,7 +35,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
   const fetchStats = useCallback(async (isManual = false) => {
     try {
       if (isManual) setRefreshing(true);
-      const data = await api.getDashboardStats();
+      const data = await api.getDashboardStats(isManual);
       setStats(data);
       if (isManual) {
         toast.success('Метрики сети обновлены');
@@ -50,10 +50,10 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
 
   useEffect(() => {
     fetchStats();
-    // Auto refresh every 30 seconds
+    // Auto refresh every 3 minutes (180,000 ms) matching cache TTL
     const interval = setInterval(() => {
       fetchStats();
-    }, 30000);
+    }, 180000);
     return () => clearInterval(interval);
   }, [fetchStats]);
 
@@ -80,20 +80,23 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
   const latencyVal = typeof stats.avg_latency_ms === 'number' ? stats.avg_latency_ms : 0;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* Header & Status Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center space-x-2">
-            <h3 className="font-serif text-2xl font-bold text-[#F2F0E8] flex items-center space-x-2.5">
-              <Radio className="w-6 h-6 text-[#D9B96E] animate-pulse" />
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-serif text-xl sm:text-2xl font-bold text-[#F2F0E8] flex items-center space-x-2.5">
+              <Radio className="w-5 h-5 sm:w-6 sm:h-6 text-[#D9B96E] animate-pulse shrink-0" />
               <span>Состояние и статус сети Avari Keys</span>
             </h3>
-            <span className="text-sm font-mono uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-600/40">
+            <span className="text-xs sm:text-sm font-mono uppercase tracking-wider px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-600/40">
               ● Live Telemetry
             </span>
+            <span className="text-xs font-mono tracking-wider px-2 py-0.5 sm:py-1 rounded-full bg-[#102833] text-[#A8B4B7] border border-[#1C3945]">
+              Кеш: 3 мин
+            </span>
           </div>
-          <p className="text-sm text-[#A8B4B7] mt-1 font-sans">
+          <p className="text-xs sm:text-sm text-[#A8B4B7] mt-1 font-sans">
             Открытый мониторинг инфраструктуры, объема пропущенного шифрованного трафика и доступности узлов.
           </p>
         </div>
@@ -101,7 +104,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
         <button
           onClick={() => fetchStats(true)}
           disabled={refreshing}
-          className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-[#102833] hover:bg-[#1C3945] border border-[#1C3945] hover:border-[#D9B96E]/40 text-[#D9B96E] text-sm font-mono transition shadow-sm self-start sm:self-auto disabled:opacity-50"
+          className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-[#102833] hover:bg-[#1C3945] border border-[#1C3945] hover:border-[#D9B96E]/40 text-[#D9B96E] text-xs sm:text-sm font-mono transition shadow-sm self-start sm:self-auto disabled:opacity-50"
         >
           <RotateCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-[#F0D48D]' : ''}`} />
           <span>Обновить данные</span>
@@ -119,7 +122,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
               <h4 className="font-serif font-bold text-amber-300 text-sm">
                 В очереди на модерацию: {stats.pending_users} {stats.pending_users === 1 ? 'заявка' : 'заявок'}
               </h4>
-              <p className="text-sm text-[#A8B4B7]">
+              <p className="text-xs sm:text-sm text-[#A8B4B7]">
                 Новые участники ожидают подтверждения администратора для получения доступа к ключам.
               </p>
             </div>
@@ -128,7 +131,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
           {onNavigateTab && (
             <button
               onClick={() => onNavigateTab('users')}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold text-sm uppercase tracking-wider font-mono rounded-xl shadow-md hover:shadow-lg transition"
+              className="flex items-center space-x-1.5 px-4 py-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold text-xs sm:text-sm uppercase tracking-wider font-mono rounded-xl shadow-md hover:shadow-lg transition shrink-0"
             >
               <span>Перейти к модерации</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -141,12 +144,12 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
       <div>
         <div className="flex items-center space-x-2 mb-4">
           <Activity className="w-4 h-4 text-[#D9B96E]" />
-          <h4 className="font-serif font-bold text-[#F2F0E8] text-base">
+          <h4 className="font-serif font-bold text-[#F2F0E8] text-sm sm:text-base">
             Аналоговые индикаторы телеметрии
           </h4>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {/* Gauge 1: Monthly Traffic (0 to 10 TB) */}
           <AnalogGauge
             title="Трафик за месяц"

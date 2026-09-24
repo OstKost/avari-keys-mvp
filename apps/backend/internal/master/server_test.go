@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/master"
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/models"
@@ -336,6 +337,31 @@ func TestDashboardStatsEndpoint(t *testing.T) {
 	if statsResp.SystemStatus == "" {
 		t.Fatalf("expected system status to be non-empty")
 	}
+
+	// 3. Test In-Memory Cache (should return the same GeneratedAt immediately)
+	req2 := httptest.NewRequest("GET", "/api/v1/stats/dashboard", nil)
+	req2.Header.Set("Authorization", "Bearer "+adminToken)
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+
+	var cachedStats models.DashboardStatsResponse
+	_ = json.NewDecoder(rec2.Body).Decode(&cachedStats)
+	if !cachedStats.GeneratedAt.Equal(statsResp.GeneratedAt) {
+		t.Fatalf("expected cached GeneratedAt %v, got %v", statsResp.GeneratedAt, cachedStats.GeneratedAt)
+	}
+
+	// 4. Test Bypass with ?fresh=true
+	time.Sleep(10 * time.Millisecond)
+	req3 := httptest.NewRequest("GET", "/api/v1/stats/dashboard?fresh=true", nil)
+	req3.Header.Set("Authorization", "Bearer "+adminToken)
+	rec3 := httptest.NewRecorder()
+	handler.ServeHTTP(rec3, req3)
+
+	var freshStats models.DashboardStatsResponse
+	_ = json.NewDecoder(rec3.Body).Decode(&freshStats)
+	if freshStats.GeneratedAt.Equal(statsResp.GeneratedAt) {
+		t.Fatalf("expected fresh GeneratedAt to be newer than %v, got %v", statsResp.GeneratedAt, freshStats.GeneratedAt)
+	}
 }
 
 func TestAdminNodeEditFlow(t *testing.T) {
@@ -578,7 +604,159 @@ func TestBillingEndpoints(t *testing.T) {
 	if adminSummary.TotalPayments < 1 {
 		t.Fatalf("expected at least 1 payment record, got %d", adminSummary.TotalPayments)
 	}
+
+	// 8. Test Billing Requisites GET & PUT
+	// Regular user can GET
+	req = httptest.NewRequest("GET", "/api/v1/billing/requisites", nil)
+	req.Header.Set("Authorization", "Bearer "+userToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for user GET requisites, got %d", rec.Code)
+	}
+	var reqs models.BillingRequisites
+	_ = json.NewDecoder(rec.Body).Decode(&reqs)
+	if reqs.SBPPhone == "" || reqs.SBPBank == "" {
+		t.Fatalf("expected default requisites, got %+v", reqs)
+	}
+
+	// Regular user cannot PUT requisites
+	updateBody, _ := json.Marshal(models.BillingRequisites{
+		SBPPhone: "+7 (999) 111-22-33",
+		SBPBank:  "Альфа-Банк",
+	})
+	req = httptest.NewRequest("PUT", "/api/v1/admin/billing/requisites", bytes.NewReader(updateBody))
+	req.Header.Set("Authorization", "Bearer "+userToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for non-admin PUT requisites, got %d", rec.Code)
+	}
+
+	// Admin can PUT requisites
+	req = httptest.NewRequest("PUT", "/api/v1/admin/billing/requisites", bytes.NewReader(updateBody))
+	req.Header.Set("Authorization", "Bearer "+adminLoginResp.Token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for admin PUT requisites, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var updatedReqs models.BillingRequisites
+	_ = json.NewDecoder(rec.Body).Decode(&updatedReqs)
+	if updatedReqs.SBPPhone != "+7 (999) 111-22-33" || updatedReqs.SBPBank != "Альфа-Банк" {
+		t.Fatalf("expected updated requisites, got %+v", updatedReqs)
+	}
 }
+
+func TestTelegramAdminEndpoints(t *testing.T) {
+	masterSrv, _, store, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	handler := masterSrv.Handler()
+
+	// 1. Login as Admin
+	adminLoginBody, _ := json.Marshal(models.LoginRequest{
+		Username: "Forve",
+		Password: "AdminPass123!",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(adminLoginBody))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	var adminLoginResp models.LoginResponse
+	_ = json.NewDecoder(rec.Body).Decode(&adminLoginResp)
+
+	// 2. Add test Telegram subscriber
+	_ = store.SaveTelegramChat(context.Background(), models.TelegramChat{
+		ChatID:        777888999,
+		Username:      "avari_tester",
+		FirstName:     "Tester",
+		IsAdmin:       true,
+		AlertsEnabled: true,
+	})
+
+	// 3. GET /api/v1/admin/telegram/status
+	req = httptest.NewRequest("GET", "/api/v1/admin/telegram/status", nil)
+	req.Header.Set("Authorization", "Bearer "+adminLoginResp.Token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for telegram status, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var statusResp models.TelegramStatusResponse
+	if err := json.NewDecoder(rec.Body).Decode(&statusResp); err != nil {
+		t.Fatalf("failed to decode telegram status response: %v", err)
+	}
+	if statusResp.TotalSubscribers != 1 {
+		t.Fatalf("expected 1 subscriber, got %d", statusResp.TotalSubscribers)
+	}
+
+	// 4. GET /api/v1/admin/telegram/settings
+	req = httptest.NewRequest("GET", "/api/v1/admin/telegram/settings", nil)
+	req.Header.Set("Authorization", "Bearer "+adminLoginResp.Token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for telegram settings, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 5. PUT /api/v1/admin/telegram/settings
+	updatePayload, _ := json.Marshal(models.TelegramSettings{
+		Enabled:             false, // Disable so getMe is not hit with fake token during test
+		BotToken:            "test_dummy_token_123",
+		BotUsername:         "AvariTestBot",
+		AdminSecret:         "secret789",
+		NotifyOnNodeDown:    true,
+		NotifyOnNodeRecover: true,
+		NotifyOnNewUser:     true,
+	})
+	req = httptest.NewRequest("PUT", "/api/v1/admin/telegram/settings", bytes.NewReader(updatePayload))
+	req.Header.Set("Authorization", "Bearer "+adminLoginResp.Token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for update telegram settings, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var updatedSettings models.TelegramSettings
+	_ = json.NewDecoder(rec.Body).Decode(&updatedSettings)
+	if updatedSettings.BotUsername != "AvariTestBot" || updatedSettings.AdminSecret != "secret789" {
+		t.Fatalf("unexpected updated settings: %+v", updatedSettings)
+	}
+
+	// 6. POST /api/v1/admin/telegram/subscribers/777888999/toggle
+	toggleBody, _ := json.Marshal(models.TelegramSubscriberToggleRequest{AlertsEnabled: false})
+	req = httptest.NewRequest("POST", "/api/v1/admin/telegram/subscribers/777888999/toggle", bytes.NewReader(toggleBody))
+	req.Header.Set("Authorization", "Bearer "+adminLoginResp.Token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for subscriber toggle, got %d", rec.Code)
+	}
+
+	// 7. DELETE /api/v1/admin/telegram/subscribers/777888999
+	req = httptest.NewRequest("DELETE", "/api/v1/admin/telegram/subscribers/777888999", nil)
+	req.Header.Set("Authorization", "Bearer "+adminLoginResp.Token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for subscriber delete, got %d", rec.Code)
+	}
+
+	// Verify subscriber count is now 0
+	subscribers, _ := store.ListTelegramChats(context.Background())
+	if len(subscribers) != 0 {
+		t.Fatalf("expected 0 subscribers after delete, got %d", len(subscribers))
+	}
+}
+
+
 
 
 

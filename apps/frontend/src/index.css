@@ -13,11 +13,21 @@ body {
   min-height: 100vh;
   background-color: #06141B;
   color: #F2F0E8;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Onest', 'Inter', system-ui, -apple-system, sans-serif;
   background-image: 
     radial-gradient(circle at 50% 0%, rgba(20, 50, 65, 0.3) 0%, transparent 60%),
     radial-gradient(circle at 100% 100%, rgba(217, 185, 110, 0.03) 0%, transparent 40%);
   background-attachment: fixed;
+}
+
+/* Victor Mono & Ligature Enhancements */
+code, pre, .font-mono {
+  font-feature-settings: "liga" 1, "calt" 1;
+}
+
+.font-elven-cursive {
+  font-style: italic;
+  font-family: 'Victor Mono', monospace;
 }
 
 #root {
@@ -47,12 +57,86 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
-/* Subtle Shimmer */
+/* Subtle Shimmer & Mascot Animations */
 @keyframes elvenGlow {
   0%, 100% { opacity: 0.7; }
   50% { opacity: 1; }
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Rotating Gold Sheen Border Animation (Beam traveling in a circle along the border) */
+@keyframes goldBeamSpin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.gold-rotating-border {
+  position: relative;
+  border-radius: 1.5rem;
+  padding: 2px;
+  overflow: hidden;
+  background: #1C3945;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8), 0 0 15px rgba(217, 185, 110, 0.2);
+}
+
+.gold-rotating-border::before {
+  content: '';
+  position: absolute;
+  top: -150%;
+  left: -150%;
+  width: 400%;
+  height: 400%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 230deg,
+    rgba(217, 185, 110, 0.4) 270deg,
+    #D9B96E 310deg,
+    #FFFFFF 340deg,
+    #F0D48D 355deg,
+    transparent 360deg
+  );
+  animation: goldBeamSpin 3.5s linear infinite;
+}
+
+.gold-rotating-border-content {
+  position: relative;
+  z-index: 10;
+  border-radius: calc(1.5rem - 2px);
+  background: rgba(10, 29, 38, 0.96);
+  backdrop-filter: blur(16px);
+}
+
 .animate-elven-glow {
   animation: elvenGlow 3s ease-in-out infinite;
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Hide scrollbar utility for touch/swipe containers */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

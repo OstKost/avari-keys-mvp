@@ -16,7 +16,10 @@ import { Loader } from './components/Loader';
 import { UserProfile } from './components/UserProfile';
 import { BillingPage } from './components/BillingPage';
 import { BillingReminderModal } from './components/BillingReminderModal';
+import { Tooltip } from './components/Tooltip';
 import { formatNodeRouting } from './utils/country';
+import { FloatingMascot, MascotFaqModal } from './components/MascotAssistant';
+import { OnboardingTour } from './components/OnboardingTour';
 
 export default function App() {
   const { toast } = useToast();
@@ -39,6 +42,11 @@ export default function App() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [keyToDelete, setKeyToDelete] = useState<ClientConfigSummary | null>(null);
   const [deletingKey, setDeletingKey] = useState(false);
+
+  // Mascot Assistant & Onboarding State
+  const [showGlobalFaq, setShowGlobalFaq] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(1);
 
   // Check existing session
   useEffect(() => {
@@ -79,12 +87,40 @@ export default function App() {
       if (!silent) setKeysLoading(true);
       setError(null);
       const [keysData, nodesData] = await Promise.all([api.getKeys(), api.getNodes()]);
-      setKeys(Array.isArray(keysData) ? keysData : []);
+      const safeKeys = Array.isArray(keysData) ? keysData : [];
+      setKeys(safeKeys);
       setNodes(Array.isArray(nodesData) ? nodesData : []);
+
+      // Auto-trigger onboarding for users with no keys
+      if (safeKeys.length === 0 && !silent) {
+        const completed = localStorage.getItem('avari_onboarding_completed') === 'true';
+        if (!completed) {
+          setShowOnboarding(true);
+          setOnboardingStep(1);
+        }
+      }
     } catch (err: any) {
       setError(err.message || 'Ошибка загрузки данных');
     } finally {
       if (!silent) setKeysLoading(false);
+    }
+  };
+
+  const handleStartOnboarding = () => {
+    setActiveTab('keys');
+    setShowOnboarding(true);
+    setOnboardingStep(1);
+  };
+
+  const handleCompleteOnboarding = () => {
+    setShowOnboarding(false);
+    localStorage.setItem('avari_onboarding_completed', 'true');
+  };
+
+  const handleOpenCreateModal = () => {
+    setShowCreateModal(true);
+    if (showOnboarding) {
+      setOnboardingStep(2);
     }
   };
 
@@ -105,6 +141,9 @@ export default function App() {
     try {
       const newKey = await api.createKey(nodeId, deviceName, psk);
       setViewingKey(newKey);
+      if (showOnboarding) {
+        setOnboardingStep(4);
+      }
       toast.success(`Ключ «${deviceName}» успешно создан`);
       const targetNode = nodes.find((n) => n.id === nodeId);
       const newSummary: ClientConfigSummary = {
@@ -169,39 +208,39 @@ export default function App() {
     <div className="min-h-screen bg-[#06141B] text-[#F2F0E8] flex flex-col selection:bg-[#D9B96E]/30 selection:text-[#F0D48D]">
       {/* Header */}
       <header className="border-b border-[#1C3945]/80 bg-[#0A1D26]/80 backdrop-blur-md sticky top-0 z-40 transition-all">
-        <div className="max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-10 h-20 flex items-center justify-between">
+        <div className="max-w-[1680px] mx-auto px-3 sm:px-6 lg:px-10 h-16 sm:h-20 flex items-center justify-between">
           
           {/* Logo & Subtitle */}
-          <div className="flex items-center space-x-3.5">
-            <div className="relative group flex items-center justify-center p-1.5 rounded-2xl bg-[#102833]/80 border border-[#1C3945] hover:border-[#D9B96E]/50 transition">
+          <div className="flex items-center space-x-2.5 sm:space-x-3.5 min-w-0">
+            <div className="relative group flex items-center justify-center p-1.5 rounded-2xl bg-[#102833]/80 border border-[#1C3945] hover:border-[#D9B96E]/50 transition shrink-0">
               <img 
                 src="/assets/logo_star.png" 
                 alt="Logo Star" 
-                className="w-8 h-8 object-contain filter drop-shadow-[0_0_8px_rgba(217,185,110,0.4)]" 
+                className="w-7 h-7 sm:w-8 sm:h-8 object-contain filter drop-shadow-[0_0_8px_rgba(217,185,110,0.4)]" 
               />
             </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="font-serif text-xl font-bold tracking-wider text-gold-gradient uppercase">
+            <div className="min-w-0">
+              <div className="flex items-center space-x-1.5 sm:space-x-2">
+                <span className="font-serif text-lg sm:text-xl font-bold tracking-wider text-gold-gradient uppercase truncate">
                   Avari Keys
                 </span>
-                <span className="text-sm font-mono font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#102833] text-[#D9B96E] border border-[#1C3945]">
-                  AmneziaWG
+                <span className="text-xs sm:text-sm font-mono font-semibold uppercase tracking-wider px-2 sm:px-2.5 py-0.5 rounded-full bg-[#102833] text-[#D9B96E] border border-[#1C3945] shrink-0">
+                  AWG
                 </span>
                 {isMockMode() && (
-                  <span className="text-sm font-bold px-2.5 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-600/40 shadow-sm font-mono">
-                    ⚡ Demo Mock
+                  <span className="text-xs sm:text-sm font-bold px-2 sm:px-2.5 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-600/40 shadow-sm font-mono shrink-0">
+                    ⚡ Mock
                   </span>
                 )}
               </div>
-              <p className="text-sm text-[#A8B4B7] tracking-wider font-mono">
+              <p className="text-xs sm:text-sm text-[#A8B4B7] tracking-wider font-mono hidden sm:block">
                 Кооперативная виртуальная сеть
               </p>
             </div>
           </div>
 
           {/* User Profile & Logout */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 sm:space-x-4 shrink-0">
             <button
               onClick={() => setActiveTab('profile')}
               title="Перейти в Мой профиль"
@@ -220,25 +259,27 @@ export default function App() {
               </div>
             </button>
 
-            <button
-              onClick={handleLogout}
-              title="Выйти"
-              className="text-[#A8B4B7] hover:text-[#F2F0E8] p-2.5 rounded-xl bg-[#0D222C] border border-[#1C3945] hover:border-[#D9B96E]/40 hover:bg-[#102833] transition shadow-sm"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            <Tooltip content="Выйти из системы">
+              <button
+                onClick={handleLogout}
+                aria-label="Выйти"
+                className="text-[#A8B4B7] hover:text-[#F2F0E8] p-2 sm:p-2.5 rounded-xl bg-[#0D222C] border border-[#1C3945] hover:border-[#D9B96E]/40 hover:bg-[#102833] transition shadow-sm"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </Tooltip>
           </div>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-10 py-8 w-full">
+      <main className="flex-1 max-w-[1680px] mx-auto px-3 sm:px-6 lg:px-10 py-5 sm:py-8 w-full">
         
-        {/* Navigation Tabs */}
-        <div className="flex flex-wrap gap-2 border-b border-[#1C3945]/80 pb-4 mb-8">
+        {/* Navigation Tabs (Smooth horizontal swipe on mobile) */}
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3 mb-6 sm:mb-8 border-b border-[#1C3945]/80 -mx-3 px-3 sm:mx-0 sm:px-0 sm:flex-wrap">
           <button
             onClick={() => setActiveTab('keys')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
+            className={`flex-shrink-0 whitespace-nowrap flex items-center space-x-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-medium text-xs sm:text-sm uppercase tracking-wider font-mono transition duration-200 ${
               activeTab === 'keys'
                 ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                 : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -250,7 +291,7 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
+            className={`flex-shrink-0 whitespace-nowrap flex items-center space-x-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-medium text-xs sm:text-sm uppercase tracking-wider font-mono transition duration-200 ${
               activeTab === 'dashboard'
                 ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                 : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -264,7 +305,7 @@ export default function App() {
             <>
               <button
                 onClick={() => setActiveTab('nodes')}
-                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
+                className={`flex-shrink-0 whitespace-nowrap flex items-center space-x-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-medium text-xs sm:text-sm uppercase tracking-wider font-mono transition duration-200 ${
                   activeTab === 'nodes'
                     ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                     : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -276,19 +317,19 @@ export default function App() {
 
               <button
                 onClick={() => setActiveTab('users')}
-                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
+                className={`flex-shrink-0 whitespace-nowrap flex items-center space-x-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-medium text-xs sm:text-sm uppercase tracking-wider font-mono transition duration-200 ${
                   activeTab === 'users'
                     ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                     : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
                 }`}
               >
                 <Users className="w-4 h-4" />
-                <span>Модерация пользователей</span>
+                <span>Модерация</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('all-keys')}
-                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
+                className={`flex-shrink-0 whitespace-nowrap flex items-center space-x-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-medium text-xs sm:text-sm uppercase tracking-wider font-mono transition duration-200 ${
                   activeTab === 'all-keys'
                     ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                     : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -300,7 +341,7 @@ export default function App() {
 
               <button
                 onClick={() => setActiveTab('logs')}
-                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
+                className={`flex-shrink-0 whitespace-nowrap flex items-center space-x-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-medium text-xs sm:text-sm uppercase tracking-wider font-mono transition duration-200 ${
                   activeTab === 'logs'
                     ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                     : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -314,7 +355,7 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('billing')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
+            className={`flex-shrink-0 whitespace-nowrap flex items-center space-x-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-medium text-xs sm:text-sm uppercase tracking-wider font-mono transition duration-200 ${
               activeTab === 'billing'
                 ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                 : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -329,7 +370,7 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('profile')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
+            className={`flex-shrink-0 whitespace-nowrap flex items-center space-x-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-medium text-xs sm:text-sm uppercase tracking-wider font-mono transition duration-200 ${
               activeTab === 'profile'
                 ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                 : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -341,32 +382,33 @@ export default function App() {
         </div>
 
         {/* Tab Container */}
-        <div className="bg-[#0A1D26]/70 border border-[#1C3945] rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl relative overflow-hidden">
+        <div className="bg-[#0A1D26]/70 border border-[#1C3945] rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 backdrop-blur-xl shadow-2xl relative overflow-hidden">
           
           {/* Subtle Elven Glow Overlay */}
           <div className="absolute top-0 right-0 w-96 h-96 bg-[radial-gradient(circle_at_100%_0%,rgba(217,185,110,0.05)_0%,transparent_70%)] pointer-events-none" />
 
           {activeTab === 'keys' && (
             <div>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
                 <div>
-                  <h2 className="font-serif text-2xl font-bold text-[#F2F0E8] tracking-wide flex items-center space-x-2">
+                  <h2 className="font-serif text-xl sm:text-2xl font-bold text-[#F2F0E8] tracking-wide flex items-center space-x-2">
                     <span>VPN Конфигурации</span>
                   </h2>
-                  <p className="text-sm text-[#A8B4B7] mt-1 font-sans">
+                  <p className="text-xs sm:text-sm text-[#A8B4B7] mt-1 font-sans">
                     Создавайте и управляйте конфигурациями доступа к виртуальной сети
                   </p>
                 </div>
 
                 <button
-                  onClick={() => setShowCreateModal(true)}
+                  onClick={handleOpenCreateModal}
                   disabled={(nodes || []).length === 0}
-                  className="flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-sm uppercase tracking-wider font-mono px-5 py-3 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300"
+                  className="w-full sm:w-auto flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-xs sm:text-sm uppercase tracking-wider font-mono px-5 py-3 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300 cursor-pointer shrink-0"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Создать новый ключ</span>
                 </button>
               </div>
+
 
               {error && (
                 <div className="flex items-center space-x-2 bg-rose-950/60 border border-rose-800/80 text-rose-300 text-sm p-4 rounded-xl mb-6 shadow-lg">
@@ -393,14 +435,43 @@ export default function App() {
               {keysLoading ? (
                 <Loader size="section" text="Получение ключей из хранилища..." />
               ) : (keys || []).length === 0 ? (
-                <div className="text-center py-16 border border-dashed border-[#1C3945] rounded-2xl bg-[#06141B]/40">
-                  <div className="relative inline-block mb-3">
-                    <Key className="w-12 h-12 text-[#718187] mx-auto" />
+                <div className="py-10 px-4 sm:px-6 flex flex-col md:flex-row items-center justify-center gap-6 max-w-2xl mx-auto">
+                  <div className="shrink-0 select-none">
+                    <img 
+                      src="/assets/mascot.png" 
+                      alt="Ари" 
+                      className="w-36 sm:w-44 max-h-60 object-contain object-bottom filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)] drop-shadow-[0_0_15px_rgba(217,185,110,0.25)] pointer-events-none"
+                    />
                   </div>
-                  <h4 className="font-serif text-lg font-semibold text-[#F2F0E8]">У вас пока нет созданных ключей</h4>
-                  <p className="text-sm text-[#A8B4B7] mt-1 max-w-sm mx-auto font-sans">
-                    Нажмите кнопку «Создать новый ключ», чтобы получить AmneziaWG конфигурацию для смартфона или компьютера.
-                  </p>
+                  <div className="flex-1 w-full gold-rotating-border">
+                    <div className="gold-rotating-border-content p-6">
+                      <h4 className="font-serif text-xl font-bold text-[#F2F0E8] mb-2">
+                        У вас пока нет созданных ключей
+                      </h4>
+                      <p className="text-sm text-[#A8B4B7] font-sans leading-relaxed">
+                        Я помогу настроить ваш первый AmneziaWG ключ для смартфона или компьютера за пару секунд.
+                      </p>
+                      <div className="text-right mt-2 mb-4 text-xs font-serif font-bold text-[#D9B96E]">
+                        — Ари
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button
+                          onClick={handleOpenCreateModal}
+                          disabled={(nodes || []).length === 0}
+                          className="flex items-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-xs uppercase tracking-wider font-mono px-5 py-2.5 rounded-xl shadow-lg shadow-[#D9B96E]/20 transition cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Создать первый ключ</span>
+                        </button>
+                        <button
+                          onClick={() => setShowGlobalFaq(true)}
+                          className="flex items-center space-x-1.5 text-xs font-mono font-bold text-[#D9B96E] hover:text-[#F0D48D] uppercase tracking-wider px-4 py-2.5 rounded-xl bg-[#06141B] hover:bg-[#102833] border border-[#D9B96E]/30 transition cursor-pointer"
+                        >
+                          <span>5 частых вопросов</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -468,13 +539,15 @@ export default function App() {
                           <QrIcon className="w-4 h-4" />
                           <span>QR & Конфиг</span>
                         </button>
-                        <button
-                          onClick={() => setKeyToDelete(k)}
-                          title="Отозвать ключ"
-                          className="p-2.5 text-[#718187] hover:text-rose-400 bg-[#06141B] hover:bg-rose-950/30 rounded-xl border border-[#1C3945] hover:border-rose-800/60 transition"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <Tooltip content="Отозвать VPN-ключ">
+                          <button
+                            onClick={() => setKeyToDelete(k)}
+                            aria-label="Отозвать ключ"
+                            className="p-2.5 text-[#718187] hover:text-rose-400 bg-[#06141B] hover:bg-rose-950/30 rounded-xl border border-[#1C3945] hover:border-rose-800/60 transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
                       </div>
                     </div>
                   ))}
@@ -551,6 +624,25 @@ export default function App() {
             </div>
           )
         }
+      />
+
+      {/* Persistent Floating Mascot Assistant */}
+      <FloatingMascot
+        onOpenFaq={() => setShowGlobalFaq(true)}
+        onStartOnboarding={handleStartOnboarding}
+      />
+
+      {/* Global 5 Questions & Answers Modal */}
+      <MascotFaqModal
+        isOpen={showGlobalFaq}
+        onClose={() => setShowGlobalFaq(false)}
+      />
+
+      {/* Step-by-Step Onboarding Walkthrough */}
+      <OnboardingTour
+        isActive={showOnboarding}
+        currentStep={onboardingStep}
+        onComplete={handleCompleteOnboarding}
       />
 
       {/* Footer */}

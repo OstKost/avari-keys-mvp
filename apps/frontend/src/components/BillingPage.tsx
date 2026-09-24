@@ -12,11 +12,14 @@ import {
   Check,
   RefreshCw,
   Users,
+  Pencil,
+  Save,
 } from 'lucide-react';
-import { User, BillingStatus, AdminBillingSummary } from '../types';
+import { User, BillingStatus, AdminBillingSummary, BillingRequisites } from '../types';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { Loader } from './Loader';
+import { Tooltip } from './Tooltip';
 
 interface BillingPageProps {
   currentUser: User;
@@ -36,19 +39,35 @@ export function BillingPage({ currentUser }: BillingPageProps) {
   const [payNote, setPayNote] = useState<string>('');
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  // Requisites state
+  const [requisites, setRequisites] = useState<BillingRequisites>({
+    sbp_phone: '+7 (999) 000-00-00',
+    sbp_bank: 'Т-Банк / Сбербанк',
+  });
+  const [isEditingRequisites, setIsEditingRequisites] = useState(false);
+  const [editRequisitesForm, setEditRequisitesForm] = useState<BillingRequisites>({
+    sbp_phone: '',
+    sbp_bank: '',
+  });
+  const [savingRequisites, setSavingRequisites] = useState(false);
+
   // Admin filter
   const [searchFilter, setSearchFilter] = useState('');
 
   const loadData = async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const [status, adminData] = await Promise.all([
+      const [status, adminData, reqsData] = await Promise.all([
         api.getBillingStatus(),
         currentUser.role === 'admin' ? api.getAdminBilling() : Promise.resolve(null),
+        api.getBillingRequisites().catch(() => null),
       ]);
       setBillingStatus(status);
       if (adminData) {
         setAdminSummary(adminData);
+      }
+      if (reqsData) {
+        setRequisites(reqsData);
       }
     } catch (err: any) {
       toast.error(err.message || 'Ошибка загрузки данных биллинга');
@@ -60,6 +79,30 @@ export function BillingPage({ currentUser }: BillingPageProps) {
   useEffect(() => {
     loadData();
   }, [currentUser]);
+
+  const handleStartEditRequisites = () => {
+    setEditRequisitesForm({ ...requisites });
+    setIsEditingRequisites(true);
+  };
+
+  const handleCancelEditRequisites = () => {
+    setIsEditingRequisites(false);
+  };
+
+  const handleSaveRequisites = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSavingRequisites(true);
+      const updated = await api.updateBillingRequisites(editRequisitesForm);
+      setRequisites(updated);
+      setIsEditingRequisites(false);
+      toast.success('Реквизиты успешно сохранены!');
+    } catch (err: any) {
+      toast.error(err.message || 'Ошибка сохранения реквизитов');
+    } finally {
+      setSavingRequisites(false);
+    }
+  };
 
   const handleCopy = (text: string, fieldName: string) => {
     navigator.clipboard.writeText(text);
@@ -121,6 +164,17 @@ export function BillingPage({ currentUser }: BillingPageProps) {
       })
     : 'Нет записей';
 
+  const daysSinceLastPayment = (() => {
+    if (!billingStatus?.last_paid_at) return null;
+    const lastPaidTime = new Date(billingStatus.last_paid_at).getTime();
+    if (isNaN(lastPaidTime)) return null;
+    const diffMs = Date.now() - lastPaidTime;
+    if (diffMs < 0) return 0;
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  })();
+
+  const isRecentPayment = daysSinceLastPayment !== null && daysSinceLastPayment < 20;
+
   const filteredAdminRecords = (adminSummary?.records || []).filter((r) => {
     if (!searchFilter) return true;
     const q = searchFilter.toLowerCase();
@@ -172,13 +226,15 @@ export function BillingPage({ currentUser }: BillingPageProps) {
             </div>
           )}
 
-          <button
-            onClick={() => loadData(false)}
-            title="Обновить"
-            className="p-2.5 rounded-xl bg-[#0D222C] border border-[#1C3945] hover:border-[#D9B96E]/40 hover:bg-[#102833] text-[#A8B4B7] hover:text-[#F2F0E8] transition"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          <Tooltip content="Обновить данные">
+            <button
+              onClick={() => loadData(false)}
+              aria-label="Обновить"
+              className="p-2.5 rounded-xl bg-[#0D222C] border border-[#1C3945] hover:border-[#D9B96E]/40 hover:bg-[#102833] text-[#A8B4B7] hover:text-[#F2F0E8] transition"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -277,6 +333,15 @@ export function BillingPage({ currentUser }: BillingPageProps) {
                   <span>Я оплатил взнос</span>
                 </button>
 
+                {isRecentPayment && (
+                  <div className="flex items-center justify-center space-x-1.5 text-[11px] font-mono text-amber-400/90 pt-0.5">
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>
+                      Оплачено {daysSinceLastPayment === 0 ? 'сегодня' : `${daysSinceLastPayment} дн. назад`}
+                    </span>
+                  </div>
+                )}
+
                 {billingStatus?.is_due && (
                   <button
                     onClick={handleSnooze}
@@ -291,75 +356,122 @@ export function BillingPage({ currentUser }: BillingPageProps) {
             </div>
           </div>
 
-          {/* Requisites Block */}
-          <div className="bg-[#0A1D26]/80 border border-[#1C3945] rounded-3xl p-6 sm:p-8 backdrop-blur-md">
-            <div className="flex items-center space-x-3 mb-6">
-              <div className="p-2.5 rounded-2xl bg-[#102833] border border-[#1C3945] text-[#D9B96E]">
-                <Wallet className="w-5 h-5" />
+          {/* Compact Requisites Card */}
+          {isEditingRequisites ? (
+            <div className="bg-[#0A1D26]/90 border border-[#D9B96E]/40 rounded-2xl p-5 backdrop-blur-md max-w-md shadow-xl">
+              <div className="flex items-center space-x-2.5 mb-3.5 pb-2.5 border-b border-[#1C3945]/70">
+                <div className="p-1.5 rounded-lg bg-[#102833] text-[#D9B96E] border border-[#1C3945]">
+                  <Wallet className="w-4 h-4" />
+                </div>
+                <span className="text-xs font-mono uppercase tracking-wider text-[#D9B96E] font-bold">
+                  Редактирование реквизитов (СБП)
+                </span>
               </div>
+
+              <form onSubmit={handleSaveRequisites} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-mono text-[#A8B4B7] mb-1">
+                    Номер телефона или карты
+                  </label>
+                  <input
+                    type="text"
+                    value={editRequisitesForm.sbp_phone}
+                    onChange={(e) =>
+                      setEditRequisitesForm({ ...editRequisitesForm, sbp_phone: e.target.value })
+                    }
+                    placeholder="+7 (999) 000-00-00"
+                    className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3 py-2 text-xs text-[#F2F0E8] font-mono focus:outline-none transition"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-mono text-[#A8B4B7] mb-1">
+                    Банк / Получатель
+                  </label>
+                  <input
+                    type="text"
+                    value={editRequisitesForm.sbp_bank}
+                    onChange={(e) =>
+                      setEditRequisitesForm({ ...editRequisitesForm, sbp_bank: e.target.value })
+                    }
+                    placeholder="Т-Банк / Сбербанк"
+                    className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3 py-2 text-xs text-[#F2F0E8] font-mono focus:outline-none transition"
+                    required
+                  />
+                </div>
+
+                <div className="flex items-center justify-end space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelEditRequisites}
+                    disabled={savingRequisites}
+                    className="px-3 py-1.5 rounded-lg border border-[#1C3945] text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] hover:bg-[#102833] transition cursor-pointer"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingRequisites}
+                    className="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold text-xs font-mono uppercase tracking-wider shadow-md hover:shadow-[#D9B96E]/30 transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{savingRequisites ? 'Сохранение...' : 'Сохранить'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div className="bg-[#0A1D26]/90 border border-[#1C3945] hover:border-[#D9B96E]/40 rounded-2xl p-5 backdrop-blur-md max-w-md shadow-xl flex flex-col justify-between transition group">
               <div>
-                <h3 className="font-serif text-lg font-bold text-[#F2F0E8]">
-                  Реквизиты для перевода взносов
-                </h3>
-                <p className="text-xs text-[#A8B4B7] font-mono">
-                  Используйте удобный способ перевода, затем нажмите «Оплачено»
-                </p>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="p-1.5 rounded-lg bg-[#102833] text-[#D9B96E] border border-[#1C3945] group-hover:border-[#D9B96E]/40 transition">
+                      <Wallet className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-mono uppercase tracking-wider text-[#A8B4B7]">
+                        Реквизиты для взноса
+                      </span>
+                      <span className="text-[11px] font-mono text-[#718187] block">СБП / Карта РФ</span>
+                    </div>
+                  </div>
+
+                  {currentUser.role === 'admin' && (
+                    <Tooltip content="Редактировать реквизиты">
+                      <button
+                        onClick={handleStartEditRequisites}
+                        aria-label="Редактировать реквизиты"
+                        className="p-1.5 rounded-lg border border-[#1C3945] bg-[#102833] text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition shadow-sm cursor-pointer"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </Tooltip>
+                  )}
+                </div>
+
+                <div className="bg-[#06141B]/80 rounded-xl p-3 border border-[#1C3945]/70 mb-3.5">
+                  <div className="font-mono text-sm sm:text-base font-bold text-[#F2F0E8] select-all tracking-wide">
+                    {requisites.sbp_phone}
+                  </div>
+                  <div className="text-xs font-mono text-[#D9B96E] mt-0.5 font-medium">
+                    {requisites.sbp_bank}
+                  </div>
+                </div>
               </div>
+
+              <button
+                onClick={() => handleCopy(requisites.sbp_phone, 'sbp')}
+                className="self-start flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-[#1C3945] bg-[#102833] hover:bg-[#163442] hover:border-[#D9B96E]/40 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition cursor-pointer"
+              >
+                {copiedField === 'sbp' ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+                <span>{copiedField === 'sbp' ? 'Скопировано' : 'Скопировать номер'}</span>
+              </button>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="bg-[#06141B] border border-[#1C3945] rounded-2xl p-4 flex flex-col justify-between">
-                <div>
-                  <span className="text-xs font-mono uppercase text-[#A8B4B7]">СБП / Карта РФ</span>
-                  <div className="font-mono text-sm font-bold text-[#F2F0E8] mt-1 select-all">
-                    +7 (999) 000-00-00
-                  </div>
-                  <div className="text-xs font-mono text-[#D9B96E] mt-0.5">Т-Банк / Сбербанк</div>
-                </div>
-                <button
-                  onClick={() => handleCopy('+79990000000', 'sbp')}
-                  className="mt-3 self-start flex items-center space-x-1 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition"
-                >
-                  {copiedField === 'sbp' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedField === 'sbp' ? 'Скопировано' : 'Скопировать номер'}</span>
-                </button>
-              </div>
-
-              <div className="bg-[#06141B] border border-[#1C3945] rounded-2xl p-4 flex flex-col justify-between">
-                <div>
-                  <span className="text-xs font-mono uppercase text-[#A8B4B7]">USDT (TRC-20)</span>
-                  <div className="font-mono text-xs font-bold text-[#F2F0E8] mt-1 truncate select-all">
-                    TYDzsXDvjZkE5dGzXy9zQ9V69z8K7sBqLa
-                  </div>
-                  <div className="text-xs font-mono text-[#D9B96E] mt-0.5">Сеть TRON</div>
-                </div>
-                <button
-                  onClick={() => handleCopy('TYDzsXDvjZkE5dGzXy9zQ9V69z8K7sBqLa', 'usdt')}
-                  className="mt-3 self-start flex items-center space-x-1 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition"
-                >
-                  {copiedField === 'usdt' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedField === 'usdt' ? 'Скопировано' : 'Скопировать кошелек'}</span>
-                </button>
-              </div>
-
-              <div className="bg-[#06141B] border border-[#1C3945] rounded-2xl p-4 flex flex-col justify-between">
-                <div>
-                  <span className="text-xs font-mono uppercase text-[#A8B4B7]">Назначение перевода</span>
-                  <div className="font-mono text-sm font-bold text-[#F2F0E8] mt-1">
-                    Взнос @{currentUser.username}
-                  </div>
-                  <div className="text-xs font-mono text-[#A8B4B7] mt-0.5">Указывайте ник в комментарии</div>
-                </div>
-                <button
-                  onClick={() => handleCopy(`Взнос @${currentUser.username}`, 'note')}
-                  className="mt-3 self-start flex items-center space-x-1 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition"
-                >
-                  {copiedField === 'note' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedField === 'note' ? 'Скопировано' : 'Скопировать текст'}</span>
-                </button>
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* User History Table */}
           <div className="bg-[#0A1D26]/80 border border-[#1C3945] rounded-3xl p-6 sm:p-8">
@@ -561,6 +673,24 @@ export function BillingPage({ currentUser }: BillingPageProps) {
               </div>
             </div>
 
+            {isRecentPayment && (
+              <div className="flex items-start space-x-3 bg-amber-950/60 border border-amber-600/60 text-amber-200 text-xs p-4 rounded-2xl mb-5 shadow-lg">
+                <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-400" />
+                <div className="space-y-1">
+                  <div className="font-bold text-amber-300 font-mono uppercase tracking-wider">
+                    Предупреждение: взнос уже оплачен
+                  </div>
+                  <p className="leading-relaxed">
+                    Вы уже подтверждали оплату {daysSinceLastPayment === 0 ? 'сегодня' : daysSinceLastPayment === 1 ? 'вчера' : `${daysSinceLastPayment} дн. назад`} ({lastPaidDate}). 
+                    До следующего расчетного срока осталось <strong className="text-amber-300">{billingStatus?.days_remaining ?? 0} дн.</strong>
+                  </p>
+                  <p className="text-amber-300/80 text-[11px]">
+                    Повторное подтверждение требуется только при внесении дополнительного взноса.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-4 mb-6">
               <div>
                 <label className="block text-xs font-mono uppercase text-[#A8B4B7] mb-1.5">
@@ -604,7 +734,7 @@ export function BillingPage({ currentUser }: BillingPageProps) {
                 disabled={actionLoading}
                 className="flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-xs uppercase tracking-wider font-mono py-3 px-4 rounded-xl shadow-lg shadow-[#D9B96E]/20 transition cursor-pointer"
               >
-                <span>{actionLoading ? 'Сохранение...' : 'Подтвердить'}</span>
+                <span>{actionLoading ? 'Сохранение...' : isRecentPayment ? 'Все равно подтвердить' : 'Подтвердить'}</span>
               </button>
             </div>
           </div>

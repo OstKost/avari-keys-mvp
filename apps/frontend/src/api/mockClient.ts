@@ -13,6 +13,10 @@ import {
   BillingRecord,
   BillingStatus,
   AdminBillingSummary,
+  BillingRequisites,
+  TelegramStatusResponse,
+  TelegramSettings,
+  TelegramChat,
 } from '../types';
 
 // In-memory mock storage for standalone FE development
@@ -636,12 +640,16 @@ PersistentKeepalive = 25`;
 
     if (params?.search) {
       const q = params.search.toLowerCase().trim();
-      filtered = filtered.filter(
-        (k) =>
+      filtered = filtered.filter((k) => {
+        const u = mockUsers.find((user) => user.id === k.user_id);
+        const userName = u ? u.username.toLowerCase() : '';
+        return (
           k.device_name.toLowerCase().includes(q) ||
           k.client_name.toLowerCase().includes(q) ||
-          (k.node_name && k.node_name.toLowerCase().includes(q))
-      );
+          (k.node_name && k.node_name.toLowerCase().includes(q)) ||
+          userName.includes(q)
+        );
+      });
     }
 
     const page = params?.page && params.page > 0 ? params.page : 1;
@@ -650,21 +658,25 @@ PersistentKeepalive = 25`;
     const totalPages = Math.max(1, Math.ceil(totalCount / limit));
 
     const startIndex = (page - 1) * limit;
-    const paged = filtered.slice(startIndex, startIndex + limit).map((k) => ({
-      id: k.id,
-      user_id: k.user_id,
-      node_id: k.node_id,
-      client_name: k.client_name,
-      device_name: k.device_name,
-      node_name: k.node_name,
-      node_type: k.node_type,
-      last_handshake: k.last_handshake || '5 минут назад',
-      total_traffic_bytes: k.total_traffic_bytes || 524288000,
-      month_traffic_bytes: k.month_traffic_bytes || 524288000,
-      total_traffic_formatted: k.total_traffic_formatted || '500.00 MB',
-      month_traffic_formatted: k.month_traffic_formatted || '500.00 MB',
-      created_at: k.created_at,
-    }));
+    const paged = filtered.slice(startIndex, startIndex + limit).map((k) => {
+      const u = mockUsers.find((user) => user.id === k.user_id);
+      return {
+        id: k.id,
+        user_id: k.user_id,
+        username: u ? u.username : 'User',
+        node_id: k.node_id,
+        client_name: k.client_name,
+        device_name: k.device_name,
+        node_name: k.node_name,
+        node_type: k.node_type,
+        last_handshake: k.last_handshake || '5 минут назад',
+        total_traffic_bytes: k.total_traffic_bytes || 524288000,
+        month_traffic_bytes: k.month_traffic_bytes || 524288000,
+        total_traffic_formatted: k.total_traffic_formatted || '500.00 MB',
+        month_traffic_formatted: k.month_traffic_formatted || '500.00 MB',
+        created_at: k.created_at,
+      };
+    });
 
     return {
       keys: paged,
@@ -747,7 +759,7 @@ PersistentKeepalive = 25`;
     };
   },
 
-  async getDashboardStats(): Promise<DashboardStats> {
+  async getDashboardStats(_fresh?: boolean): Promise<DashboardStats> {
     const totalUsers = mockUsers.length;
     const activeUsers = mockUsers.filter((u) => u.is_active).length;
     const pendingUsers = mockUsers.filter((u) => !u.is_active).length;
@@ -961,9 +973,88 @@ PersistentKeepalive = 25`;
       records: [...mockBillingRecords],
     };
   },
+
+  async getBillingRequisites(): Promise<BillingRequisites> {
+    return { ...mockRequisites };
+  },
+
+  async updateBillingRequisites(req: BillingRequisites): Promise<BillingRequisites> {
+    mockRequisites = { ...req };
+    return { ...mockRequisites };
+  },
+
+  async getTelegramStatus(): Promise<TelegramStatusResponse> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return {
+      enabled: mockTelegramSettings.enabled,
+      bot_username: mockTelegramSettings.bot_username || 'AvariElfBot',
+      settings: { ...mockTelegramSettings },
+      subscribers: [...mockTelegramSubscribers],
+      total_subscribers: mockTelegramSubscribers.length,
+    };
+  },
+
+  async getTelegramSettings(): Promise<TelegramSettings> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return { ...mockTelegramSettings };
+  },
+
+  async updateTelegramSettings(settings: TelegramSettings): Promise<TelegramSettings> {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    mockTelegramSettings = { ...settings };
+    return { ...mockTelegramSettings };
+  },
+
+  async deleteTelegramSubscriber(chatId: number): Promise<{ success: boolean; message: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    mockTelegramSubscribers = mockTelegramSubscribers.filter((s) => s.chat_id !== chatId);
+    return { success: true, message: 'Получатель удален' };
+  },
+
+  async toggleTelegramSubscriber(chatId: number, alertsEnabled: boolean): Promise<{ success: boolean; message: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const sub = mockTelegramSubscribers.find((s) => s.chat_id === chatId);
+    if (sub) {
+      sub.alerts_enabled = alertsEnabled;
+    }
+    return { success: true, message: alertsEnabled ? 'Оповещения включены' : 'Оповещения отключены' };
+  },
+
+  async sendTelegramTestAlert(): Promise<{ success: boolean; message: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return {
+      success: true,
+      message: `Тестовое оповещение успешно отправлено в Telegram @${mockTelegramSettings.bot_username || 'AvariElfBot'}`,
+    };
+  },
 };
 
 // Mock state helpers
+let mockTelegramSettings: TelegramSettings = {
+  enabled: true,
+  bot_token: '8402833005:AAEZ4eJ6KKb0qErWK05gLnIrS1lyjY3b_i4',
+  bot_username: 'AvariElfBot',
+  admin_secret: 'elfsecret123',
+  notify_on_node_down: true,
+  notify_on_node_recover: true,
+  notify_on_new_user: true,
+};
+
+let mockTelegramSubscribers: TelegramChat[] = [
+  {
+    chat_id: 123456789,
+    username: 'ForveAdmin',
+    first_name: 'Forve',
+    is_admin: true,
+    alerts_enabled: true,
+    created_at: new Date().toISOString(),
+  },
+];
+
+let mockRequisites: BillingRequisites = {
+  sbp_phone: '+7 (999) 000-00-00',
+  sbp_bank: 'Т-Банк / Сбербанк',
+};
 const mockBillingRecords: BillingRecord[] = [
   {
     id: 1,

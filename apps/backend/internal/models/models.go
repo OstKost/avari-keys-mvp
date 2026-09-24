@@ -65,6 +65,7 @@ type NodeWithStatus struct {
 type ClientConfig struct {
 	ID                    int64     `json:"id"`
 	UserID                int64     `json:"user_id"`
+	Username              string    `json:"username,omitempty"`
 	NodeID                int64     `json:"node_id"`
 	ClientName            string    `json:"client_name"` // e.g. "u1_iphone"
 	DeviceName            string    `json:"device_name"` // e.g. "iPhone"
@@ -152,6 +153,7 @@ const (
 	CategoryProfile AuditLogCategory = "profile"
 	CategoryAdmin   AuditLogCategory = "admin"
 	CategoryBilling AuditLogCategory = "billing"
+	CategorySystem  AuditLogCategory = "system"
 )
 
 // BillingRecord represents a recorded payment/dues entry in the system.
@@ -282,6 +284,52 @@ type DashboardStatsResponse struct {
 	TopologyBreakdown     TopologyTrafficBreakdown `json:"topology_breakdown"`
 	Nodes                 []NodeDashboardInfo      `json:"nodes"`
 	GeneratedAt           time.Time                `json:"generated_at"`
+}
+
+// BillingRequisites represents customizable payment details for cooperative dues.
+type BillingRequisites struct {
+	SBPPhone string `json:"sbp_phone"`
+	SBPBank  string `json:"sbp_bank"`
+}
+
+// TelegramChat represents a subscribed Telegram chat for admin alerts.
+type TelegramChat struct {
+	ChatID        int64     `json:"chat_id"`
+	Username      string    `json:"username"`
+	FirstName     string    `json:"first_name"`
+	IsAdmin       bool      `json:"is_admin"`
+	AlertsEnabled bool      `json:"alerts_enabled"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// TelegramSettings represents configurable Telegram Bot settings in Master Backend.
+type TelegramSettings struct {
+	Enabled             bool   `json:"enabled"`
+	BotToken            string `json:"bot_token"`
+	BotUsername         string `json:"bot_username"`
+	AdminSecret         string `json:"admin_secret"`
+	NotifyOnNodeDown    bool   `json:"notify_on_node_down"`
+	NotifyOnNodeRecover bool   `json:"notify_on_node_recover"`
+	NotifyOnNewUser     bool   `json:"notify_on_new_user"`
+}
+
+// TelegramStatusResponse represents the current status of the Telegram bot.
+type TelegramStatusResponse struct {
+	Enabled          bool              `json:"enabled"`
+	BotUsername      string            `json:"bot_username"`
+	Settings         *TelegramSettings `json:"settings,omitempty"`
+	Subscribers      []TelegramChat    `json:"subscribers"`
+	TotalSubscribers int               `json:"total_subscribers"`
+}
+
+// TelegramTestAlertRequest for sending a test notification.
+type TelegramTestAlertRequest struct {
+	Message string `json:"message,omitempty"`
+}
+
+// TelegramSubscriberToggleRequest for enabling/disabling subscriber alerts.
+type TelegramSubscriberToggleRequest struct {
+	AlertsEnabled bool `json:"alerts_enabled"`
 }
 
 

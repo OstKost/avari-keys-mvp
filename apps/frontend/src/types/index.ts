@@ -35,6 +35,7 @@ export interface AdminNode {
 export interface ClientConfigSummary {
   id: number;
   user_id: number;
+  username?: string;
   node_id: number;
   client_name: string;
   device_name: string;
@@ -59,6 +60,8 @@ export interface PaginatedKeysResponse {
 
 export interface ClientConfigDetail {
   id: number;
+  user_id?: number;
+  username?: string;
   client_name: string;
   device_name: string;
   node_id: number;
@@ -182,6 +185,40 @@ export interface AdminBillingSummary {
   total_users: number;
   records: BillingRecord[];
 }
+
+export interface BillingRequisites {
+  sbp_phone: string;
+  sbp_bank: string;
+}
+
+export interface TelegramChat {
+  chat_id: number;
+  username: string;
+  first_name: string;
+  is_admin: boolean;
+  alerts_enabled: boolean;
+  created_at: string;
+}
+
+export interface TelegramSettings {
+  enabled: boolean;
+  bot_token: string;
+  bot_username: string;
+  admin_secret: string;
+  notify_on_node_down: boolean;
+  notify_on_node_recover: boolean;
+  notify_on_new_user: boolean;
+}
+
+export interface TelegramStatusResponse {
+  enabled: boolean;
+  bot_username: string;
+  settings?: TelegramSettings;
+  subscribers: TelegramChat[];
+  total_subscribers: number;
+}
+
+
 
 
 

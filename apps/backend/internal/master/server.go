@@ -1,33 +1,54 @@
 package master
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/auth"
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/client"
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/models"
+	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/monitor"
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/runner"
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/storage"
+	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/telegram"
 )
+
+const dashboardCacheTTL = 3 * time.Minute
+
+type dashboardCache struct {
+	mu           sync.RWMutex
+	data         *models.DashboardStatsResponse
+	pendingUsers int
+	cachedAt     time.Time
+}
 
 // Config holds Master server configuration.
 type Config struct {
-	Port      string
-	JWTSecret string
+	Port                string
+	JWTSecret           string
+	TelegramBotToken    string
+	TelegramBotUsername string
+	TelegramAdminChatID string
+	TelegramAdminSecret string
+	HealthCheckInterval time.Duration
 }
 
 // Server is the Master Backend API server.
 type Server struct {
-	cfg     Config
-	storage *storage.Storage
-	jwtMgr  *auth.JWTManager
-	mux     *http.ServeMux
+	cfg           Config
+	storage       *storage.Storage
+	jwtMgr        *auth.JWTManager
+	mux           *http.ServeMux
+	telegramBot   *telegram.Bot
+	healthChecker *monitor.HealthChecker
+	dashCache     dashboardCache
 }
 
 // NewServer creates a new Master server instance.
@@ -43,9 +64,96 @@ func NewServer(cfg Config, s *storage.Storage) *Server {
 		jwtMgr:  jwtMgr,
 		mux:     http.NewServeMux(),
 	}
+
+	// Load stored Telegram settings if available
+	var tgToken, tgUsername, tgSecret string
+	var notifyDown, notifyRecover, notifyNewUser bool = true, true, true
+	tgEnabled := false
+
+	savedSettings, err := s.GetTelegramSettings(context.Background())
+	if err == nil && savedSettings != nil && (savedSettings.BotToken != "" || savedSettings.Enabled) {
+		tgToken = savedSettings.BotToken
+		tgUsername = savedSettings.BotUsername
+		tgSecret = savedSettings.AdminSecret
+		tgEnabled = savedSettings.Enabled
+		notifyDown = savedSettings.NotifyOnNodeDown
+		notifyRecover = savedSettings.NotifyOnNodeRecover
+		notifyNewUser = savedSettings.NotifyOnNewUser
+	} else {
+		tgToken = cfg.TelegramBotToken
+		tgUsername = cfg.TelegramBotUsername
+		tgSecret = cfg.TelegramAdminSecret
+		tgEnabled = cfg.TelegramBotToken != ""
+	}
+
+	// Initialize Telegram Bot & HealthChecker
+	tgCfg := telegram.Config{
+		Token:               tgToken,
+		BotUsername:         tgUsername,
+		AdminSecret:         tgSecret,
+		AdminChatID:         cfg.TelegramAdminChatID,
+		Enabled:             tgEnabled,
+		NotifyOnNodeDown:    notifyDown,
+		NotifyOnNodeRecover: notifyRecover,
+		NotifyOnNewUser:     notifyNewUser,
+		Storage:             s,
+		NodeLister: func(ctx context.Context) ([]models.NodeWithStatus, error) {
+			if srv.healthChecker != nil {
+				return srv.healthChecker.CheckAllNodes(ctx)
+			}
+			nodes, err := s.ListNodes(ctx)
+			if err != nil {
+				return nil, err
+			}
+			res := make([]models.NodeWithStatus, len(nodes))
+			for i, n := range nodes {
+				res[i] = models.NodeWithStatus{Node: n, Online: true}
+			}
+			return res, nil
+		},
+	}
+	srv.telegramBot = telegram.NewBot(tgCfg)
+
+	hcCfg := monitor.Config{
+		Storage:     s,
+		Bot:         srv.telegramBot,
+		Interval:    cfg.HealthCheckInterval,
+		LogActivity: func(category models.AuditLogCategory, action string, details string) {
+			_ = s.CreateAuditLog(context.Background(), &models.AuditLog{
+				Username:  "system_monitor",
+				Action:    action,
+				Category:  category,
+				IPAddress: "127.0.0.1",
+				Details:   details,
+			})
+		},
+	}
+	srv.healthChecker = monitor.NewHealthChecker(hcCfg)
+
 	srv.routes()
 	return srv
 }
+
+// StartBackgroundWorkers launches Telegram bot polling and HealthChecker.
+func (s *Server) StartBackgroundWorkers(ctx context.Context) {
+	if s.telegramBot != nil && s.telegramBot.IsEnabled() {
+		s.telegramBot.Start(ctx)
+	}
+	if s.healthChecker != nil {
+		s.healthChecker.Start(ctx)
+	}
+}
+
+// StopBackgroundWorkers gracefully stops background workers.
+func (s *Server) StopBackgroundWorkers() {
+	if s.healthChecker != nil {
+		s.healthChecker.Stop()
+	}
+	if s.telegramBot != nil && s.telegramBot.IsEnabled() {
+		s.telegramBot.Stop()
+	}
+}
+
 
 // Handler returns the HTTP handler with global middleware.
 func (s *Server) Handler() http.Handler {
@@ -106,9 +214,19 @@ func (s *Server) routes() {
 
 	// Billing Routes
 	s.mux.HandleFunc("GET /api/v1/billing/status", auth.RequireAuth(s.handleGetBillingStatus))
+	s.mux.HandleFunc("GET /api/v1/billing/requisites", auth.RequireAuth(s.handleGetBillingRequisites))
 	s.mux.HandleFunc("POST /api/v1/billing/pay", auth.RequireAuth(s.handlePayDues))
 	s.mux.HandleFunc("POST /api/v1/billing/snooze", auth.RequireAuth(s.handleSnoozeDues))
 	s.mux.HandleFunc("GET /api/v1/admin/billing", auth.RequireAdmin(s.handleAdminGetBilling))
+	s.mux.HandleFunc("PUT /api/v1/admin/billing/requisites", auth.RequireAdmin(s.handleAdminUpdateBillingRequisites))
+
+	// Telegram Bot Routes
+	s.mux.HandleFunc("GET /api/v1/admin/telegram/status", auth.RequireAdmin(s.handleAdminGetTelegramStatus))
+	s.mux.HandleFunc("GET /api/v1/admin/telegram/settings", auth.RequireAdmin(s.handleAdminGetTelegramSettings))
+	s.mux.HandleFunc("PUT /api/v1/admin/telegram/settings", auth.RequireAdmin(s.handleAdminUpdateTelegramSettings))
+	s.mux.HandleFunc("POST /api/v1/admin/telegram/test", auth.RequireAdmin(s.handleAdminSendTelegramTest))
+	s.mux.HandleFunc("DELETE /api/v1/admin/telegram/subscribers/{id}", auth.RequireAdmin(s.handleAdminDeleteTelegramSubscriber))
+	s.mux.HandleFunc("POST /api/v1/admin/telegram/subscribers/{id}/toggle", auth.RequireAdmin(s.handleAdminToggleTelegramSubscriber))
 
 	// Shared / Dashboard Routes
 	s.mux.HandleFunc("GET /api/v1/stats/dashboard", auth.RequireAuth(s.handleGetDashboardStats))
@@ -137,6 +255,10 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.logActivity(r, &user.ID, user.Username, models.CategoryAuth, "auth_register", "Регистрация нового аккаунта (ожидает подтверждения администратора)")
+
+	if s.telegramBot != nil && s.telegramBot.IsEnabled() {
+		go s.telegramBot.NotifyNewUser(*user)
+	}
 
 	s.writeJSON(w, http.StatusCreated, map[string]any{
 		"message": "Registration successful. Please wait for administrator approval before logging in.",
@@ -348,6 +470,8 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		slaveResp.Config = cleanConfig
 	}
 
+	s.invalidateDashboardCache()
+
 	s.writeJSON(w, http.StatusCreated, map[string]any{
 		"id":          keyRecord.ID,
 		"client_name": clientName,
@@ -452,6 +576,8 @@ func (s *Server) handleDeleteKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryKeys, "key_delete", fmt.Sprintf("Отозван и удален VPN-ключ «%s» (%s)", keyRecord.DeviceName, keyRecord.ClientName))
+
+	s.invalidateDashboardCache()
 
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
 		Success: true,
@@ -815,6 +941,8 @@ func (s *Server) handleAdminAddNode(w http.ResponseWriter, r *http.Request) {
 	}
 	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_create", fmt.Sprintf("Добавлен новый сервер «%s» (%s%s%s, URL: %s)", node.Name, node.Type, countryTag, mobileTag, node.APIURL))
 
+	s.invalidateDashboardCache()
+
 	s.writeJSON(w, http.StatusCreated, node)
 }
 
@@ -865,6 +993,8 @@ func (s *Server) handleAdminUpdateNode(w http.ResponseWriter, r *http.Request) {
 	}
 	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_update", fmt.Sprintf("Обновлены параметры сервера «%s» (ID #%d, %s%s%s, URL: %s)", node.Name, node.ID, node.Type, countryTag, mobileTag, node.APIURL))
 
+	s.invalidateDashboardCache()
+
 	s.writeJSON(w, http.StatusOK, node)
 }
 
@@ -889,6 +1019,8 @@ func (s *Server) handleAdminDeleteNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_delete", fmt.Sprintf("Удален сервер «%s» (ID #%d)", nodeName, id))
+
+	s.invalidateDashboardCache()
 
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{Success: true, Message: "Node deleted"})
 }
@@ -928,7 +1060,8 @@ func (s *Server) handleAdminListAllKeys(w http.ResponseWriter, r *http.Request) 
 			matchDevice := strings.Contains(strings.ToLower(k.DeviceName), search)
 			matchClient := strings.Contains(strings.ToLower(k.ClientName), search)
 			matchNode := strings.Contains(strings.ToLower(k.NodeName), search)
-			if !matchDevice && !matchClient && !matchNode {
+			matchUser := strings.Contains(strings.ToLower(k.Username), search)
+			if !matchDevice && !matchClient && !matchNode && !matchUser {
 				continue
 			}
 		}
@@ -1121,8 +1254,32 @@ func formatBytes(b int64) string {
 	return fmt.Sprintf("%.2f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
+func (s *Server) invalidateDashboardCache() {
+	s.dashCache.mu.Lock()
+	s.dashCache.data = nil
+	s.dashCache.cachedAt = time.Time{}
+	s.dashCache.mu.Unlock()
+}
+
 func (s *Server) handleGetDashboardStats(w http.ResponseWriter, r *http.Request) {
 	claims, _ := auth.GetUserFromContext(r.Context())
+	isFresh := r.URL.Query().Get("fresh") == "true" || r.URL.Query().Get("force") == "true"
+
+	if !isFresh {
+		s.dashCache.mu.RLock()
+		if s.dashCache.data != nil && time.Since(s.dashCache.cachedAt) < dashboardCacheTTL {
+			respCopy := *s.dashCache.data
+			if claims != nil && claims.Role == models.RoleAdmin {
+				respCopy.PendingUsers = s.dashCache.pendingUsers
+			} else {
+				respCopy.PendingUsers = 0
+			}
+			s.dashCache.mu.RUnlock()
+			s.writeJSON(w, http.StatusOK, respCopy)
+			return
+		}
+		s.dashCache.mu.RUnlock()
+	}
 
 	// 1. Users metrics
 	users, err := s.storage.ListUsers(r.Context())
@@ -1299,9 +1456,18 @@ func (s *Server) handleGetDashboardStats(w http.ResponseWriter, r *http.Request)
 		GeneratedAt: time.Now(),
 	}
 
+	// Save to in-memory cache
+	s.dashCache.mu.Lock()
+	s.dashCache.data = &resp
+	s.dashCache.pendingUsers = pendingUsers
+	s.dashCache.cachedAt = resp.GeneratedAt
+	s.dashCache.mu.Unlock()
+
 	// Admin-only insights
 	if claims != nil && claims.Role == models.RoleAdmin {
 		resp.PendingUsers = pendingUsers
+	} else {
+		resp.PendingUsers = 0
 	}
 
 	s.writeJSON(w, http.StatusOK, resp)
@@ -1378,11 +1544,203 @@ func (s *Server) handleAdminGetBilling(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, summary)
 }
 
+func (s *Server) handleGetBillingRequisites(w http.ResponseWriter, r *http.Request) {
+	reqs, err := s.storage.GetBillingRequisites(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, reqs)
+}
+
+func (s *Server) handleAdminUpdateBillingRequisites(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	var req models.BillingRequisites
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	updated, err := s.storage.UpdateBillingRequisites(r.Context(), req)
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "billing_requisites_update", fmt.Sprintf("Обновлены платежные реквизиты: СБП %s (%s)", updated.SBPPhone, updated.SBPBank))
+
+	s.writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *Server) handleAdminGetTelegramStatus(w http.ResponseWriter, r *http.Request) {
+	chats, err := s.storage.ListTelegramChats(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	botUsername := s.cfg.TelegramBotUsername
+	if botUsername == "" {
+		botUsername = "AvariElfBot"
+	}
+
+	var settings *models.TelegramSettings
+	if s.telegramBot != nil {
+		snap := s.telegramBot.GetSettings()
+		settings = &snap
+		if snap.BotUsername != "" {
+			botUsername = snap.BotUsername
+		}
+	}
+
+	isEnabled := s.telegramBot != nil && s.telegramBot.IsEnabled()
+
+	s.writeJSON(w, http.StatusOK, models.TelegramStatusResponse{
+		Enabled:          isEnabled,
+		BotUsername:      botUsername,
+		Settings:         settings,
+		Subscribers:      chats,
+		TotalSubscribers: len(chats),
+	})
+}
+
+func (s *Server) handleAdminGetTelegramSettings(w http.ResponseWriter, r *http.Request) {
+	settings, err := s.storage.GetTelegramSettings(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Also sync live bot username if known
+	if s.telegramBot != nil {
+		snap := s.telegramBot.GetSettings()
+		if snap.BotUsername != "" && settings.BotUsername == "" {
+			settings.BotUsername = snap.BotUsername
+		}
+	}
+
+	s.writeJSON(w, http.StatusOK, settings)
+}
+
+func (s *Server) handleAdminUpdateTelegramSettings(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	var req models.TelegramSettings
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	req.BotToken = strings.TrimSpace(req.BotToken)
+	req.BotUsername = strings.TrimSpace(req.BotUsername)
+	req.AdminSecret = strings.TrimSpace(req.AdminSecret)
+
+	// If token is provided and enabled, validate with Telegram getMe API
+	if req.Enabled && req.BotToken != "" && s.telegramBot != nil {
+		detectedUsername, _, err := s.telegramBot.ValidateToken(req.BotToken)
+		if err != nil {
+			s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("Ошибка валидации токена Telegram: %v", err)})
+			return
+		}
+		if detectedUsername != "" {
+			req.BotUsername = detectedUsername
+		}
+	}
+
+	saved, err := s.storage.UpdateTelegramSettings(r.Context(), req)
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Hot reload running Telegram bot instance
+	if s.telegramBot != nil {
+		_ = s.telegramBot.UpdateConfig(context.Background(), *saved)
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_telegram_settings_update", fmt.Sprintf("Обновлены настройки Telegram-бота @%s (Enabled: %v)", saved.BotUsername, saved.Enabled))
+
+	s.writeJSON(w, http.StatusOK, saved)
+}
+
+func (s *Server) handleAdminDeleteTelegramSubscriber(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid chat ID"})
+		return
+	}
+
+	if err := s.storage.DeleteTelegramChat(r.Context(), id); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_telegram_subscriber_delete", fmt.Sprintf("Удален получатель Telegram-оповещений (Chat ID #%d)", id))
+
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: "Получатель успешно удален из списка рассылки",
+	})
+}
+
+func (s *Server) handleAdminToggleTelegramSubscriber(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid chat ID"})
+		return
+	}
+
+	var req models.TelegramSubscriberToggleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	if err := s.storage.SetTelegramAlertsEnabled(r.Context(), id, req.AlertsEnabled); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	statusText := "отключены"
+	if req.AlertsEnabled {
+		statusText = "включены"
+	}
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_telegram_subscriber_toggle", fmt.Sprintf("Оповещения для Telegram-чата #%d %s", id, statusText))
+
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: fmt.Sprintf("Оповещения для чата %s", statusText),
+	})
+}
+
+func (s *Server) handleAdminSendTelegramTest(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	if s.telegramBot == nil || !s.telegramBot.IsEnabled() {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Telegram bot is not configured or disabled"})
+		return
+	}
+
+	if err := s.telegramBot.SendTestAlert(0); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("Failed to send test alert: %v", err)})
+		return
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_telegram_test", "Отправлено тестовое оповещение в Telegram")
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: "Тестовое оповещение успешно отправлено во все привязанные Telegram-чаты",
+	})
+}
+
 func (s *Server) writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
 }
+
 
 
 

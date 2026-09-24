@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/master"
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/storage"
@@ -23,6 +28,27 @@ func main() {
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 
+	tgToken := os.Getenv("TELEGRAM_BOT_TOKEN")
+	if tgToken == "" {
+		// Default token for AvariElfBot
+		tgToken = "8402833005:AAEZ4eJ6KKb0qErWK05gLnIrS1lyjY3b_i4"
+	}
+
+	tgUsername := os.Getenv("TELEGRAM_BOT_USERNAME")
+	if tgUsername == "" {
+		tgUsername = "AvariElfBot"
+	}
+
+	tgAdminChatID := os.Getenv("TELEGRAM_ADMIN_CHAT_ID")
+	tgAdminSecret := os.Getenv("TELEGRAM_ADMIN_SECRET")
+
+	intervalSec := 30
+	if secStr := os.Getenv("HEALTHCHECK_INTERVAL_SEC"); secStr != "" {
+		if s, err := strconv.Atoi(secStr); err == nil && s > 0 {
+			intervalSec = s
+		}
+	}
+
 	store, err := storage.NewSQLiteStorage(dbPath)
 	if err != nil {
 		log.Fatalf("[MASTER] Failed to initialize SQLite database: %v", err)
@@ -30,15 +56,44 @@ func main() {
 	defer store.Close()
 
 	cfg := master.Config{
-		Port:      port,
-		JWTSecret: jwtSecret,
+		Port:                port,
+		JWTSecret:           jwtSecret,
+		TelegramBotToken:    tgToken,
+		TelegramBotUsername: tgUsername,
+		TelegramAdminChatID: tgAdminChatID,
+		TelegramAdminSecret: tgAdminSecret,
+		HealthCheckInterval: time.Duration(intervalSec) * time.Second,
 	}
 
 	srv := master.NewServer(cfg, store)
 
-	addr := fmt.Sprintf(":%s", port)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start background workers (Telegram long-polling & HealthChecker)
+	srv.StartBackgroundWorkers(ctx)
+
+	httpServer := &http.Server{
+		Addr:    fmt.Sprintf(":%s", port),
+		Handler: srv.Handler(),
+	}
+
+	// Graceful shutdown listener
+	stopChan := make(chan os.Signal, 1)
+	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-stopChan
+		log.Println("[MASTER] Shutting down gracefully...")
+		srv.StopBackgroundWorkers()
+		shutdownCtx, sCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer sCancel()
+		_ = httpServer.Shutdown(shutdownCtx)
+		cancel()
+	}()
+
 	log.Printf("[MASTER] Server listening on http://0.0.0.0:%s", port)
-	if err := http.ListenAndServe(addr, srv.Handler()); err != nil {
+	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("[MASTER] Server startup failed: %v", err)
 	}
 }
