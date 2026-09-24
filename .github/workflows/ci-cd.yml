@@ -1,0 +1,187 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+jobs:
+  # ==========================================
+  # 1. Test, Lint and Build Artifacts
+  # ==========================================
+  test-and-build:
+    name: 🧪 Test & Build Artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 🐹 Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          check-latest: true
+          cache-dependency-path: apps/backend/go.sum
+
+      - name: 📦 Go Vet & Tests
+        working-directory: apps/backend
+        run: |
+          go vet ./...
+          go test -v -race ./...
+
+      - name: 🏗️ Compile Static Linux (amd64) Binaries
+        working-directory: apps/backend
+        run: |
+          mkdir -p ../../dist/linux-amd64
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../../dist/linux-amd64/avari-master ./cmd/master
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../../dist/linux-amd64/avari-slave ./cmd/slave
+          chmod +x ../../dist/linux-amd64/avari-master ../../dist/linux-amd64/avari-slave
+
+      - name: ⚡ Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: 📦 Install Frontend Dependencies & Build SPA
+        working-directory: apps/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: 📤 Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: avari-build-artifacts
+          retention-days: 1
+          path: |
+            dist/linux-amd64/avari-master
+            dist/linux-amd64/avari-slave
+            apps/frontend/dist/
+
+  # ==========================================
+  # 2. Secure Production Deployment to VPS
+  # ==========================================
+  deploy:
+    name: 🚀 Deploy to VPS (157.22.252.225)
+    needs: test-and-build
+    # Only deploy on pushes or manual dispatches to master or main
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') || (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-vps-deploy
+      cancel-in-progress: false
+
+    steps:
+      - name: 📥 Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: avari-build-artifacts
+          path: deploy-artifacts
+
+      - name: 🔑 Configure SSH Key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST || '157.22.252.225' }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+        run: |
+          if [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "❌ Error: Secret SSH_PRIVATE_KEY is not defined in GitHub repository secrets."
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+          # Add remote host to known_hosts to prevent MITM warnings
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: 📦 Sync Binaries & Frontend to VPS (Atomic Swap)
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST || '157.22.252.225' }}
+          SSH_USER: ${{ secrets.SSH_USER || 'root' }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          DEPLOY_TMP="/tmp/avari-deploy-${RUN_ID}"
+          SSH_CMD="ssh -i ~/.ssh/id_deploy -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new ${SSH_USER}@${SSH_HOST}"
+          SCP_CMD="scp -i ~/.ssh/id_deploy -P ${SSH_PORT} -o StrictHostKeyChecking=accept-new"
+          RSYNC_CMD="rsync -avz --delete -e \"ssh -i ~/.ssh/id_deploy -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new\""
+
+          echo "==> Creating temporary deployment folder on VPS: ${DEPLOY_TMP}..."
+          $SSH_CMD "mkdir -p ${DEPLOY_TMP}/bin ${DEPLOY_TMP}/frontend /var/www/avari-keys/frontend /opt/avari-keys/data"
+
+          echo "==> Uploading compiled binaries..."
+          $SCP_CMD deploy-artifacts/dist/linux-amd64/avari-master ${SSH_USER}@${SSH_HOST}:${DEPLOY_TMP}/bin/avari-master
+          $SCP_CMD deploy-artifacts/dist/linux-amd64/avari-slave ${SSH_USER}@${SSH_HOST}:${DEPLOY_TMP}/bin/avari-slave
+          $SSH_CMD "chmod +x ${DEPLOY_TMP}/bin/avari-master ${DEPLOY_TMP}/bin/avari-slave"
+
+          echo "==> Uploading Frontend SPA static build..."
+          eval $RSYNC_CMD deploy-artifacts/apps/frontend/dist/ ${SSH_USER}@${SSH_HOST}:${DEPLOY_TMP}/frontend/
+
+          echo "==> Atomically applying changes on VPS..."
+          $SSH_CMD "bash -se" << 'EOF'
+            set -euo pipefail
+
+            # 1. Update binaries safely using install (preserves execution and replaces cleanly)
+            install -m 755 /tmp/avari-deploy-${RUN_ID}/bin/avari-master /usr/local/bin/avari-master
+            install -m 755 /tmp/avari-deploy-${RUN_ID}/bin/avari-slave /usr/local/bin/avari-slave
+
+            # 2. Update frontend SPA files
+            rsync -av --delete /tmp/avari-deploy-${RUN_ID}/frontend/ /var/www/avari-keys/frontend/
+
+            # 3. Clean up staging directory
+            rm -rf /tmp/avari-deploy-${RUN_ID}
+
+            # 4. Restart or reload services
+            systemctl daemon-reload
+            if systemctl is-active --quiet avari-master; then
+              echo "Restarting avari-master..."
+              systemctl restart avari-master
+            else
+              echo "Starting avari-master..."
+              systemctl enable --now avari-master || true
+            fi
+
+            if systemctl is-active --quiet avari-slave; then
+              echo "Restarting avari-slave..."
+              systemctl restart avari-slave
+            fi
+
+            if systemctl is-active --quiet caddy; then
+              echo "Reloading caddy..."
+              systemctl reload caddy || true
+            fi
+          EOF
+
+      - name: 🩺 Verify Deployment Health
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST || '157.22.252.225' }}
+          SSH_USER: ${{ secrets.SSH_USER || 'root' }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+        run: |
+          SSH_CMD="ssh -i ~/.ssh/id_deploy -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new ${SSH_USER}@${SSH_HOST}"
+          
+          echo "==> Checking systemd status of avari-master..."
+          sleep 2
+          $SSH_CMD "systemctl is-active avari-master"
+          echo "✅ Service avari-master is active and healthy!"
+
+      - name: 🧹 Cleanup Local SSH Credentials
+        if: always()
+        run: |
+          rm -rf ~/.ssh/id_deploy
