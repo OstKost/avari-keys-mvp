@@ -419,22 +419,25 @@ export function KeyModal({ keyData, onClose }: Props) {
           </>
         )}
 
-        {/* Mascot Quick Tip & FAQ Link */}
-        <div className="mt-5 pt-4 border-t border-[#1C3945]/80 flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#06141B]/40 p-3 rounded-2xl">
-          <div className="flex items-center space-x-3 text-left">
-            <MascotAvatar size="xs" withGlow={false} />
-            <p className="text-xs text-[#A8B4B7] font-sans">
-              <strong>Совет Хранителя:</strong> Отсканируйте QR в мобильном приложении AmneziaWG или сохраните .conf для ПК.
-            </p>
+        {/* Ari Quick Tip & FAQ Link with Rotating Golden Sheen Border */}
+        <div className="mt-5 gold-rotating-border">
+          <div className="gold-rotating-border-content p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center space-x-3 text-left">
+              <MascotAvatar size="xs" withGlow={false} />
+              <div className="text-xs text-[#D9E1E3] font-sans">
+                <span>Отсканируйте QR в приложении AmneziaWG на телефоне или сохраните .conf для ПК.</span>
+                <span className="ml-2 font-serif font-bold text-[#D9B96E] whitespace-nowrap">— Ари</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowFaq(true)}
+              className="flex items-center space-x-1.5 text-xs font-mono font-bold text-[#D9B96E] hover:text-[#06141B] hover:bg-[#D9B96E] uppercase tracking-wider px-3.5 py-2 rounded-xl bg-[#06141B] border border-[#D9B96E]/40 transition shrink-0 cursor-pointer"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>Частые вопросы (FAQ)</span>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowFaq(true)}
-            className="flex items-center space-x-1.5 text-xs font-mono font-bold text-[#D9B96E] hover:text-[#F0D48D] uppercase tracking-wider px-3 py-1.5 rounded-xl bg-[#102833] hover:bg-[#163442] border border-[#D9B96E]/30 transition shrink-0 cursor-pointer"
-          >
-            <HelpCircle className="w-3.5 h-3.5" />
-            <span>Инструкция и FAQ</span>
-          </button>
         </div>
 
         {/* Mascot FAQ Modal */}

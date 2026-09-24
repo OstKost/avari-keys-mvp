@@ -18,7 +18,7 @@ import { BillingPage } from './components/BillingPage';
 import { BillingReminderModal } from './components/BillingReminderModal';
 import { Tooltip } from './components/Tooltip';
 import { formatNodeRouting } from './utils/country';
-import { FloatingMascot, MascotFaqModal, MascotAvatar } from './components/MascotAssistant';
+import { FloatingMascot, MascotFaqModal } from './components/MascotAssistant';
 import { OnboardingTour } from './components/OnboardingTour';
 
 export default function App() {
@@ -434,32 +434,41 @@ export default function App() {
               {keysLoading ? (
                 <Loader size="section" text="Получение ключей из хранилища..." />
               ) : (keys || []).length === 0 ? (
-                <div className="text-center py-14 px-6 border border-dashed border-[#1C3945] rounded-3xl bg-[#06141B]/50 relative overflow-hidden">
-                  <div className="relative z-10 flex flex-col items-center max-w-md mx-auto">
-                    <div className="mb-4">
-                      <MascotAvatar size="lg" />
-                    </div>
-                    <h4 className="font-serif text-xl font-bold text-[#F2F0E8]">
-                      У вас пока нет созданных ключей
-                    </h4>
-                    <p className="text-sm text-[#A8B4B7] mt-2 font-sans leading-relaxed text-center">
-                      Хранитель готов помочь! Создайте ваш первый AmneziaWG ключ для смартфона или компьютера за пару секунд.
-                    </p>
-                    <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
-                      <button
-                        onClick={handleOpenCreateModal}
-                        disabled={(nodes || []).length === 0}
-                        className="flex items-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-xs uppercase tracking-wider font-mono px-5 py-3 rounded-xl shadow-lg shadow-[#D9B96E]/20 transition cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Создать первый ключ</span>
-                      </button>
-                      <button
-                        onClick={() => setShowGlobalFaq(true)}
-                        className="flex items-center space-x-1.5 text-xs font-mono font-bold text-[#D9B96E] hover:text-[#F0D48D] uppercase tracking-wider px-4 py-3 rounded-xl bg-[#102833] hover:bg-[#163442] border border-[#D9B96E]/30 transition cursor-pointer"
-                      >
-                        <span>5 частых вопросов (FAQ)</span>
-                      </button>
+                <div className="py-10 px-4 sm:px-6 flex flex-col md:flex-row items-center justify-center gap-6 max-w-2xl mx-auto">
+                  <div className="shrink-0 select-none">
+                    <img 
+                      src="/assets/mascot.png" 
+                      alt="Ари" 
+                      className="w-36 sm:w-44 max-h-60 object-contain object-bottom filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)] drop-shadow-[0_0_15px_rgba(217,185,110,0.25)] pointer-events-none"
+                    />
+                  </div>
+                  <div className="flex-1 w-full gold-rotating-border">
+                    <div className="gold-rotating-border-content p-6">
+                      <h4 className="font-serif text-xl font-bold text-[#F2F0E8] mb-2">
+                        У вас пока нет созданных ключей
+                      </h4>
+                      <p className="text-sm text-[#A8B4B7] font-sans leading-relaxed">
+                        Я помогу настроить ваш первый AmneziaWG ключ для смартфона или компьютера за пару секунд.
+                      </p>
+                      <div className="text-right mt-2 mb-4 text-xs font-serif font-bold text-[#D9B96E]">
+                        — Ари
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button
+                          onClick={handleOpenCreateModal}
+                          disabled={(nodes || []).length === 0}
+                          className="flex items-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-xs uppercase tracking-wider font-mono px-5 py-2.5 rounded-xl shadow-lg shadow-[#D9B96E]/20 transition cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Создать первый ключ</span>
+                        </button>
+                        <button
+                          onClick={() => setShowGlobalFaq(true)}
+                          className="flex items-center space-x-1.5 text-xs font-mono font-bold text-[#D9B96E] hover:text-[#F0D48D] uppercase tracking-wider px-4 py-2.5 rounded-xl bg-[#06141B] hover:bg-[#102833] border border-[#D9B96E]/30 transition cursor-pointer"
+                        >
+                          <span>5 частых вопросов</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

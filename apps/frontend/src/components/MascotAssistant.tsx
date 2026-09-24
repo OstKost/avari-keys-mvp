@@ -133,7 +133,7 @@ export function MascotFaqModal({
             <div>
               <div className="flex items-center space-x-2">
                 <h3 className="font-serif text-2xl font-bold text-[#F2F0E8] tracking-wide">
-                  База знаний Хранителя
+                  База знаний Ари
                 </h3>
                 <span className="text-xs font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#102833] text-[#D9B96E] border border-[#D9B96E]/30">
                   5 ответов
@@ -212,7 +212,7 @@ export function MascotFaqModal({
         <div className="pt-4 border-t border-[#1C3945]/80 flex items-center justify-between">
           <span className="text-xs text-[#718187] font-mono flex items-center space-x-1.5">
             <Shield className="w-3.5 h-3.5 text-[#D9B96E]" />
-            <span>Avari Keys • AmneziaWG Guide</span>
+            <span>Avari Keys • AmneziaWG Guide by Ari</span>
           </span>
           <button
             onClick={onClose}
@@ -235,38 +235,39 @@ export function MascotModalCompanion({
 }) {
   return (
     <div className="relative mb-6">
-      {/* Character Figure standing directly alongside the form */}
-      <div 
-        onClick={onClickFaq}
-        className="flex items-center space-x-4 bg-gradient-to-r from-[#102833]/95 via-[#0A1D26]/90 to-[#0A1D26]/60 border-2 border-[#D9B96E]/60 hover:border-[#D9B96E] p-3.5 sm:p-4 rounded-3xl shadow-2xl backdrop-blur-md cursor-pointer transition-all duration-300 group hover:scale-[1.01]"
-      >
-        {/* Mascot Avatar with floating animation */}
-        <div className="relative shrink-0">
-          <MascotAvatar size="md" />
-          <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-[#06141B] flex items-center justify-center">
-            <Sparkles className="w-2.5 h-2.5 text-black" />
-          </span>
-        </div>
-
-        {/* Speech Bubble Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center space-x-2">
-            <span className="font-serif font-bold text-base text-[#F0D48D] group-hover:text-gold-gradient transition">
-              Нужна помощь с выбором?
-            </span>
-            <span className="bg-[#06141B] text-[#D9B96E] text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-[#D9B96E]/40 animate-pulse">
-              5 ответов
-            </span>
+      <div className="gold-rotating-border">
+        <div 
+          onClick={onClickFaq}
+          className="gold-rotating-border-content p-3.5 sm:p-4 flex items-center space-x-4 cursor-pointer transition-all duration-300 group hover:bg-[#102833]/90"
+        >
+          {/* Mascot Avatar with clean glow */}
+          <div className="relative shrink-0">
+            <MascotAvatar size="md" />
           </div>
-          <p className="text-xs sm:text-sm text-[#D9E1E3] font-sans mt-0.5 leading-snug">
-            Нажмите, и я объясню разницу между Direct и Cascade серверами, имя устройства и настройку PSK.
-          </p>
-        </div>
 
-        {/* Action Button */}
-        <div className="shrink-0 hidden sm:flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-[#06141B] group-hover:bg-[#D9B96E] text-[#D9B96E] group-hover:text-[#06141B] border border-[#D9B96E]/40 font-mono text-xs font-bold uppercase tracking-wider transition">
-          <BookOpen className="w-4 h-4" />
-          <span>Спросить</span>
+          {/* Speech Bubble Content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center space-x-2">
+              <span className="font-serif font-bold text-base text-[#F0D48D] group-hover:text-gold-gradient transition">
+                Нужна помощь с выбором?
+              </span>
+              <span className="bg-[#06141B] text-[#D9B96E] text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-[#D9B96E]/40">
+                5 ответов
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-[#D9E1E3] font-sans mt-0.5 leading-snug">
+              Нажмите, и я объясню разницу между серверами, имя устройства и настройку PSK.
+            </p>
+            <div className="text-right mt-1 text-xs font-serif font-bold text-[#D9B96E]">
+              — Ари
+            </div>
+          </div>
+
+          {/* Action Button */}
+          <div className="shrink-0 hidden sm:flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-[#06141B] group-hover:bg-[#D9B96E] text-[#D9B96E] group-hover:text-[#06141B] border border-[#D9B96E]/40 font-mono text-xs font-bold uppercase tracking-wider transition">
+            <BookOpen className="w-4 h-4" />
+            <span>Спросить</span>
+          </div>
         </div>
       </div>
     </div>
