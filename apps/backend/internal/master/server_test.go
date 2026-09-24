@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/master"
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/models"
@@ -335,6 +336,31 @@ func TestDashboardStatsEndpoint(t *testing.T) {
 	}
 	if statsResp.SystemStatus == "" {
 		t.Fatalf("expected system status to be non-empty")
+	}
+
+	// 3. Test In-Memory Cache (should return the same GeneratedAt immediately)
+	req2 := httptest.NewRequest("GET", "/api/v1/stats/dashboard", nil)
+	req2.Header.Set("Authorization", "Bearer "+adminToken)
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+
+	var cachedStats models.DashboardStatsResponse
+	_ = json.NewDecoder(rec2.Body).Decode(&cachedStats)
+	if !cachedStats.GeneratedAt.Equal(statsResp.GeneratedAt) {
+		t.Fatalf("expected cached GeneratedAt %v, got %v", statsResp.GeneratedAt, cachedStats.GeneratedAt)
+	}
+
+	// 4. Test Bypass with ?fresh=true
+	time.Sleep(10 * time.Millisecond)
+	req3 := httptest.NewRequest("GET", "/api/v1/stats/dashboard?fresh=true", nil)
+	req3.Header.Set("Authorization", "Bearer "+adminToken)
+	rec3 := httptest.NewRecorder()
+	handler.ServeHTTP(rec3, req3)
+
+	var freshStats models.DashboardStatsResponse
+	_ = json.NewDecoder(rec3.Body).Decode(&freshStats)
+	if freshStats.GeneratedAt.Equal(statsResp.GeneratedAt) {
+		t.Fatalf("expected fresh GeneratedAt to be newer than %v, got %v", statsResp.GeneratedAt, freshStats.GeneratedAt)
 	}
 }
 
