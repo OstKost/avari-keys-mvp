@@ -15,10 +15,12 @@ import {
   Pencil,
   ExternalLink,
   Globe,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { api } from '../api/client';
-import { AdminNode } from '../types';
+import { AdminNode, EgressStatusResponse } from '../types';
 import { ConfirmModal } from './ConfirmModal';
+
 import { useToast } from '../context/ToastContext';
 import { Loader } from './Loader';
 import { COUNTRIES, formatNodeRouting, getCountryInfo } from '../utils/country';
@@ -65,10 +67,51 @@ export function AdminNodes() {
   const [restoreData, setRestoreData] = useState('');
   const [isRestoring, setIsRestoring] = useState(false);
 
-  const fetchNodes = async (showSpin = false) => {
+  // Egress Switcher modal state
+  const [egressNode, setEgressNode] = useState<AdminNode | null>(null);
+  const [egressStatus, setEgressStatus] = useState<EgressStatusResponse | null>(null);
+  const [loadingEgress, setLoadingEgress] = useState(false);
+  const [switchingEgress, setSwitchingEgress] = useState(false);
+  const [targetEgressIf, setTargetEgressIf] = useState<string>('awg3');
+
+  const handleOpenEgress = async (node: AdminNode) => {
+    setEgressNode(node);
+    setLoadingEgress(true);
+    setEgressStatus(null);
+    try {
+      const status = await api.getNodeEgress(node.id);
+      setEgressStatus(status);
+      setTargetEgressIf(status.active_interface === 'awg1' ? 'awg3' : 'awg1');
+    } catch (err: any) {
+      toast.error(err.message || 'Ошибка получения данных Egress');
+    } finally {
+      setLoadingEgress(false);
+    }
+  };
+
+  const handleSwitchEgressSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!egressNode || !targetEgressIf) return;
+    try {
+      setSwitchingEgress(true);
+      const res = await api.switchNodeEgress(egressNode.id, targetEgressIf);
+      toast.success(res.message || `Шлюз выхода каскада переключен на ${targetEgressIf}`);
+      const updated = await api.getNodeEgress(egressNode.id);
+      setEgressStatus(updated);
+      setTargetEgressIf(updated.active_interface === 'awg1' ? 'awg3' : 'awg1');
+      fetchNodes(false, true);
+    } catch (err: any) {
+      toast.error(err.message || 'Ошибка переключения шлюза выхода');
+    } finally {
+      setSwitchingEgress(false);
+    }
+  };
+
+
+  const fetchNodes = async (showSpin = false, silent = false) => {
     try {
       if (showSpin) setIsChecking(true);
-      else setLoading(true);
+      else if (!silent) setLoading(true);
       const data = await api.getAdminNodes();
       const safeData = Array.isArray(data) ? data : [];
       setNodes(safeData);
@@ -79,7 +122,7 @@ export function AdminNodes() {
     } catch (err: any) {
       toast.error(err.message || 'Ошибка загрузки серверов');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
       setIsChecking(false);
     }
   };
@@ -90,16 +133,23 @@ export function AdminNodes() {
 
   const handleAddNode = async (e: React.FormEvent) => {
     e.preventDefault();
+    const nodeName = name.trim();
+    const nodeType = type;
+    const nodeCountry = countryCode.trim().toUpperCase();
+    const nodeProvider = providerUrl.trim();
+    const nodeApi = apiUrl.trim();
+    const nodeKey = apiKey.trim();
+    const nodeMobile = isMobileOptimized;
     try {
       setSubmitting(true);
-      await api.addAdminNode(
-        name.trim(),
-        type,
-        apiUrl.trim(),
-        apiKey.trim(),
-        isMobileOptimized,
-        countryCode.trim().toUpperCase(),
-        providerUrl.trim()
+      const res = await api.addAdminNode(
+        nodeName,
+        nodeType,
+        nodeApi,
+        nodeKey,
+        nodeMobile,
+        nodeCountry,
+        nodeProvider
       );
       setName('');
       setCountryCode('NLD');
@@ -108,8 +158,11 @@ export function AdminNodes() {
       setApiKey('');
       setIsMobileOptimized(false);
       setShowAddForm(false);
-      toast.success(`Сервер «${name}» успешно подключен`);
-      await fetchNodes(false);
+      toast.success(`Сервер «${nodeName}» успешно подключен`);
+      if (res && res.id) {
+        setNodes((prev) => [...prev.filter((n) => n.id !== res.id), res]);
+      }
+      fetchNodes(false, true);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка добавления сервера');
     } finally {
@@ -131,22 +184,50 @@ export function AdminNodes() {
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingNode) return;
+    const targetId = editingNode.id;
+    const updatedName = editName.trim();
+    const updatedType = editType;
+    const updatedCountry = editCountryCode.trim().toUpperCase();
+    const updatedProvider = editProviderUrl.trim();
+    const updatedApiUrl = editApiUrl.trim();
+    const updatedApiKey = editApiKey.trim();
+    const updatedMobile = editIsMobileOptimized;
+
+    // Optimistic local state update
+    const previousNodes = [...nodes];
+    setNodes((prev) =>
+      prev.map((n) =>
+        n.id === targetId
+          ? {
+              ...n,
+              name: updatedName,
+              type: updatedType,
+              country_code: updatedCountry,
+              provider_url: updatedProvider,
+              api_url: updatedApiUrl,
+              is_mobile_optimized: updatedMobile,
+            }
+          : n
+      )
+    );
+    setEditingNode(null);
+
     try {
       setIsEditingSubmitting(true);
-      await api.updateAdminNode(editingNode.id, {
-        name: editName.trim(),
-        type: editType,
-        apiUrl: editApiUrl.trim(),
-        apiKey: editApiKey.trim() || undefined,
-        isMobileOptimized: editIsMobileOptimized,
-        countryCode: editCountryCode.trim().toUpperCase(),
-        providerUrl: editProviderUrl.trim(),
+      await api.updateAdminNode(targetId, {
+        name: updatedName,
+        type: updatedType,
+        apiUrl: updatedApiUrl,
+        apiKey: updatedApiKey || undefined,
+        isMobileOptimized: updatedMobile,
+        countryCode: updatedCountry,
+        providerUrl: updatedProvider,
       });
-      toast.success(`Параметры сервера «${editName}» успешно обновлены`);
-      setEditingNode(null);
-      await fetchNodes(false);
+      toast.success(`Параметры сервера «${updatedName}» успешно обновлены`);
+      fetchNodes(false, true);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка обновления сервера');
+      setNodes(previousNodes);
     } finally {
       setIsEditingSubmitting(false);
     }
@@ -154,14 +235,18 @@ export function AdminNodes() {
 
   const handleConfirmDelete = async () => {
     if (!nodeToDelete) return;
+    const target = nodeToDelete;
+    const previousNodes = [...nodes];
+    setNodes((prev) => prev.filter((n) => n.id !== target.id));
+    setNodeToDelete(null);
     try {
       setIsDeleting(true);
-      await api.deleteAdminNode(nodeToDelete.id);
-      toast.success(`Сервер «${nodeToDelete.name}» удален`);
-      setNodeToDelete(null);
-      await fetchNodes(false);
+      await api.deleteAdminNode(target.id);
+      toast.success(`Сервер «${target.name}» удален`);
+      fetchNodes(false, true);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка удаления ноды');
+      setNodes(previousNodes);
     } finally {
       setIsDeleting(false);
     }
@@ -174,7 +259,7 @@ export function AdminNodes() {
       const res = await api.restartNode(restartingNode.id);
       toast.success(res.message || `Служба AWG на сервере «${restartingNode.name}» успешно перезапущена`);
       setRestartingNode(null);
-      await fetchNodes(false);
+      fetchNodes(false, true);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка перезапуска службы AWG');
     } finally {
@@ -222,7 +307,7 @@ export function AdminNodes() {
       toast.success(res.message || `Конфигурация сервера «${restoringNode.name}» успешно восстановлена`);
       setRestoringNode(null);
       setRestoreData('');
-      await fetchNodes(false);
+      fetchNodes(false, true);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка восстановления из резервной копии');
     } finally {
@@ -270,7 +355,7 @@ export function AdminNodes() {
             <Server className="w-5 h-5 text-[#D9B96E]" />
             <span>Управление Slave-нодами AmneziaWG</span>
           </h3>
-          <p className="text-xs text-[#A8B4B7] mt-1 font-sans">
+          <p className="text-sm text-[#A8B4B7] mt-1 font-sans">
             Подключение и редактирование серверов AWG (Каскад M0 $\to$ S1 или автономных S2) с привязкой локации (Флаг + Код) и быстрым переходом к панели VPS.
           </p>
         </div>
@@ -279,15 +364,15 @@ export function AdminNodes() {
           <button
             onClick={() => fetchNodes(true)}
             disabled={isChecking}
-            className="flex items-center space-x-1.5 text-xs font-mono uppercase tracking-wider bg-[#102833] hover:bg-[#1C3945] text-[#A8B4B7] hover:text-[#F2F0E8] px-3.5 py-2.5 rounded-xl border border-[#1C3945] transition disabled:opacity-50"
+            className="flex items-center space-x-1.5 text-sm font-mono uppercase tracking-wider bg-[#102833] hover:bg-[#1C3945] text-[#A8B4B7] hover:text-[#F2F0E8] px-3.5 py-2.5 rounded-xl border border-[#1C3945] transition disabled:opacity-50"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin text-[#D9B96E]' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isChecking ? 'animate-spin text-[#D9B96E]' : ''}`} />
             <span>{isChecking ? 'Проверка...' : 'Health Check'}</span>
           </button>
 
           <button
             onClick={() => setShowAddForm(!showAddForm)}
-            className="flex items-center space-x-1.5 text-xs font-mono font-bold uppercase tracking-wider bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] px-4 py-2.5 rounded-xl shadow-lg shadow-[#D9B96E]/20 transition"
+            className="flex items-center space-x-1.5 text-sm font-mono font-bold uppercase tracking-wider bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] px-4 py-2.5 rounded-xl shadow-lg shadow-[#D9B96E]/20 transition"
           >
             <Plus className="w-4 h-4" />
             <span>Добавить Сервер</span>
@@ -298,10 +383,10 @@ export function AdminNodes() {
       {/* Add Form */}
       {showAddForm && (
         <form onSubmit={handleAddNode} className="bg-[#102833] border border-[#D9B96E]/40 rounded-2xl p-6 mb-6 shadow-2xl space-y-4">
-          <h4 className="font-serif text-base font-bold text-[#F2F0E8]">Параметры нового Slave API</h4>
+          <h4 className="font-serif text-lg font-bold text-[#F2F0E8]">Параметры нового Slave API</h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+              <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                 Название сервера
               </label>
               <input
@@ -315,7 +400,7 @@ export function AdminNodes() {
             </div>
 
             <div>
-              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+              <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                 Тип соединения
               </label>
               <select
@@ -329,7 +414,7 @@ export function AdminNodes() {
             </div>
 
             <div>
-              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+              <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                 Страна выхода (Флаг + 3 буквы)
               </label>
               <select
@@ -343,7 +428,7 @@ export function AdminNodes() {
                   </option>
                 ))}
               </select>
-              <span className="text-[10px] text-[#D9B96E] font-mono mt-1 block">
+              <span className="text-sm text-[#D9B96E] font-mono mt-1.5 block">
                 {type === 'cascade'
                   ? `Маршрут: 🇷🇺 RUS ➔ ${getCountryInfo(countryCode)?.flag || '🌐'} ${countryCode.toUpperCase()}`
                   : `Маршрут: ${getCountryInfo(countryCode)?.flag || '🌐'} ${countryCode.toUpperCase()}`}
@@ -351,7 +436,7 @@ export function AdminNodes() {
             </div>
 
             <div>
-              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+              <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                 API URL (Slave Endpoint)
               </label>
               <input
@@ -359,13 +444,13 @@ export function AdminNodes() {
                 placeholder="например: https://s1.vpn.test или http://127.0.0.1:8081"
                 value={apiUrl}
                 onChange={(e) => setApiUrl(e.target.value)}
-                className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono text-xs"
+                className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+              <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                 Секретный API Key (X-API-Key)
               </label>
               <input
@@ -373,13 +458,13 @@ export function AdminNodes() {
                 placeholder="Сгенерированный при запуске Slave ключ"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono text-xs"
+                className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+              <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                 Адрес VPS провайдера (Панель / Биллинг)
               </label>
               <input
@@ -387,9 +472,9 @@ export function AdminNodes() {
                 placeholder="например: https://aeza.net или https://hetzner.com"
                 value={providerUrl}
                 onChange={(e) => setProviderUrl(e.target.value)}
-                className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono text-xs placeholder-[#718187]"
+                className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono placeholder-[#718187]"
               />
-              <span className="text-[10px] text-[#718187] font-mono mt-1 block">
+              <span className="text-sm text-[#718187] font-mono mt-1.5 block">
                 Для быстрого перехода к оплате и контролю VPS
               </span>
             </div>
@@ -414,15 +499,15 @@ export function AdminNodes() {
               />
               <div className="ml-3 flex-1">
                 <div className="flex items-center space-x-2">
-                  <span className="font-serif font-bold text-xs text-[#F2F0E8]">
+                  <span className="font-serif font-bold text-sm text-[#F2F0E8]">
                     Оптимизирован для мобильных сетей (--mobile / 443 UDP)
                   </span>
-                  <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#102833] text-[#D9B96E] border border-[#D9B96E]/30">
+                  <span className="text-sm font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#102833] text-[#D9B96E] border border-[#D9B96E]/30">
                     LTE / 5G
                   </span>
                 </div>
-                <p className="text-[11px] text-[#A8B4B7] mt-1 font-sans leading-relaxed">
-                  Отмечает данный сервер как использующий порт <code className="text-[#D9B96E] font-mono text-[10px]">443/UDP</code> и мобильный пресет обфускации. Рекомендуется для обхода жестких блокировок мобильных операторов.
+                <p className="text-sm text-[#A8B4B7] mt-1 font-sans leading-relaxed">
+                  Отмечает данный сервер как использующий порт <code className="text-[#D9B96E] font-mono text-sm">443/UDP</code> и мобильный пресет обфускации. Рекомендуется для обхода жестких блокировок мобильных операторов.
                 </p>
               </div>
             </div>
@@ -432,14 +517,14 @@ export function AdminNodes() {
             <button
               type="button"
               onClick={() => setShowAddForm(false)}
-              className="px-4 py-2 text-xs font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#06141B]"
+              className="px-4 py-2 text-sm font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#06141B]"
             >
               Отмена
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-5 py-2 text-xs font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition"
+              className="px-5 py-2.5 text-sm font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition"
             >
               {submitting ? 'Сохранение...' : 'Сохранить и подключить'}
             </button>
@@ -450,7 +535,7 @@ export function AdminNodes() {
       {/* Nodes Table */}
       <div className="overflow-x-auto border border-[#1C3945] rounded-2xl bg-[#06141B]/60 shadow-xl">
         <table className="w-full text-left text-sm text-[#F2F0E8]">
-          <thead className="bg-[#102833]/90 text-[10px] font-mono uppercase tracking-widest text-[#A8B4B7] border-b border-[#1C3945]">
+          <thead className="bg-[#102833]/90 text-sm font-mono uppercase tracking-wider text-[#A8B4B7] border-b border-[#1C3945]">
             <tr>
               <th className="px-5 py-3.5">Статус / Ping</th>
               <th className="px-5 py-3.5">Маршрут / Страна</th>
@@ -469,17 +554,17 @@ export function AdminNodes() {
                   <td className="px-5 py-3.5">
                     <div className="flex items-center space-x-2">
                       <span
-                        className={`inline-flex items-center space-x-1.5 text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full ${
+                        className={`inline-flex items-center space-x-1.5 text-sm font-mono font-semibold px-2.5 py-0.5 rounded-full ${
                           node.online
                             ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
                             : 'bg-rose-950/80 text-rose-400 border border-rose-800/60'
                         }`}
                       >
-                        {node.online ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                        {node.online ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
                         <span>{node.online ? 'Online' : 'Offline'}</span>
                       </span>
                       {node.online && typeof node.latency_ms === 'number' && (
-                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-[#102833] text-emerald-300 border border-[#1C3945]">
+                        <span className="text-sm font-mono font-semibold px-2 py-0.5 rounded-md bg-[#102833] text-emerald-300 border border-[#1C3945]">
                           {node.latency_ms} ms
                         </span>
                       )}
@@ -490,7 +575,7 @@ export function AdminNodes() {
                   <td className="px-5 py-3.5">
                     <div className="flex items-center space-x-1.5">
                       <span
-                        className={`text-xs font-mono font-bold tracking-wider px-2.5 py-1 rounded-lg border flex items-center space-x-1 shadow-sm ${
+                        className={`text-sm font-mono font-bold tracking-wider px-2.5 py-1 rounded-lg border flex items-center space-x-1 shadow-sm ${
                           node.type === 'cascade'
                             ? 'bg-amber-950/80 text-amber-300 border-amber-600/40'
                             : 'bg-[#102833] text-[#6EA8C4] border-[#6EA8C4]/40'
@@ -512,13 +597,13 @@ export function AdminNodes() {
                   {/* Name & Mobile Tag */}
                   <td className="px-5 py-3.5 font-medium text-[#F2F0E8]">
                     <div className="flex items-center space-x-2">
-                      <span className="font-semibold">{node.name}</span>
+                      <span className="font-semibold text-sm">{node.name}</span>
                       {node.is_mobile_optimized && (
                         <span
-                          className="inline-flex items-center space-x-1 bg-[#102833] text-[#D9B96E] border border-[#D9B96E]/30 text-[9px] font-mono px-2 py-0.5 rounded-full font-bold"
+                          className="inline-flex items-center space-x-1 bg-[#102833] text-[#D9B96E] border border-[#D9B96E]/30 text-sm font-mono px-2 py-0.5 rounded-full font-bold"
                           title="Оптимизирован для мобильных сетей (--mobile 443/UDP)"
                         >
-                          <Smartphone className="w-2.5 h-2.5" />
+                          <Smartphone className="w-3.5 h-3.5" />
                           <span>443 LTE</span>
                         </span>
                       )}
@@ -526,43 +611,55 @@ export function AdminNodes() {
                   </td>
 
                   {/* API URL */}
-                  <td className="px-5 py-3.5 text-xs font-mono text-[#A8B4B7]">{node.api_url}</td>
+                  <td className="px-5 py-3.5 text-sm font-mono text-[#A8B4B7]">{node.api_url}</td>
 
                   {/* Provider URL Note / Quick Link */}
-                  <td className="px-5 py-3.5 text-xs font-mono">
+                  <td className="px-5 py-3.5 text-sm font-mono">
                     {node.provider_url ? (
                       <a
                         href={formatUrl(node.provider_url)}
                         target="_blank"
                         rel="noopener noreferrer"
                         title={`Открыть панель управления / биллинг VPS (${node.provider_url})`}
-                        className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-[#102833] hover:bg-[#1C3945] border border-[#1C3945] hover:border-[#D9B96E]/50 text-[#6EA8C4] hover:text-[#F0D48D] transition text-[11px]"
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-[#102833] hover:bg-[#1C3945] border border-[#1C3945] hover:border-[#D9B96E]/50 text-[#6EA8C4] hover:text-[#F0D48D] transition text-sm"
                       >
-                        <Globe className="w-3 h-3 text-[#D9B96E]" />
+                        <Globe className="w-3.5 h-3.5 text-[#D9B96E]" />
                         <span className="font-medium max-w-[120px] truncate">{getDomainFromUrl(node.provider_url)}</span>
-                        <ExternalLink className="w-3 h-3 text-[#718187]" />
+                        <ExternalLink className="w-3.5 h-3.5 text-[#718187]" />
                       </a>
                     ) : (
-                      <span className="text-[#718187] text-[11px]">—</span>
+                      <span className="text-[#718187] text-sm">—</span>
                     )}
                   </td>
 
                   {/* Added Date */}
-                  <td className="px-5 py-3.5 text-xs text-[#718187] font-mono">
+                  <td className="px-5 py-3.5 text-sm text-[#718187] font-mono">
                     {new Date(node.created_at).toLocaleDateString()}
                   </td>
 
                   {/* Actions */}
                   <td className="px-5 py-3.5 text-right">
                     <div className="flex items-center justify-end space-x-1.5">
+                      {/* Egress Switcher (Only for Cascade nodes) */}
+                      {node.type === 'cascade' && (
+                        <button
+                          onClick={() => handleOpenEgress(node)}
+                          title="Управление шлюзом выхода каскада (Egress Switcher: S1 <-> S2)"
+                          className="p-2 rounded-xl border border-[#D9B96E]/50 bg-[#102833]/80 text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition shadow-sm"
+                        >
+                          <ArrowRightLeft className="w-4 h-4" />
+                        </button>
+                      )}
+
                       {/* Edit Node */}
                       <button
                         onClick={() => handleOpenEdit(node)}
                         title="Редактировать параметры сервера (страна, название, API, провайдер)"
                         className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition"
                       >
-                        <Pencil className="w-3.5 h-3.5" />
+                        <Pencil className="w-4 h-4" />
                       </button>
+
 
                       {/* Restart Service */}
                       <button
@@ -570,7 +667,7 @@ export function AdminNodes() {
                         title="Перезапустить службу AmneziaWG"
                         className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#A8B4B7] hover:bg-[#1C3945] hover:text-[#F0D48D] transition"
                       >
-                        <RotateCcw className="w-3.5 h-3.5" />
+                        <RotateCcw className="w-4 h-4" />
                       </button>
 
                       {/* Backup */}
@@ -580,7 +677,7 @@ export function AdminNodes() {
                         title="Экспорт резервной копии (Backup)"
                         className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#6EA8C4] hover:bg-[#1C3945] hover:text-[#A8B4B7] transition"
                       >
-                        <Download className="w-3.5 h-3.5" />
+                        <Download className="w-4 h-4" />
                       </button>
 
                       {/* Restore */}
@@ -589,7 +686,7 @@ export function AdminNodes() {
                         title="Восстановить из копии (Restore)"
                         className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#A8B4B7] hover:bg-[#1C3945] hover:text-[#F2F0E8] transition"
                       >
-                        <Upload className="w-3.5 h-3.5" />
+                        <Upload className="w-4 h-4" />
                       </button>
 
                       {/* Delete */}
@@ -598,7 +695,7 @@ export function AdminNodes() {
                         title="Удалить ноду"
                         className="p-2 rounded-xl border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </td>
@@ -607,7 +704,7 @@ export function AdminNodes() {
             })}
             {(nodes || []).length === 0 && (
               <tr>
-                <td colSpan={7} className="text-center py-10 text-[#718187] text-xs font-mono uppercase tracking-wider">
+                <td colSpan={7} className="text-center py-10 text-[#718187] text-sm font-mono uppercase tracking-wider">
                   Нет подключенных Slave-серверов.
                 </td>
               </tr>
@@ -642,7 +739,7 @@ export function AdminNodes() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+                  <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                     Название сервера
                   </label>
                   <input
@@ -655,7 +752,7 @@ export function AdminNodes() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+                  <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                     Тип соединения
                   </label>
                   <select
@@ -669,7 +766,7 @@ export function AdminNodes() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+                  <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                     Страна выхода (Флаг + 3 буквы)
                   </label>
                   <select
@@ -683,7 +780,7 @@ export function AdminNodes() {
                       </option>
                     ))}
                   </select>
-                  <span className="text-[10px] text-[#D9B96E] font-mono mt-1 block">
+                  <span className="text-sm text-[#D9B96E] font-mono mt-1.5 block">
                     {editType === 'cascade'
                       ? `Маршрут: 🇷🇺 RUS ➔ ${getCountryInfo(editCountryCode)?.flag || '🌐'} ${editCountryCode.toUpperCase()}`
                       : `Маршрут: ${getCountryInfo(editCountryCode)?.flag || '🌐'} ${editCountryCode.toUpperCase()}`}
@@ -691,20 +788,20 @@ export function AdminNodes() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+                  <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                     API URL (Slave Endpoint)
                   </label>
                   <input
                     type="text"
                     value={editApiUrl}
                     onChange={(e) => setEditApiUrl(e.target.value)}
-                    className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono text-xs"
+                    className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+                  <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                     Новый API Key (X-API-Key)
                   </label>
                   <input
@@ -712,12 +809,12 @@ export function AdminNodes() {
                     placeholder="Оставьте пустым, чтобы не менять"
                     value={editApiKey}
                     onChange={(e) => setEditApiKey(e.target.value)}
-                    className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono text-xs placeholder-[#718187]"
+                    className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono placeholder-[#718187]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+                  <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                     Адрес VPS провайдера (Панель / Биллинг)
                   </label>
                   <input
@@ -725,7 +822,7 @@ export function AdminNodes() {
                     placeholder="например: https://aeza.net или https://hetzner.com"
                     value={editProviderUrl}
                     onChange={(e) => setEditProviderUrl(e.target.value)}
-                    className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono text-xs placeholder-[#718187]"
+                    className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono placeholder-[#718187]"
                   />
                 </div>
               </div>
@@ -749,15 +846,15 @@ export function AdminNodes() {
                   />
                   <div className="ml-3 flex-1">
                     <div className="flex items-center space-x-2">
-                      <span className="font-serif font-bold text-xs text-[#F2F0E8]">
+                      <span className="font-serif font-bold text-sm text-[#F2F0E8]">
                         Оптимизирован для мобильных сетей (--mobile / 443 UDP)
                       </span>
-                      <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#102833] text-[#D9B96E] border border-[#D9B96E]/30">
+                      <span className="text-sm font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#102833] text-[#D9B96E] border border-[#D9B96E]/30">
                         LTE / 5G
                       </span>
                     </div>
-                    <p className="text-[11px] text-[#A8B4B7] mt-1 font-sans leading-relaxed">
-                      Отмечает данный сервер как использующий порт <code className="text-[#D9B96E] font-mono text-[10px]">443/UDP</code>.
+                    <p className="text-sm text-[#A8B4B7] mt-1 font-sans leading-relaxed">
+                      Отмечает данный сервер как использующий порт <code className="text-[#D9B96E] font-mono text-sm">443/UDP</code>.
                     </p>
                   </div>
                 </div>
@@ -767,14 +864,14 @@ export function AdminNodes() {
                 <button
                   type="button"
                   onClick={() => setEditingNode(null)}
-                  className="px-4 py-2 text-xs font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#06141B]"
+                  className="px-4 py-2 text-sm font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#06141B]"
                 >
                   Отмена
                 </button>
                 <button
                   type="submit"
                   disabled={isEditingSubmitting}
-                  className="px-5 py-2 text-xs font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition disabled:opacity-50"
+                  className="px-5 py-2.5 text-sm font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition disabled:opacity-50"
                 >
                   {isEditingSubmitting ? 'Сохранение...' : 'Сохранить изменения'}
                 </button>
@@ -840,19 +937,19 @@ export function AdminNodes() {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-xs text-[#A8B4B7]">
+              <p className="text-sm text-[#A8B4B7]">
                 Архив конфигураций клиентов и ключей с ноды{' '}
                 <strong className="text-[#F2F0E8]">«{backupNodeState.node.name}»</strong> от{' '}
                 <span className="font-mono text-emerald-400">{new Date(backupNodeState.timestamp).toLocaleString()}</span>.
               </p>
-              <div className="bg-[#06141B] p-3 rounded-xl border border-[#1C3945] font-mono text-[11px] text-[#A8B4B7] max-h-36 overflow-y-auto break-all select-all">
+              <div className="bg-[#06141B] p-3 rounded-xl border border-[#1C3945] font-mono text-sm text-[#A8B4B7] max-h-36 overflow-y-auto break-all select-all">
                 {backupNodeState.data}
               </div>
               <div className="flex justify-end space-x-3 pt-2">
                 <button
                   type="button"
                   onClick={handleDownloadBackupFile}
-                  className="flex items-center space-x-2 px-5 py-2.5 text-xs font-mono font-bold uppercase bg-gradient-to-r from-[#6EA8C4] to-[#407B98] text-[#06141B] rounded-xl shadow-lg transition"
+                  className="flex items-center space-x-2 px-5 py-2.5 text-sm font-mono font-bold uppercase bg-gradient-to-r from-[#6EA8C4] to-[#407B98] text-[#06141B] rounded-xl shadow-lg transition"
                 >
                   <Download className="w-4 h-4" />
                   <span>Скачать файл .bak</span>
@@ -877,23 +974,23 @@ export function AdminNodes() {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-xs text-[#A8B4B7]">
+              <p className="text-sm text-[#A8B4B7]">
                 Загрузите или вставьте архив резервной копии для развертывания на ноде{' '}
                 <strong className="text-[#F2F0E8]">«{restoringNode.name}»</strong>.
               </p>
               <div>
-                <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+                <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                   Загрузить из файла (.bak)
                 </label>
                 <input
                   type="file"
                   accept=".bak,.txt,.json"
                   onChange={handleRestoreFileUpload}
-                  className="block w-full text-xs text-[#A8B4B7] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-mono file:bg-[#102833] file:text-[#D9B96E] hover:file:bg-[#1C3945]"
+                  className="block w-full text-sm text-[#A8B4B7] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-mono file:bg-[#102833] file:text-[#D9B96E] hover:file:bg-[#1C3945]"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
+                <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-1.5">
                   Или вставьте данные архива:
                 </label>
                 <textarea
@@ -901,7 +998,7 @@ export function AdminNodes() {
                   value={restoreData}
                   onChange={(e) => setRestoreData(e.target.value)}
                   placeholder="Вставьте base64 строку резервной копии..."
-                  className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl p-3 text-xs text-[#F2F0E8] focus:outline-none font-mono"
+                  className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl p-3 text-sm text-[#F2F0E8] focus:outline-none font-mono"
                   required
                 />
               </div>
@@ -910,16 +1007,140 @@ export function AdminNodes() {
                   type="button"
                   onClick={() => setRestoringNode(null)}
                   disabled={isRestoring}
-                  className="px-4 py-2 text-xs font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#102833]"
+                  className="px-4 py-2 text-sm font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#102833]"
                 >
                   Отмена
                 </button>
                 <button
                   type="submit"
                   disabled={isRestoring || !restoreData.trim()}
-                  className="px-5 py-2 text-xs font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition disabled:opacity-50"
+                  className="px-5 py-2.5 text-sm font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition disabled:opacity-50"
                 >
                   {isRestoring ? 'Восстановление...' : 'Восстановить конфигурацию'}
+                </button>
+              </div>
+            </form>
+          </div>,
+          document.body
+        )}
+
+      {/* Egress Switcher Modal */}
+      {egressNode &&
+        createPortal(
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-[#06141B]/85 backdrop-blur-md overflow-y-auto">
+            <form onSubmit={handleSwitchEgressSubmit} className="bg-[#0A1D26] border border-[#D9B96E]/40 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-4 my-auto">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3 text-[#D9B96E]">
+                  <ArrowRightLeft className="w-6 h-6" />
+                  <h3 className="font-serif text-lg font-bold text-[#F2F0E8]">Управление выходом каскада</h3>
+                </div>
+                <button type="button" onClick={() => setEgressNode(null)} className="text-[#A8B4B7] hover:text-[#F2F0E8] p-1 rounded-lg hover:bg-[#102833]">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-sm text-[#A8B4B7] font-sans">
+                Узел <strong className="text-[#F2F0E8]">«{egressNode.name}»</strong>. Переключение шлюза зарубежного выхода на лету без изменения клиентских ключей.
+              </p>
+
+              {loadingEgress ? (
+                <div className="py-8 flex justify-center">
+                  <Loader size="section" text="Опрос статуса маршрутизации узла..." />
+                </div>
+              ) : egressStatus ? (
+                <div className="space-y-4">
+                  {/* Current Status Box */}
+                  <div className="p-4 rounded-2xl bg-[#06141B] border border-[#1C3945]">
+                    <div className="text-xs font-mono font-bold uppercase tracking-wider text-[#A8B4B7] mb-2">
+                      Текущий активный шлюз (Таблица 100):
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="font-mono font-bold text-base text-[#F2F0E8]">
+                          {egressStatus.active_interface === 'awg1' ? 'awg1 — Выход через S1 (Германия)' : 'awg3 — Выход через S2 (Нидерланды)'}
+                        </span>
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold uppercase bg-emerald-950/80 text-emerald-400 border border-emerald-800/60">
+                        Active Egress
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Switch Target Options */}
+                  <div>
+                    <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-2">
+                      Выберите целевой шлюз выхода:
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setTargetEgressIf('awg1')}
+                        className={`p-3.5 rounded-2xl border text-left transition flex flex-col justify-between space-y-1 ${
+                          targetEgressIf === 'awg1'
+                            ? 'bg-[#102833] border-[#D9B96E] text-[#F2F0E8] shadow-md shadow-[#D9B96E]/10 ring-1 ring-[#D9B96E]'
+                            : 'bg-[#06141B] border-[#1C3945] text-[#A8B4B7] hover:border-[#1C3945]/80'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-bold text-sm">🇩🇪 Шлюз S1</span>
+                          {egressStatus.active_interface === 'awg1' && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/50">
+                              Текущий
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-[#A8B4B7] font-mono">dev awg1 (Германия)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTargetEgressIf('awg3')}
+                        className={`p-3.5 rounded-2xl border text-left transition flex flex-col justify-between space-y-1 ${
+                          targetEgressIf === 'awg3'
+                            ? 'bg-[#102833] border-[#D9B96E] text-[#F2F0E8] shadow-md shadow-[#D9B96E]/10 ring-1 ring-[#D9B96E]'
+                            : 'bg-[#06141B] border-[#1C3945] text-[#A8B4B7] hover:border-[#1C3945]/80'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-bold text-sm">🇳🇱 Шлюз S2</span>
+                          {egressStatus.active_interface === 'awg3' && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/50">
+                              Текущий
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-[#A8B4B7] font-mono">dev awg3 (Нидерланды)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[#102833]/60 border border-[#1C3945] text-xs text-[#A8B4B7] font-sans leading-relaxed">
+                    ℹ️ Маршрут будет мгновенно заменен в таблице 100 ядра Linux. Подключенные клиенты на смартфонах и ПК продолжат работать без необходимости перевыпускать конфигурации.
+                  </div>
+                </div>
+              ) : (
+                <div className="py-4 text-sm text-rose-400 font-mono">
+                  Не удалось получить статус Egress с узла.
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEgressNode(null)}
+                  disabled={switchingEgress}
+                  className="px-4 py-2 text-sm font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#102833]"
+                >
+                  Закрыть
+                </button>
+                <button
+                  type="submit"
+                  disabled={switchingEgress || loadingEgress || !egressStatus || targetEgressIf === egressStatus?.active_interface}
+                  className="px-5 py-2.5 text-sm font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition disabled:opacity-50 flex items-center space-x-1.5"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  <span>{switchingEgress ? 'Переключение...' : `Переключить на ${targetEgressIf}`}</span>
                 </button>
               </div>
             </form>
@@ -929,3 +1150,4 @@ export function AdminNodes() {
     </div>
   );
 }
+

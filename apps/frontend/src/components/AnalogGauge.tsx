@@ -132,10 +132,10 @@ export const AnalogGauge: React.FC<AnalogGaugeProps> = ({
 
       {/* Header */}
       <div className="w-full text-center mb-1">
-        <h4 className="font-serif font-bold text-[#F2F0E8] text-sm group-hover:text-gold-gradient transition">
+        <h4 className="font-serif font-bold text-[#F2F0E8] text-base group-hover:text-gold-gradient transition">
           {title}
         </h4>
-        {subtitle && <p className="text-[11px] text-[#A8B4B7] font-sans mt-0.5">{subtitle}</p>}
+        {subtitle && <p className="text-sm text-[#A8B4B7] font-sans mt-0.5">{subtitle}</p>}
       </div>
 
       {/* SVG Analog Dial */}
@@ -203,7 +203,7 @@ export const AnalogGauge: React.FC<AnalogGaugeProps> = ({
                   x={t.textP.x}
                   y={t.textP.y + 3}
                   textAnchor="middle"
-                  className="text-[8px] font-mono fill-[#718187]"
+                  className="text-[10px] font-mono fill-[#A8B4B7]"
                 >
                   {t.tickVal}
                 </text>
@@ -216,15 +216,15 @@ export const AnalogGauge: React.FC<AnalogGaugeProps> = ({
             x={cx}
             y={cy + 42}
             textAnchor="middle"
-            className="font-mono font-bold text-lg fill-[#F2F0E8] tracking-tight"
+            className="font-mono font-bold text-xl fill-[#F2F0E8] tracking-tight"
           >
             {displayValue !== undefined ? displayValue : clampedValue}
           </text>
           <text
             x={cx}
-            y={cy + 55}
+            y={cy + 56}
             textAnchor="middle"
-            className="font-mono text-[9px] uppercase tracking-wider fill-[#D9B96E]"
+            className="font-mono text-[11px] uppercase tracking-wider fill-[#D9B96E] font-semibold"
           >
             {unit}
           </text>
@@ -260,7 +260,7 @@ export const AnalogGauge: React.FC<AnalogGaugeProps> = ({
       {statusText && (
         <div className="mt-2 text-center">
           <span
-            className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${
+            className={`text-sm font-mono font-semibold uppercase tracking-wider px-3 py-1 rounded-full border ${
               statusType === 'success'
                 ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600/40'
                 : statusType === 'warning'

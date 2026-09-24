@@ -61,3 +61,16 @@ type GenericSuccessResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
 }
+
+// SwitchEgressRequest payload for switching cascade egress interface.
+type SwitchEgressRequest struct {
+	Interface string `json:"interface"` // e.g. "awg1" or "awg3"
+}
+
+// EgressStatusResponse represents the active and available egress routes for a cascade node.
+type EgressStatusResponse struct {
+	ActiveInterface     string   `json:"active_interface"`
+	AvailableInterfaces []string `json:"available_interfaces"`
+	Details             string   `json:"details,omitempty"`
+}
+

@@ -178,3 +178,63 @@ func TestStatsEndpoint(t *testing.T) {
 		t.Fatalf("expected 200 OK, got %d", rec.Code)
 	}
 }
+
+func TestCascadeEgressEndpoints(t *testing.T) {
+	srv, apiKey := setupTestSlave()
+
+	// 1. Get initial egress status (default: awg1)
+	req := httptest.NewRequest("GET", "/api/v1/cascade/egress", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var status models.EgressStatusResponse
+	if err := json.NewDecoder(rec.Body).Decode(&status); err != nil {
+		t.Fatalf("failed to decode egress status: %v", err)
+	}
+	if status.ActiveInterface != "awg1" {
+		t.Fatalf("expected active interface 'awg1', got '%s'", status.ActiveInterface)
+	}
+
+	// 2. Switch to awg3
+	switchBody, _ := json.Marshal(models.SwitchEgressRequest{Interface: "awg3"})
+	req = httptest.NewRequest("POST", "/api/v1/cascade/egress", bytes.NewReader(switchBody))
+	req.Header.Set("X-API-Key", apiKey)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on switch, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 3. Verify status updated to awg3
+	req = httptest.NewRequest("GET", "/api/v1/cascade/egress", nil)
+	req.Header.Set("X-API-Key", apiKey)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&status); err != nil {
+		t.Fatalf("failed to decode egress status: %v", err)
+	}
+	if status.ActiveInterface != "awg3" {
+		t.Fatalf("expected active interface 'awg3' after switch, got '%s'", status.ActiveInterface)
+	}
+
+	// 4. Test invalid interface
+	badBody, _ := json.Marshal(models.SwitchEgressRequest{Interface: "eth0"})
+	req = httptest.NewRequest("POST", "/api/v1/cascade/egress", bytes.NewReader(badBody))
+	req.Header.Set("X-API-Key", apiKey)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 error for invalid interface eth0, got %d", rec.Code)
+	}
+}
+

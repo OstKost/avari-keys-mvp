@@ -146,4 +146,11 @@ export interface DashboardStats {
   generated_at: string;
 }
 
+export interface EgressStatusResponse {
+  active_interface: string;
+  available_interfaces: string[];
+  details?: string;
+}
+
+
 

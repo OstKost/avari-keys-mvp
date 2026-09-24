@@ -9,7 +9,9 @@ import {
   AuditLogFilterParams,
   CleanupLogsResponse,
   DashboardStats,
+  EgressStatusResponse,
 } from '../types';
+
 import { mockApi } from './mockClient';
 
 const API_BASE = '/api/v1';
@@ -280,6 +282,22 @@ const realApi = {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ backup_data: backupData }),
+    });
+    return handleResponse<{ success: boolean; message: string }>(res);
+  },
+
+  async getNodeEgress(id: number): Promise<EgressStatusResponse> {
+    const res = await fetch(`${API_BASE}/admin/nodes/${id}/egress`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<EgressStatusResponse>(res);
+  },
+
+  async switchNodeEgress(id: number, targetInterface: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/admin/nodes/${id}/egress`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ interface: targetInterface }),
     });
     return handleResponse<{ success: boolean; message: string }>(res);
   },
