@@ -13,6 +13,7 @@ import {
   BillingRecord,
   BillingStatus,
   AdminBillingSummary,
+  BillingRequisites,
 } from '../types';
 
 // In-memory mock storage for standalone FE development
@@ -636,12 +637,16 @@ PersistentKeepalive = 25`;
 
     if (params?.search) {
       const q = params.search.toLowerCase().trim();
-      filtered = filtered.filter(
-        (k) =>
+      filtered = filtered.filter((k) => {
+        const u = mockUsers.find((user) => user.id === k.user_id);
+        const userName = u ? u.username.toLowerCase() : '';
+        return (
           k.device_name.toLowerCase().includes(q) ||
           k.client_name.toLowerCase().includes(q) ||
-          (k.node_name && k.node_name.toLowerCase().includes(q))
-      );
+          (k.node_name && k.node_name.toLowerCase().includes(q)) ||
+          userName.includes(q)
+        );
+      });
     }
 
     const page = params?.page && params.page > 0 ? params.page : 1;
@@ -650,21 +655,25 @@ PersistentKeepalive = 25`;
     const totalPages = Math.max(1, Math.ceil(totalCount / limit));
 
     const startIndex = (page - 1) * limit;
-    const paged = filtered.slice(startIndex, startIndex + limit).map((k) => ({
-      id: k.id,
-      user_id: k.user_id,
-      node_id: k.node_id,
-      client_name: k.client_name,
-      device_name: k.device_name,
-      node_name: k.node_name,
-      node_type: k.node_type,
-      last_handshake: k.last_handshake || '5 минут назад',
-      total_traffic_bytes: k.total_traffic_bytes || 524288000,
-      month_traffic_bytes: k.month_traffic_bytes || 524288000,
-      total_traffic_formatted: k.total_traffic_formatted || '500.00 MB',
-      month_traffic_formatted: k.month_traffic_formatted || '500.00 MB',
-      created_at: k.created_at,
-    }));
+    const paged = filtered.slice(startIndex, startIndex + limit).map((k) => {
+      const u = mockUsers.find((user) => user.id === k.user_id);
+      return {
+        id: k.id,
+        user_id: k.user_id,
+        username: u ? u.username : 'User',
+        node_id: k.node_id,
+        client_name: k.client_name,
+        device_name: k.device_name,
+        node_name: k.node_name,
+        node_type: k.node_type,
+        last_handshake: k.last_handshake || '5 минут назад',
+        total_traffic_bytes: k.total_traffic_bytes || 524288000,
+        month_traffic_bytes: k.month_traffic_bytes || 524288000,
+        total_traffic_formatted: k.total_traffic_formatted || '500.00 MB',
+        month_traffic_formatted: k.month_traffic_formatted || '500.00 MB',
+        created_at: k.created_at,
+      };
+    });
 
     return {
       keys: paged,
@@ -961,9 +970,22 @@ PersistentKeepalive = 25`;
       records: [...mockBillingRecords],
     };
   },
+
+  async getBillingRequisites(): Promise<BillingRequisites> {
+    return { ...mockRequisites };
+  },
+
+  async updateBillingRequisites(req: BillingRequisites): Promise<BillingRequisites> {
+    mockRequisites = { ...req };
+    return { ...mockRequisites };
+  },
 };
 
 // Mock state helpers
+let mockRequisites: BillingRequisites = {
+  sbp_phone: '+7 (999) 000-00-00',
+  sbp_bank: 'Т-Банк / Сбербанк',
+};
 const mockBillingRecords: BillingRecord[] = [
   {
     id: 1,

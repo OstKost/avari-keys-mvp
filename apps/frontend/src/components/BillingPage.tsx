@@ -12,11 +12,14 @@ import {
   Check,
   RefreshCw,
   Users,
+  Pencil,
+  Save,
 } from 'lucide-react';
-import { User, BillingStatus, AdminBillingSummary } from '../types';
+import { User, BillingStatus, AdminBillingSummary, BillingRequisites } from '../types';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { Loader } from './Loader';
+import { Tooltip } from './Tooltip';
 
 interface BillingPageProps {
   currentUser: User;
@@ -36,19 +39,35 @@ export function BillingPage({ currentUser }: BillingPageProps) {
   const [payNote, setPayNote] = useState<string>('');
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  // Requisites state
+  const [requisites, setRequisites] = useState<BillingRequisites>({
+    sbp_phone: '+7 (999) 000-00-00',
+    sbp_bank: 'Т-Банк / Сбербанк',
+  });
+  const [isEditingRequisites, setIsEditingRequisites] = useState(false);
+  const [editRequisitesForm, setEditRequisitesForm] = useState<BillingRequisites>({
+    sbp_phone: '',
+    sbp_bank: '',
+  });
+  const [savingRequisites, setSavingRequisites] = useState(false);
+
   // Admin filter
   const [searchFilter, setSearchFilter] = useState('');
 
   const loadData = async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const [status, adminData] = await Promise.all([
+      const [status, adminData, reqsData] = await Promise.all([
         api.getBillingStatus(),
         currentUser.role === 'admin' ? api.getAdminBilling() : Promise.resolve(null),
+        api.getBillingRequisites().catch(() => null),
       ]);
       setBillingStatus(status);
       if (adminData) {
         setAdminSummary(adminData);
+      }
+      if (reqsData) {
+        setRequisites(reqsData);
       }
     } catch (err: any) {
       toast.error(err.message || 'Ошибка загрузки данных биллинга');
@@ -60,6 +79,30 @@ export function BillingPage({ currentUser }: BillingPageProps) {
   useEffect(() => {
     loadData();
   }, [currentUser]);
+
+  const handleStartEditRequisites = () => {
+    setEditRequisitesForm({ ...requisites });
+    setIsEditingRequisites(true);
+  };
+
+  const handleCancelEditRequisites = () => {
+    setIsEditingRequisites(false);
+  };
+
+  const handleSaveRequisites = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSavingRequisites(true);
+      const updated = await api.updateBillingRequisites(editRequisitesForm);
+      setRequisites(updated);
+      setIsEditingRequisites(false);
+      toast.success('Реквизиты успешно сохранены!');
+    } catch (err: any) {
+      toast.error(err.message || 'Ошибка сохранения реквизитов');
+    } finally {
+      setSavingRequisites(false);
+    }
+  };
 
   const handleCopy = (text: string, fieldName: string) => {
     navigator.clipboard.writeText(text);
@@ -172,13 +215,15 @@ export function BillingPage({ currentUser }: BillingPageProps) {
             </div>
           )}
 
-          <button
-            onClick={() => loadData(false)}
-            title="Обновить"
-            className="p-2.5 rounded-xl bg-[#0D222C] border border-[#1C3945] hover:border-[#D9B96E]/40 hover:bg-[#102833] text-[#A8B4B7] hover:text-[#F2F0E8] transition"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          <Tooltip content="Обновить данные">
+            <button
+              onClick={() => loadData(false)}
+              aria-label="Обновить"
+              className="p-2.5 rounded-xl bg-[#0D222C] border border-[#1C3945] hover:border-[#D9B96E]/40 hover:bg-[#102833] text-[#A8B4B7] hover:text-[#F2F0E8] transition"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -293,72 +338,130 @@ export function BillingPage({ currentUser }: BillingPageProps) {
 
           {/* Requisites Block */}
           <div className="bg-[#0A1D26]/80 border border-[#1C3945] rounded-3xl p-6 sm:p-8 backdrop-blur-md">
-            <div className="flex items-center space-x-3 mb-6">
-              <div className="p-2.5 rounded-2xl bg-[#102833] border border-[#1C3945] text-[#D9B96E]">
-                <Wallet className="w-5 h-5" />
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-2xl bg-[#102833] border border-[#1C3945] text-[#D9B96E]">
+                  <Wallet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-[#F2F0E8]">
+                    Реквизиты для перевода взносов
+                  </h3>
+                  <p className="text-xs text-[#A8B4B7] font-mono">
+                    Используйте удобный способ перевода, затем нажмите «Оплачено»
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-serif text-lg font-bold text-[#F2F0E8]">
-                  Реквизиты для перевода взносов
-                </h3>
-                <p className="text-xs text-[#A8B4B7] font-mono">
-                  Используйте удобный способ перевода, затем нажмите «Оплачено»
-                </p>
-              </div>
+
+              {currentUser.role === 'admin' && !isEditingRequisites && (
+                <Tooltip content="Редактировать реквизиты">
+                  <button
+                    onClick={handleStartEditRequisites}
+                    aria-label="Редактировать реквизиты"
+                    className="p-2 rounded-xl border border-[#1C3945] bg-[#102833] text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition shadow-sm"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                </Tooltip>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="bg-[#06141B] border border-[#1C3945] rounded-2xl p-4 flex flex-col justify-between">
-                <div>
-                  <span className="text-xs font-mono uppercase text-[#A8B4B7]">СБП / Карта РФ</span>
-                  <div className="font-mono text-sm font-bold text-[#F2F0E8] mt-1 select-all">
-                    +7 (999) 000-00-00
+            {isEditingRequisites ? (
+              <form onSubmit={handleSaveRequisites} className="space-y-4">
+                <div className="max-w-xl bg-[#06141B] border border-[#D9B96E]/40 rounded-2xl p-5 space-y-4 shadow-lg">
+                  <div className="text-xs font-mono uppercase text-[#D9B96E] font-bold flex items-center space-x-1.5">
+                    <span>СБП / Карта РФ</span>
                   </div>
-                  <div className="text-xs font-mono text-[#D9B96E] mt-0.5">Т-Банк / Сбербанк</div>
-                </div>
-                <button
-                  onClick={() => handleCopy('+79990000000', 'sbp')}
-                  className="mt-3 self-start flex items-center space-x-1 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition"
-                >
-                  {copiedField === 'sbp' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedField === 'sbp' ? 'Скопировано' : 'Скопировать номер'}</span>
-                </button>
-              </div>
+                  <div>
+                    <label className="block text-xs font-mono text-[#A8B4B7] mb-1">
+                      Номер телефона или карты
+                    </label>
+                    <input
+                      type="text"
+                      value={editRequisitesForm.sbp_phone}
+                      onChange={(e) =>
+                        setEditRequisitesForm({ ...editRequisitesForm, sbp_phone: e.target.value })
+                      }
+                      placeholder="+7 (999) 000-00-00"
+                      className="w-full bg-[#0A1D26] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3 py-2 text-sm text-[#F2F0E8] font-mono focus:outline-none transition"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-mono text-[#A8B4B7] mb-1">
+                      Банк / Получатель
+                    </label>
+                    <input
+                      type="text"
+                      value={editRequisitesForm.sbp_bank}
+                      onChange={(e) =>
+                        setEditRequisitesForm({ ...editRequisitesForm, sbp_bank: e.target.value })
+                      }
+                      placeholder="Т-Банк / Сбербанк"
+                      className="w-full bg-[#0A1D26] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3 py-2 text-sm text-[#F2F0E8] font-mono focus:outline-none transition"
+                      required
+                    />
+                  </div>
 
-              <div className="bg-[#06141B] border border-[#1C3945] rounded-2xl p-4 flex flex-col justify-between">
-                <div>
-                  <span className="text-xs font-mono uppercase text-[#A8B4B7]">USDT (TRC-20)</span>
-                  <div className="font-mono text-xs font-bold text-[#F2F0E8] mt-1 truncate select-all">
-                    TYDzsXDvjZkE5dGzXy9zQ9V69z8K7sBqLa
+                  <div className="flex items-center justify-end space-x-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleCancelEditRequisites}
+                      disabled={savingRequisites}
+                      className="px-4 py-2 rounded-xl border border-[#1C3945] text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] hover:bg-[#102833] transition"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={savingRequisites}
+                      className="flex items-center space-x-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold text-xs font-mono uppercase tracking-wider shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{savingRequisites ? 'Сохранение...' : 'Сохранить реквизиты'}</span>
+                    </button>
                   </div>
-                  <div className="text-xs font-mono text-[#D9B96E] mt-0.5">Сеть TRON</div>
                 </div>
-                <button
-                  onClick={() => handleCopy('TYDzsXDvjZkE5dGzXy9zQ9V69z8K7sBqLa', 'usdt')}
-                  className="mt-3 self-start flex items-center space-x-1 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition"
-                >
-                  {copiedField === 'usdt' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedField === 'usdt' ? 'Скопировано' : 'Скопировать кошелек'}</span>
-                </button>
-              </div>
+              </form>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* SBP Card */}
+                <div className="bg-[#06141B] border border-[#1C3945] rounded-2xl p-4 flex flex-col justify-between">
+                  <div>
+                    <span className="text-xs font-mono uppercase text-[#A8B4B7]">СБП / Карта РФ</span>
+                    <div className="font-mono text-sm font-bold text-[#F2F0E8] mt-1 select-all">
+                      {requisites.sbp_phone}
+                    </div>
+                    <div className="text-xs font-mono text-[#D9B96E] mt-0.5">{requisites.sbp_bank}</div>
+                  </div>
+                  <button
+                    onClick={() => handleCopy(requisites.sbp_phone, 'sbp')}
+                    className="mt-3 self-start flex items-center space-x-1 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition"
+                  >
+                    {copiedField === 'sbp' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedField === 'sbp' ? 'Скопировано' : 'Скопировать номер'}</span>
+                  </button>
+                </div>
 
-              <div className="bg-[#06141B] border border-[#1C3945] rounded-2xl p-4 flex flex-col justify-between">
-                <div>
-                  <span className="text-xs font-mono uppercase text-[#A8B4B7]">Назначение перевода</span>
-                  <div className="font-mono text-sm font-bold text-[#F2F0E8] mt-1">
-                    Взнос @{currentUser.username}
+                {/* Note Card */}
+                <div className="bg-[#06141B] border border-[#1C3945] rounded-2xl p-4 flex flex-col justify-between">
+                  <div>
+                    <span className="text-xs font-mono uppercase text-[#A8B4B7]">Назначение перевода</span>
+                    <div className="font-mono text-sm font-bold text-[#F2F0E8] mt-1">
+                      Взнос @{currentUser.username}
+                    </div>
+                    <div className="text-xs font-mono text-[#A8B4B7] mt-0.5">Указывайте ник в комментарии</div>
                   </div>
-                  <div className="text-xs font-mono text-[#A8B4B7] mt-0.5">Указывайте ник в комментарии</div>
+                  <button
+                    onClick={() => handleCopy(`Взнос @${currentUser.username}`, 'note')}
+                    className="mt-3 self-start flex items-center space-x-1 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition"
+                  >
+                    {copiedField === 'note' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedField === 'note' ? 'Скопировано' : 'Скопировать текст'}</span>
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleCopy(`Взнос @${currentUser.username}`, 'note')}
-                  className="mt-3 self-start flex items-center space-x-1 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition"
-                >
-                  {copiedField === 'note' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedField === 'note' ? 'Скопировано' : 'Скопировать текст'}</span>
-                </button>
               </div>
-            </div>
+            )}
           </div>
 
           {/* User History Table */}

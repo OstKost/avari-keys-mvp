@@ -16,7 +16,10 @@ import { Loader } from './components/Loader';
 import { UserProfile } from './components/UserProfile';
 import { BillingPage } from './components/BillingPage';
 import { BillingReminderModal } from './components/BillingReminderModal';
+import { Tooltip } from './components/Tooltip';
 import { formatNodeRouting } from './utils/country';
+import { FloatingMascot, MascotFaqModal, MascotAvatar } from './components/MascotAssistant';
+import { OnboardingTour } from './components/OnboardingTour';
 
 export default function App() {
   const { toast } = useToast();
@@ -39,6 +42,11 @@ export default function App() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [keyToDelete, setKeyToDelete] = useState<ClientConfigSummary | null>(null);
   const [deletingKey, setDeletingKey] = useState(false);
+
+  // Mascot Assistant & Onboarding State
+  const [showGlobalFaq, setShowGlobalFaq] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(1);
 
   // Check existing session
   useEffect(() => {
@@ -79,12 +87,40 @@ export default function App() {
       if (!silent) setKeysLoading(true);
       setError(null);
       const [keysData, nodesData] = await Promise.all([api.getKeys(), api.getNodes()]);
-      setKeys(Array.isArray(keysData) ? keysData : []);
+      const safeKeys = Array.isArray(keysData) ? keysData : [];
+      setKeys(safeKeys);
       setNodes(Array.isArray(nodesData) ? nodesData : []);
+
+      // Auto-trigger onboarding for users with no keys
+      if (safeKeys.length === 0 && !silent) {
+        const completed = localStorage.getItem('avari_onboarding_completed') === 'true';
+        if (!completed) {
+          setShowOnboarding(true);
+          setOnboardingStep(1);
+        }
+      }
     } catch (err: any) {
       setError(err.message || 'Ошибка загрузки данных');
     } finally {
       if (!silent) setKeysLoading(false);
+    }
+  };
+
+  const handleStartOnboarding = () => {
+    setActiveTab('keys');
+    setShowOnboarding(true);
+    setOnboardingStep(1);
+  };
+
+  const handleCompleteOnboarding = () => {
+    setShowOnboarding(false);
+    localStorage.setItem('avari_onboarding_completed', 'true');
+  };
+
+  const handleOpenCreateModal = () => {
+    setShowCreateModal(true);
+    if (showOnboarding) {
+      setOnboardingStep(2);
     }
   };
 
@@ -105,6 +141,9 @@ export default function App() {
     try {
       const newKey = await api.createKey(nodeId, deviceName, psk);
       setViewingKey(newKey);
+      if (showOnboarding) {
+        setOnboardingStep(4);
+      }
       toast.success(`Ключ «${deviceName}» успешно создан`);
       const targetNode = nodes.find((n) => n.id === nodeId);
       const newSummary: ClientConfigSummary = {
@@ -220,13 +259,15 @@ export default function App() {
               </div>
             </button>
 
-            <button
-              onClick={handleLogout}
-              title="Выйти"
-              className="text-[#A8B4B7] hover:text-[#F2F0E8] p-2.5 rounded-xl bg-[#0D222C] border border-[#1C3945] hover:border-[#D9B96E]/40 hover:bg-[#102833] transition shadow-sm"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            <Tooltip content="Выйти из системы">
+              <button
+                onClick={handleLogout}
+                aria-label="Выйти"
+                className="text-[#A8B4B7] hover:text-[#F2F0E8] p-2.5 rounded-xl bg-[#0D222C] border border-[#1C3945] hover:border-[#D9B96E]/40 hover:bg-[#102833] transition shadow-sm"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </Tooltip>
           </div>
         </div>
       </header>
@@ -359,9 +400,9 @@ export default function App() {
                 </div>
 
                 <button
-                  onClick={() => setShowCreateModal(true)}
+                  onClick={handleOpenCreateModal}
                   disabled={(nodes || []).length === 0}
-                  className="flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-sm uppercase tracking-wider font-mono px-5 py-3 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300"
+                  className="flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-sm uppercase tracking-wider font-mono px-5 py-3 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Создать новый ключ</span>
@@ -393,14 +434,34 @@ export default function App() {
               {keysLoading ? (
                 <Loader size="section" text="Получение ключей из хранилища..." />
               ) : (keys || []).length === 0 ? (
-                <div className="text-center py-16 border border-dashed border-[#1C3945] rounded-2xl bg-[#06141B]/40">
-                  <div className="relative inline-block mb-3">
-                    <Key className="w-12 h-12 text-[#718187] mx-auto" />
+                <div className="text-center py-14 px-6 border border-dashed border-[#1C3945] rounded-3xl bg-[#06141B]/50 relative overflow-hidden">
+                  <div className="relative z-10 flex flex-col items-center max-w-md mx-auto">
+                    <div className="mb-4">
+                      <MascotAvatar size="lg" />
+                    </div>
+                    <h4 className="font-serif text-xl font-bold text-[#F2F0E8]">
+                      У вас пока нет созданных ключей
+                    </h4>
+                    <p className="text-sm text-[#A8B4B7] mt-2 font-sans leading-relaxed text-center">
+                      Хранитель готов помочь! Создайте ваш первый AmneziaWG ключ для смартфона или компьютера за пару секунд.
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
+                      <button
+                        onClick={handleOpenCreateModal}
+                        disabled={(nodes || []).length === 0}
+                        className="flex items-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-xs uppercase tracking-wider font-mono px-5 py-3 rounded-xl shadow-lg shadow-[#D9B96E]/20 transition cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Создать первый ключ</span>
+                      </button>
+                      <button
+                        onClick={() => setShowGlobalFaq(true)}
+                        className="flex items-center space-x-1.5 text-xs font-mono font-bold text-[#D9B96E] hover:text-[#F0D48D] uppercase tracking-wider px-4 py-3 rounded-xl bg-[#102833] hover:bg-[#163442] border border-[#D9B96E]/30 transition cursor-pointer"
+                      >
+                        <span>5 частых вопросов (FAQ)</span>
+                      </button>
+                    </div>
                   </div>
-                  <h4 className="font-serif text-lg font-semibold text-[#F2F0E8]">У вас пока нет созданных ключей</h4>
-                  <p className="text-sm text-[#A8B4B7] mt-1 max-w-sm mx-auto font-sans">
-                    Нажмите кнопку «Создать новый ключ», чтобы получить AmneziaWG конфигурацию для смартфона или компьютера.
-                  </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -468,13 +529,15 @@ export default function App() {
                           <QrIcon className="w-4 h-4" />
                           <span>QR & Конфиг</span>
                         </button>
-                        <button
-                          onClick={() => setKeyToDelete(k)}
-                          title="Отозвать ключ"
-                          className="p-2.5 text-[#718187] hover:text-rose-400 bg-[#06141B] hover:bg-rose-950/30 rounded-xl border border-[#1C3945] hover:border-rose-800/60 transition"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <Tooltip content="Отозвать VPN-ключ">
+                          <button
+                            onClick={() => setKeyToDelete(k)}
+                            aria-label="Отозвать ключ"
+                            className="p-2.5 text-[#718187] hover:text-rose-400 bg-[#06141B] hover:bg-rose-950/30 rounded-xl border border-[#1C3945] hover:border-rose-800/60 transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
                       </div>
                     </div>
                   ))}
@@ -551,6 +614,25 @@ export default function App() {
             </div>
           )
         }
+      />
+
+      {/* Persistent Floating Mascot Assistant */}
+      <FloatingMascot
+        onOpenFaq={() => setShowGlobalFaq(true)}
+        onStartOnboarding={handleStartOnboarding}
+      />
+
+      {/* Global 5 Questions & Answers Modal */}
+      <MascotFaqModal
+        isOpen={showGlobalFaq}
+        onClose={() => setShowGlobalFaq(false)}
+      />
+
+      {/* Step-by-Step Onboarding Walkthrough */}
+      <OnboardingTour
+        isActive={showOnboarding}
+        currentStep={onboardingStep}
+        onComplete={handleCompleteOnboarding}
       />
 
       {/* Footer */}

@@ -5,6 +5,7 @@ import { User } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { useToast } from '../context/ToastContext';
 import { Loader } from './Loader';
+import { Tooltip } from './Tooltip';
 
 export function AdminUsers() {
   const { toast } = useToast();
@@ -167,46 +168,54 @@ export function AdminUsers() {
                 </td>
                 <td className="px-5 py-3.5 text-right space-x-2">
                   {/* Toggle Active / Deactivate */}
-                  <button
-                    onClick={() => handleToggleActive(u)}
-                    title={u.is_active ? 'Деактивировать учетную запись' : 'Одобрить и активировать'}
-                    className={`p-2 rounded-xl border transition ${
-                      u.is_active
-                        ? 'border-amber-700/50 bg-amber-950/30 text-amber-400 hover:bg-amber-900/50'
-                        : 'border-emerald-700/50 bg-emerald-950/30 text-emerald-400 hover:bg-emerald-900/50'
-                    }`}
-                  >
-                    {u.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
-                  </button>
+                  <Tooltip content={u.is_active ? 'Деактивировать учетную запись' : 'Одобрить и активировать'}>
+                    <button
+                      onClick={() => handleToggleActive(u)}
+                      aria-label={u.is_active ? 'Деактивировать учетную запись' : 'Одобрить и активировать'}
+                      className={`p-2 rounded-xl border transition ${
+                        u.is_active
+                          ? 'border-amber-700/50 bg-amber-950/30 text-amber-400 hover:bg-amber-900/50'
+                          : 'border-emerald-700/50 bg-emerald-950/30 text-emerald-400 hover:bg-emerald-900/50'
+                      }`}
+                    >
+                      {u.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                    </button>
+                  </Tooltip>
 
                   {/* Promote / Demote Admin */}
                   {u.role !== 'admin' ? (
-                    <button
-                      onClick={() => setRoleChangeTarget({ user: u, newRole: 'admin' })}
-                      title="Повысить до Администратора"
-                      className="p-2 rounded-xl border border-[#D9B96E]/40 bg-[#102833] text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition"
-                    >
-                      <ShieldPlus className="w-4 h-4" />
-                    </button>
+                    <Tooltip content="Повысить до Администратора">
+                      <button
+                        onClick={() => setRoleChangeTarget({ user: u, newRole: 'admin' })}
+                        aria-label="Повысить до Администратора"
+                        className="p-2 rounded-xl border border-[#D9B96E]/40 bg-[#102833] text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition"
+                      >
+                        <ShieldPlus className="w-4 h-4" />
+                      </button>
+                    </Tooltip>
                   ) : (
-                    <button
-                      onClick={() => setRoleChangeTarget({ user: u, newRole: 'user' })}
-                      title="Снять права Администратора (понизить до пользователя)"
-                      className="p-2 rounded-xl border border-[#1C3945] bg-[#06141B] text-[#718187] hover:text-[#F2F0E8] hover:bg-[#102833] transition"
-                    >
-                      <ShieldMinus className="w-4 h-4" />
-                    </button>
+                    <Tooltip content="Снять права Администратора (понизить до пользователя)">
+                      <button
+                        onClick={() => setRoleChangeTarget({ user: u, newRole: 'user' })}
+                        aria-label="Снять права Администратора"
+                        className="p-2 rounded-xl border border-[#1C3945] bg-[#06141B] text-[#718187] hover:text-[#F2F0E8] hover:bg-[#102833] transition"
+                      >
+                        <ShieldMinus className="w-4 h-4" />
+                      </button>
+                    </Tooltip>
                   )}
 
                   {/* Delete User */}
                   {u.role !== 'admin' && (
-                    <button
-                      onClick={() => setUserToDelete(u)}
-                      title="Удалить пользователя"
-                      className="p-2 rounded-xl border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <Tooltip content="Удалить пользователя">
+                      <button
+                        onClick={() => setUserToDelete(u)}
+                        aria-label="Удалить пользователя"
+                        className="p-2 rounded-xl border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </Tooltip>
                   )}
                 </td>
               </tr>

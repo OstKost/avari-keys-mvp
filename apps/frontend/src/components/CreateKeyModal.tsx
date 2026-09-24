@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Plus, Zap, ShieldCheck, Smartphone } from 'lucide-react';
 import { NodePublic } from '../types';
 import { formatNodeRouting } from '../utils/country';
+import { MascotHelpBubble, MascotFaqModal } from './MascotAssistant';
 
 interface Props {
   nodes: NodePublic[];
@@ -17,6 +18,7 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
   const [psk, setPsk] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showFaq, setShowFaq] = useState(false);
 
   const handleDeviceNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Only allow Latin letters, digits, underscore, and dash
@@ -63,7 +65,7 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
           <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center space-x-3.5 mb-6">
+        <div className="flex items-center space-x-3.5 mb-5">
           <div className="bg-[#102833] p-3.5 rounded-2xl text-[#D9B96E] border border-[#1C3945]">
             <Plus className="w-6 h-6" />
           </div>
@@ -71,6 +73,15 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
             <h3 className="font-serif text-2xl font-bold text-[#F2F0E8] tracking-wide">Создать VPN Ключ</h3>
             <p className="text-sm text-[#A8B4B7] mt-0.5 font-sans">Выберите тип туннелирования и назовите устройство</p>
           </div>
+        </div>
+
+        {/* Mascot Assistant Help Bubble */}
+        <div className="mb-5">
+          <MascotHelpBubble 
+            title="Нужна помощь?" 
+            subtitle="5 ответов на частые вопросы новичков" 
+            onClickFaq={() => setShowFaq(true)} 
+          />
         </div>
 
         {error && (
@@ -212,6 +223,12 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
             )}
           </button>
         </form>
+
+        {/* 5 Popular Questions & Answers Modal */}
+        <MascotFaqModal
+          isOpen={showFaq}
+          onClose={() => setShowFaq(false)}
+        />
       </div>
     </div>,
     document.body

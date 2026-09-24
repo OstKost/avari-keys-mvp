@@ -578,6 +578,48 @@ func TestBillingEndpoints(t *testing.T) {
 	if adminSummary.TotalPayments < 1 {
 		t.Fatalf("expected at least 1 payment record, got %d", adminSummary.TotalPayments)
 	}
+
+	// 8. Test Billing Requisites GET & PUT
+	// Regular user can GET
+	req = httptest.NewRequest("GET", "/api/v1/billing/requisites", nil)
+	req.Header.Set("Authorization", "Bearer "+userToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for user GET requisites, got %d", rec.Code)
+	}
+	var reqs models.BillingRequisites
+	_ = json.NewDecoder(rec.Body).Decode(&reqs)
+	if reqs.SBPPhone == "" || reqs.SBPBank == "" {
+		t.Fatalf("expected default requisites, got %+v", reqs)
+	}
+
+	// Regular user cannot PUT requisites
+	updateBody, _ := json.Marshal(models.BillingRequisites{
+		SBPPhone: "+7 (999) 111-22-33",
+		SBPBank:  "Альфа-Банк",
+	})
+	req = httptest.NewRequest("PUT", "/api/v1/admin/billing/requisites", bytes.NewReader(updateBody))
+	req.Header.Set("Authorization", "Bearer "+userToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for non-admin PUT requisites, got %d", rec.Code)
+	}
+
+	// Admin can PUT requisites
+	req = httptest.NewRequest("PUT", "/api/v1/admin/billing/requisites", bytes.NewReader(updateBody))
+	req.Header.Set("Authorization", "Bearer "+adminLoginResp.Token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for admin PUT requisites, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var updatedReqs models.BillingRequisites
+	_ = json.NewDecoder(rec.Body).Decode(&updatedReqs)
+	if updatedReqs.SBPPhone != "+7 (999) 111-22-33" || updatedReqs.SBPBank != "Альфа-Банк" {
+		t.Fatalf("expected updated requisites, got %+v", updatedReqs)
+	}
 }
 
 

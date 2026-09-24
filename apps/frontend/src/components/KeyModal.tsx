@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Copy, Check, Download, QrCode as QrIcon, FileText, AlertTriangle, ChevronDown, ChevronUp, Zap, ShieldCheck } from 'lucide-react';
+import { X, Copy, Check, Download, QrCode as QrIcon, FileText, AlertTriangle, ChevronDown, ChevronUp, Zap, ShieldCheck, HelpCircle } from 'lucide-react';
 import QRCode from 'qrcode';
 import { ClientConfigDetail } from '../types';
 import { useToast } from '../context/ToastContext';
 import { formatNodeRouting } from '../utils/country';
+import { MascotAvatar, MascotFaqModal } from './MascotAssistant';
 
 interface Props {
   keyData: ClientConfigDetail;
@@ -85,6 +86,7 @@ export function KeyModal({ keyData, onClose }: Props) {
   const [awgQrUrl, setAwgQrUrl] = useState<string>('');
   const [vpnQrUrl, setVpnQrUrl] = useState<string>('');
   const [showRawLogs, setShowRawLogs] = useState(false);
+  const [showFaq, setShowFaq] = useState(false);
 
   const routing = useMemo(() => formatNodeRouting(keyData.node_type || 'direct', (keyData as any).node_country_code), [keyData]);
 
@@ -416,6 +418,31 @@ export function KeyModal({ keyData, onClose }: Props) {
             )}
           </>
         )}
+
+        {/* Mascot Quick Tip & FAQ Link */}
+        <div className="mt-5 pt-4 border-t border-[#1C3945]/80 flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#06141B]/40 p-3 rounded-2xl">
+          <div className="flex items-center space-x-3 text-left">
+            <MascotAvatar size="xs" withGlow={false} />
+            <p className="text-xs text-[#A8B4B7] font-sans">
+              <strong>Совет Хранителя:</strong> Отсканируйте QR в мобильном приложении AmneziaWG или сохраните .conf для ПК.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowFaq(true)}
+            className="flex items-center space-x-1.5 text-xs font-mono font-bold text-[#D9B96E] hover:text-[#F0D48D] uppercase tracking-wider px-3 py-1.5 rounded-xl bg-[#102833] hover:bg-[#163442] border border-[#D9B96E]/30 transition shrink-0 cursor-pointer"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>Инструкция и FAQ</span>
+          </button>
+        </div>
+
+        {/* Mascot FAQ Modal */}
+        <MascotFaqModal
+          isOpen={showFaq}
+          onClose={() => setShowFaq(false)}
+          initialQuestionId="how-to-connect"
+        />
       </div>
     </div>,
     document.body
