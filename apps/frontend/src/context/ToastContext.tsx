@@ -105,7 +105,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   {t.title}
                 </h5>
               )}
-              <p className="text-xs text-[#A8B4B7] font-sans leading-relaxed break-words">
+              <p className="text-sm text-[#A8B4B7] font-sans leading-relaxed break-words">
                 {t.message}
               </p>
             </div>

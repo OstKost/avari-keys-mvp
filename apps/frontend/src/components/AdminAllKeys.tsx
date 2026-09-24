@@ -34,9 +34,9 @@ export function AdminAllKeys() {
     }
   };
 
-  const fetchKeys = useCallback(async () => {
+  const fetchKeys = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await api.getAdminKeys({
         search: search.trim() || undefined,
         nodeId: selectedNodeId,
@@ -49,7 +49,7 @@ export function AdminAllKeys() {
     } catch (err: any) {
       toast.error(err.message || 'Ошибка загрузки реестра ключей');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [search, selectedNodeId, page, limit, toast]);
 
@@ -63,14 +63,24 @@ export function AdminAllKeys() {
 
   const handleConfirmDelete = async () => {
     if (!keyToDelete) return;
+    const target = keyToDelete;
+    const prevKeys = [...keys];
+    const prevTotal = totalCount;
+
+    // Optimistic deletion
+    setKeys((prev) => prev.filter((k) => k.id !== target.id));
+    setTotalCount((prev) => Math.max(0, prev - 1));
+    setKeyToDelete(null);
+
     try {
       setIsDeleting(true);
-      await api.deleteKey(keyToDelete.id);
-      toast.success(`Ключ «${keyToDelete.device_name}» (${keyToDelete.client_name}) отозван`);
-      setKeyToDelete(null);
-      await fetchKeys();
+      await api.deleteKey(target.id);
+      toast.success(`Ключ «${target.device_name}» (${target.client_name}) отозван`);
+      fetchKeys(true);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка удаления ключа');
+      setKeys(prevKeys);
+      setTotalCount(prevTotal);
     } finally {
       setIsDeleting(false);
     }
@@ -95,7 +105,7 @@ export function AdminAllKeys() {
             <Key className="w-5 h-5 text-[#D9B96E]" />
             <span>Сводный реестр и аудит VPN-ключей</span>
           </h3>
-          <p className="text-xs text-[#A8B4B7] mt-1 font-sans">
+          <p className="text-sm text-[#A8B4B7] mt-1 font-sans">
             Мониторинг активности, учет трафика (Total / Monthly) и управление ключами по всем узлам сети.
           </p>
         </div>
@@ -104,18 +114,18 @@ export function AdminAllKeys() {
       {/* Filters Bar */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
         <div className="md:col-span-2 relative">
-          <Search className="w-4 h-4 text-[#718187] absolute left-3.5 top-3" />
+          <Search className="w-4 h-4 text-[#718187] absolute left-3.5 top-3.5" />
           <input
             type="text"
             value={search}
             onChange={handleSearchChange}
             placeholder="Поиск по устройству, имени пира или ноде..."
-            className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl pl-10 pr-10 py-2.5 text-xs text-[#F2F0E8] placeholder-[#718187] focus:outline-none transition shadow-inner font-sans"
+            className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl pl-10 pr-10 py-2.5 text-sm text-[#F2F0E8] placeholder-[#718187] focus:outline-none transition shadow-inner font-sans"
           />
           {search && (
             <button
               onClick={() => { setSearch(''); setPage(1); }}
-              className="absolute right-3.5 top-3 text-[#718187] hover:text-[#F2F0E8]"
+              className="absolute right-3.5 top-3.5 text-[#718187] hover:text-[#F2F0E8]"
             >
               <X className="w-4 h-4" />
             </button>
@@ -123,11 +133,11 @@ export function AdminAllKeys() {
         </div>
 
         <div className="relative">
-          <Filter className="w-3.5 h-3.5 text-[#D9B96E] absolute left-3.5 top-3.5 pointer-events-none" />
+          <Filter className="w-4 h-4 text-[#D9B96E] absolute left-3.5 top-3.5 pointer-events-none" />
           <select
             value={selectedNodeId || ''}
             onChange={handleNodeFilterChange}
-            className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl pl-10 pr-9 py-2.5 text-xs text-[#F2F0E8] focus:outline-none font-mono transition appearance-none cursor-pointer"
+            className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl pl-10 pr-9 py-2.5 text-sm text-[#F2F0E8] focus:outline-none font-mono transition appearance-none cursor-pointer"
           >
             <option value="">Все серверы / узлы</option>
             {(nodes || []).map((n) => (
@@ -136,14 +146,14 @@ export function AdminAllKeys() {
               </option>
             ))}
           </select>
-          <ChevronDown className="w-3.5 h-3.5 text-[#718187] absolute right-3.5 top-3.5 pointer-events-none" />
+          <ChevronDown className="w-4 h-4 text-[#718187] absolute right-3.5 top-3.5 pointer-events-none" />
         </div>
       </div>
 
       {/* Keys Table */}
       <div className="overflow-x-auto border border-[#1C3945] rounded-2xl bg-[#06141B]/60 shadow-xl mb-4">
         <table className="w-full text-left text-sm text-[#F2F0E8]">
-          <thead className="bg-[#102833]/90 text-[10px] font-mono uppercase tracking-widest text-[#A8B4B7] border-b border-[#1C3945]">
+          <thead className="bg-[#102833]/90 text-sm font-mono uppercase tracking-wider text-[#A8B4B7] border-b border-[#1C3945]">
             <tr>
               <th className="px-5 py-3.5">ID</th>
               <th className="px-5 py-3.5">Устройство / Пир</th>
@@ -158,16 +168,16 @@ export function AdminAllKeys() {
           <tbody className="divide-y divide-[#1C3945]/70 bg-[#0A1D26]/40 font-sans">
             {(keys || []).map((k) => (
               <tr key={k.id} className="hover:bg-[#102833]/50 transition duration-150">
-                <td className="px-5 py-3.5 text-[#718187] font-mono text-xs">#{k.id}</td>
+                <td className="px-5 py-3.5 text-[#718187] font-mono text-sm">#{k.id}</td>
                 <td className="px-5 py-3.5">
                   <div className="font-medium text-[#F2F0E8] text-sm">{k.device_name}</div>
-                  <div className="text-[11px] font-mono text-[#D9B96E] mt-0.5">{k.client_name}</div>
+                  <div className="text-sm font-mono text-[#D9B96E] mt-0.5">{k.client_name}</div>
                 </td>
-                <td className="px-5 py-3.5 text-xs text-[#A8B4B7] font-mono">User #{k.user_id}</td>
+                <td className="px-5 py-3.5 text-sm text-[#A8B4B7] font-mono">User #{k.user_id}</td>
                 <td className="px-5 py-3.5">
                   <div className="flex flex-col items-start gap-1">
                     <span
-                      className={`text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                      className={`text-sm font-mono font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-md ${
                         k.node_type === 'cascade'
                           ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40'
                           : 'bg-[#102833] text-[#6EA8C4] border border-[#6EA8C4]/40'
@@ -175,26 +185,26 @@ export function AdminAllKeys() {
                     >
                       {formatNodeRouting(k.node_type || 'direct', k.node_country_code).fullText}
                     </span>
-                    <span className="text-[11px] font-mono text-[#A8B4B7] max-w-[190px] truncate" title={k.node_name}>
+                    <span className="text-sm font-mono text-[#A8B4B7] max-w-[190px] truncate" title={k.node_name}>
                       {k.node_name || 'Node'}
                     </span>
                   </div>
                 </td>
                 <td className="px-5 py-3.5">
-                  <div className="flex items-center space-x-1.5 text-xs font-mono text-[#A8B4B7]">
+                  <div className="flex items-center space-x-1.5 text-sm font-mono text-[#A8B4B7]">
                     <span className={`w-2 h-2 rounded-full ${k.last_handshake && !k.last_handshake.includes('Не') ? 'bg-emerald-400 animate-pulse' : 'bg-[#718187]'}`} />
                     <span>{k.last_handshake || 'Не подключался'}</span>
                   </div>
                 </td>
                 <td className="px-5 py-3.5">
-                  <div className="text-xs font-mono font-semibold text-[#F2F0E8]">
+                  <div className="text-sm font-mono font-semibold text-[#F2F0E8]">
                     {k.total_traffic_formatted || '0 B'}
                   </div>
-                  <div className="text-[10px] font-mono text-[#718187]">
+                  <div className="text-sm font-mono text-[#718187]">
                     Месяц: {k.month_traffic_formatted || '0 B'}
                   </div>
                 </td>
-                <td className="px-5 py-3.5 text-xs text-[#718187] font-mono">
+                <td className="px-5 py-3.5 text-sm text-[#718187] font-mono">
                   {new Date(k.created_at).toLocaleDateString()}
                 </td>
                 <td className="px-5 py-3.5 text-right">
@@ -213,7 +223,7 @@ export function AdminAllKeys() {
             )}
             {(keys || []).length === 0 && !loading && (
               <tr>
-                <td colSpan={8} className="text-center py-12 text-[#718187] text-xs font-mono uppercase tracking-wider">
+                <td colSpan={8} className="text-center py-12 text-[#718187] text-sm font-mono uppercase tracking-wider">
                   {search || selectedNodeId ? 'По заданным фильтрам ключи не найдены.' : 'Пока не выпущено ни одной конфигурации.'}
                 </td>
               </tr>
@@ -224,7 +234,7 @@ export function AdminAllKeys() {
 
       {/* Pagination Bar */}
       {totalCount > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 py-1 text-xs text-[#A8B4B7] font-mono">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 py-1 text-sm text-[#A8B4B7] font-mono">
           <div>
             Показано {(page - 1) * limit + 1}–{Math.min(page * limit, totalCount)} из {totalCount} ключей
           </div>
@@ -233,23 +243,23 @@ export function AdminAllKeys() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="flex items-center space-x-1 px-3 py-1.5 rounded-lg border border-[#1C3945] bg-[#102833] hover:bg-[#1C3945] text-[#F2F0E8] disabled:opacity-40 disabled:hover:bg-[#102833] transition"
+              className="flex items-center space-x-1 px-3.5 py-2 rounded-lg border border-[#1C3945] bg-[#102833] hover:bg-[#1C3945] text-[#F2F0E8] disabled:opacity-40 disabled:hover:bg-[#102833] transition"
             >
-              <ChevronLeft className="w-3.5 h-3.5" />
+              <ChevronLeft className="w-4 h-4" />
               <span>Назад</span>
             </button>
 
-            <div className="px-3 py-1.5 rounded-lg bg-[#06141B] border border-[#1C3945] text-xs font-mono font-bold text-[#D9B96E]">
+            <div className="px-3.5 py-2 rounded-lg bg-[#06141B] border border-[#1C3945] text-sm font-mono font-bold text-[#D9B96E]">
               {page} / {totalPages}
             </div>
 
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="flex items-center space-x-1 px-3 py-1.5 rounded-lg border border-[#1C3945] bg-[#102833] hover:bg-[#1C3945] text-[#F2F0E8] disabled:opacity-40 disabled:hover:bg-[#102833] transition"
+              className="flex items-center space-x-1 px-3.5 py-2 rounded-lg border border-[#1C3945] bg-[#102833] hover:bg-[#1C3945] text-[#F2F0E8] disabled:opacity-40 disabled:hover:bg-[#102833] transition"
             >
               <span>Вперед</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>

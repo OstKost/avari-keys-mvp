@@ -15,23 +15,31 @@ export function AdminUsers() {
   const [roleChangeTarget, setRoleChangeTarget] = useState<{ user: User; newRole: 'admin' | 'user' } | null>(null);
   const [changingRole, setChangingRole] = useState(false);
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await api.getAdminUsers();
       setUsers(Array.isArray(data) ? data : []);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка загрузки пользователей');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchUsers();
+    fetchUsers(false);
   }, []);
 
   const handleToggleActive = async (user: User) => {
+    const previousUsers = [...users];
+    const willBeActive = !user.is_active;
+
+    // Optimistic toggle
+    setUsers((prev) =>
+      prev.map((u) => (u.id === user.id ? { ...u, is_active: willBeActive } : u))
+    );
+
     try {
       if (user.is_active) {
         await api.deactivateUser(user.id);
@@ -40,26 +48,36 @@ export function AdminUsers() {
         await api.activateUser(user.id);
         toast.success(`Пользователь «${user.username}» успешно одобрен и активирован`);
       }
-      await fetchUsers();
+      fetchUsers(true);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка изменения статуса пользователя');
+      setUsers(previousUsers);
     }
   };
 
   const handleConfirmRoleChange = async () => {
     if (!roleChangeTarget) return;
+    const target = roleChangeTarget;
+    const previousUsers = [...users];
+
+    // Optimistic role change
+    setUsers((prev) =>
+      prev.map((u) => (u.id === target.user.id ? { ...u, role: target.newRole } : u))
+    );
+    setRoleChangeTarget(null);
+
     try {
       setChangingRole(true);
-      await api.setUserRole(roleChangeTarget.user.id, roleChangeTarget.newRole);
+      await api.setUserRole(target.user.id, target.newRole);
       toast.success(
-        `Роль пользователя «${roleChangeTarget.user.username}» успешно изменена на ${
-          roleChangeTarget.newRole === 'admin' ? 'Администратор' : 'Пользователь'
+        `Роль пользователя «${target.user.username}» успешно изменена на ${
+          target.newRole === 'admin' ? 'Администратор' : 'Пользователь'
         }`
       );
-      setRoleChangeTarget(null);
-      await fetchUsers();
+      fetchUsers(true);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка изменения роли');
+      setUsers(previousUsers);
     } finally {
       setChangingRole(false);
     }
@@ -67,20 +85,27 @@ export function AdminUsers() {
 
   const handleConfirmDelete = async () => {
     if (!userToDelete) return;
+    const target = userToDelete;
+    const previousUsers = [...users];
+
+    // Optimistic removal
+    setUsers((prev) => prev.filter((u) => u.id !== target.id));
+    setUserToDelete(null);
+
     try {
       setDeleting(true);
-      await api.deleteUser(userToDelete.id);
-      toast.success(`Пользователь «${userToDelete.username}» успешно удален`);
-      setUserToDelete(null);
-      await fetchUsers();
+      await api.deleteUser(target.id);
+      toast.success(`Пользователь «${target.username}» успешно удален`);
+      fetchUsers(true);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка удаления пользователя');
+      setUsers(previousUsers);
     } finally {
       setDeleting(false);
     }
   };
 
-  if (loading) {
+  if (loading && users.length === 0) {
     return <Loader size="section" text="Загрузка списка пользователей..." />;
   }
 
@@ -92,7 +117,7 @@ export function AdminUsers() {
             <Users className="w-5 h-5 text-[#D9B96E]" />
             <span>Модерация пользователей</span>
           </h3>
-          <p className="text-xs text-[#A8B4B7] mt-1 font-sans">
+          <p className="text-sm text-[#A8B4B7] mt-1 font-sans">
             Активация и управление доступом зарегистрированных пользователей системы.
           </p>
         </div>
@@ -100,7 +125,7 @@ export function AdminUsers() {
 
       <div className="overflow-x-auto border border-[#1C3945] rounded-2xl bg-[#06141B]/60 shadow-xl">
         <table className="w-full text-left text-sm text-[#F2F0E8]">
-          <thead className="bg-[#102833]/90 text-[10px] font-mono uppercase tracking-widest text-[#A8B4B7] border-b border-[#1C3945]">
+          <thead className="bg-[#102833]/90 text-sm font-mono uppercase tracking-wider text-[#A8B4B7] border-b border-[#1C3945]">
             <tr>
               <th className="px-5 py-3.5">ID</th>
               <th className="px-5 py-3.5">Имя пользователя</th>
@@ -113,11 +138,11 @@ export function AdminUsers() {
           <tbody className="divide-y divide-[#1C3945]/70 bg-[#0A1D26]/40 font-sans">
             {(users || []).map((u) => (
               <tr key={u.id} className="hover:bg-[#102833]/50 transition duration-150">
-                <td className="px-5 py-3.5 text-[#718187] font-mono text-xs">#{u.id}</td>
-                <td className="px-5 py-3.5 font-medium text-[#F2F0E8]">{u.username}</td>
+                <td className="px-5 py-3.5 text-[#718187] font-mono text-sm">#{u.id}</td>
+                <td className="px-5 py-3.5 font-medium text-[#F2F0E8] text-sm">{u.username}</td>
                 <td className="px-5 py-3.5">
                   <span
-                    className={`text-[9px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                    className={`text-sm font-mono font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
                       u.role === 'admin'
                         ? 'bg-[#D9B96E]/20 text-[#F0D48D] border border-[#D9B96E]/40'
                         : 'bg-[#102833] text-[#A8B4B7] border border-[#1C3945]'
@@ -128,7 +153,7 @@ export function AdminUsers() {
                 </td>
                 <td className="px-5 py-3.5">
                   <span
-                    className={`inline-flex items-center text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full ${
+                    className={`inline-flex items-center text-sm font-mono font-semibold px-2.5 py-0.5 rounded-full ${
                       u.is_active
                         ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
                         : 'bg-amber-950/80 text-amber-300 border border-amber-600/40 animate-pulse'
@@ -137,7 +162,7 @@ export function AdminUsers() {
                     {u.is_active ? 'Активен (Одобрен)' : 'Ожидает модерации'}
                   </span>
                 </td>
-                <td className="px-5 py-3.5 text-xs text-[#A8B4B7] font-mono">
+                <td className="px-5 py-3.5 text-sm text-[#A8B4B7] font-mono">
                   {new Date(u.created_at).toLocaleDateString()}
                 </td>
                 <td className="px-5 py-3.5 text-right space-x-2">
@@ -209,11 +234,11 @@ export function AdminUsers() {
                 {roleChangeTarget.newRole === 'admin' ? 'Администратор' : 'Пользователь (Хранитель)'}
               </span>.
               {roleChangeTarget.newRole === 'admin' ? (
-                <p className="mt-2 text-xs text-[#A8B4B7]">
+                <p className="mt-2 text-sm text-[#A8B4B7]">
                   Пользователь получит полный доступ к управлению узлами сети, модерации и аудиту всех ключей.
                 </p>
               ) : (
-                <p className="mt-2 text-xs text-[#A8B4B7]">
+                <p className="mt-2 text-sm text-[#A8B4B7]">
                   Пользователь потеряет доступ к панели администрирования.
                 </p>
               )}

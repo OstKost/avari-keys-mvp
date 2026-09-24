@@ -20,10 +20,10 @@ export function Loader({ size = 'section', text = 'Загрузка данных
             className="absolute w-10 h-10 object-contain animate-pulse filter drop-shadow-[0_0_12px_rgba(217,185,110,0.6)]"
           />
         </div>
-        <span className="font-serif tracking-widest uppercase text-xs sm:text-sm text-gold-gradient font-bold animate-pulse">
+        <span className="font-serif tracking-widest uppercase text-sm sm:text-base text-gold-gradient font-bold animate-pulse">
           {text}
         </span>
-        <span className="text-[10px] text-[#718187] font-mono tracking-wider mt-1.5 uppercase">
+        <span className="text-sm text-[#718187] font-mono tracking-wider mt-1.5 uppercase">
           Avari Keys • AmneziaWG
         </span>
       </div>
@@ -43,7 +43,7 @@ export function Loader({ size = 'section', text = 'Загрузка данных
                 className="absolute w-6 h-6 object-contain animate-pulse filter drop-shadow-[0_0_8px_rgba(217,185,110,0.5)]"
               />
             </div>
-            <span className="text-xs font-mono tracking-widest uppercase text-[#D9B96E]">
+            <span className="text-sm font-mono tracking-widest uppercase text-[#D9B96E]">
               {text}
             </span>
           </div>
@@ -56,7 +56,7 @@ export function Loader({ size = 'section', text = 'Загрузка данных
     return (
       <div className="inline-flex items-center space-x-2">
         <div className="w-4 h-4 rounded-full border-2 border-[#1C3945] border-t-[#D9B96E] animate-spin" />
-        {text && <span className="text-xs font-mono text-[#D9B96E]">{text}</span>}
+        {text && <span className="text-sm font-mono text-[#D9B96E]">{text}</span>}
       </div>
     );
   }
@@ -76,7 +76,7 @@ export function Loader({ size = 'section', text = 'Загрузка данных
           className="absolute w-7 h-7 object-contain animate-pulse filter drop-shadow-[0_0_10px_rgba(217,185,110,0.5)]"
         />
       </div>
-      <span className="text-xs sm:text-sm font-mono tracking-widest uppercase text-[#D9B96E] font-medium animate-pulse">
+      <span className="text-sm sm:text-base font-mono tracking-widest uppercase text-[#D9B96E] font-medium animate-pulse">
         {text}
       </span>
     </div>

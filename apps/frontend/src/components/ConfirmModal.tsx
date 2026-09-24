@@ -88,7 +88,7 @@ export function ConfirmModal({
           </div>
         </div>
 
-        <div className="text-xs text-[#A8B4B7] font-sans leading-relaxed mb-6 bg-[#06141B]/60 p-3.5 rounded-2xl border border-[#1C3945]/70">
+        <div className="text-sm text-[#A8B4B7] font-sans leading-relaxed mb-6 bg-[#06141B]/60 p-4 rounded-2xl border border-[#1C3945]/70">
           {message}
         </div>
 
@@ -97,7 +97,7 @@ export function ConfirmModal({
             type="button"
             onClick={onClose}
             disabled={isLoading}
-            className="px-4 py-2.5 text-xs font-mono uppercase tracking-wider text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#102833] border border-transparent hover:border-[#1C3945] transition disabled:opacity-40"
+            className="px-4 py-2.5 text-sm font-mono uppercase tracking-wider text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#102833] border border-transparent hover:border-[#1C3945] transition disabled:opacity-40 cursor-pointer"
           >
             {cancelText}
           </button>
@@ -105,7 +105,7 @@ export function ConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={isLoading}
-            className={`px-5 py-2.5 text-xs font-mono font-bold uppercase tracking-wider rounded-xl shadow-lg transition disabled:opacity-50 ${getConfirmButtonClasses()}`}
+            className={`px-5 py-2.5 text-sm font-mono font-bold uppercase tracking-wider rounded-xl shadow-lg transition disabled:opacity-50 cursor-pointer ${getConfirmButtonClasses()}`}
           >
             {isLoading ? 'Выполнение...' : confirmText}
           </button>

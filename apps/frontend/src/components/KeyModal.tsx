@@ -167,7 +167,7 @@ export function KeyModal({ keyData, onClose }: Props) {
           qrUrl ? (
             <div className="flex flex-col items-center justify-center bg-white p-5 rounded-2xl mb-5 shadow-2xl border-4 border-[#102833]">
               <img src={qrUrl} alt="AmneziaWG QR Code" className="w-60 h-60 object-contain rounded-lg" />
-              <span className="text-xs text-slate-800 font-mono tracking-wider font-semibold mt-3">
+              <span className="text-sm text-slate-800 font-mono tracking-wider font-semibold mt-3">
                 Сканируйте в приложении AmneziaWG
               </span>
             </div>
@@ -180,7 +180,7 @@ export function KeyModal({ keyData, onClose }: Props) {
           <div className="bg-amber-950/30 border border-amber-500/40 rounded-2xl p-4 mb-5 text-amber-200">
             <div className="flex items-start space-x-3">
               <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-              <div className="text-xs sm:text-sm space-y-1.5 font-sans">
+              <div className="text-sm space-y-1.5 font-sans">
                 <p className="font-semibold text-amber-300">Конфигурация не найдена на сервере</p>
                 <p className="text-amber-200/80 leading-relaxed">
                   Узел не вернул файл конфигурации AmneziaWG. Убедитесь, что на сервере <strong>{keyData.node_name}</strong> обновлен и перезапущен сервис <code>avari-slave</code>.
@@ -194,13 +194,13 @@ export function KeyModal({ keyData, onClose }: Props) {
         {isValidConfig ? (
           <div className="mb-6">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-xs sm:text-sm font-mono font-semibold text-[#D9B96E] uppercase tracking-wider flex items-center space-x-1.5">
+              <span className="text-sm font-mono font-semibold text-[#D9B96E] uppercase tracking-wider flex items-center space-x-1.5">
                 <FileText className="w-4 h-4" />
                 <span>Конфигурационный файл (.conf)</span>
               </span>
-              <span className="text-xs text-[#A8B4B7] font-mono">AmneziaWG Protocol</span>
+              <span className="text-sm text-[#A8B4B7] font-mono">AmneziaWG Protocol</span>
             </div>
-            <pre className="bg-[#06141B] border border-[#1C3945] text-[#F2F0E8] text-xs sm:text-sm p-4 rounded-xl overflow-x-auto max-h-40 font-mono scrollbar-thin leading-relaxed">
+            <pre className="bg-[#06141B] border border-[#1C3945] text-[#F2F0E8] text-sm p-4 rounded-xl overflow-x-auto max-h-40 font-mono scrollbar-thin leading-relaxed">
               {cleanConfig}
             </pre>
           </div>
@@ -208,13 +208,13 @@ export function KeyModal({ keyData, onClose }: Props) {
           <div className="mb-6">
             <button
               onClick={() => setShowRawLogs(!showRawLogs)}
-              className="flex items-center justify-between w-full text-xs font-mono text-[#A8B4B7] hover:text-[#D9B96E] py-1 transition"
+              className="flex items-center justify-between w-full text-sm font-mono text-[#A8B4B7] hover:text-[#D9B96E] py-1 transition"
             >
               <span>{showRawLogs ? 'Скрыть технический ответ узла' : 'Показать технический ответ узла'}</span>
               {showRawLogs ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
             {showRawLogs && (
-              <pre className="mt-2 bg-[#06141B] border border-[#1C3945] text-red-300/80 text-xs p-3 rounded-xl overflow-x-auto max-h-36 font-mono scrollbar-thin leading-relaxed whitespace-pre-wrap break-all">
+              <pre className="mt-2 bg-[#06141B] border border-[#1C3945] text-red-300/80 text-sm p-3.5 rounded-xl overflow-x-auto max-h-36 font-mono scrollbar-thin leading-relaxed whitespace-pre-wrap break-all">
                 {rawWithoutAnsi || 'Пустой ответ'}
               </pre>
             )}
@@ -226,7 +226,7 @@ export function KeyModal({ keyData, onClose }: Props) {
           <button
             onClick={handleCopy}
             disabled={!isValidConfig}
-            className={`flex items-center justify-center space-x-2 bg-[#102833] text-[#F2F0E8] font-mono text-xs sm:text-sm uppercase tracking-wider py-3.5 px-4 rounded-xl border border-[#1C3945] transition ${
+            className={`flex items-center justify-center space-x-2 bg-[#102833] text-[#F2F0E8] font-mono text-sm uppercase tracking-wider py-3.5 px-4 rounded-xl border border-[#1C3945] transition ${
               isValidConfig ? 'hover:bg-[#1C3945] hover:border-[#D9B96E]/50 cursor-pointer' : 'opacity-40 cursor-not-allowed'
             }`}
           >
@@ -237,7 +237,7 @@ export function KeyModal({ keyData, onClose }: Props) {
           <button
             onClick={handleDownload}
             disabled={!isValidConfig}
-            className={`flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold font-mono text-xs sm:text-sm uppercase tracking-wider py-3.5 px-4 rounded-xl shadow-lg transition ${
+            className={`flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold font-mono text-sm uppercase tracking-wider py-3.5 px-4 rounded-xl shadow-lg transition ${
               isValidConfig
                 ? 'hover:from-[#F0D48D] hover:to-[#D9B96E] shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 cursor-pointer'
                 : 'opacity-40 cursor-not-allowed'
