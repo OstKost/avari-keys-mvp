@@ -213,7 +213,7 @@ WorkingDirectory=/opt/avari-keys
 Environment="SLAVE_PORT=8081"
 Environment="SLAVE_API_KEY=<SLAVE_KEY_M0>"
 Environment="AWG_SCRIPT_PATH=/root/awg/manage_amneziawg.sh"
-Environment="AWG_CONFIGS_DIR=/root/awg/clients"
+Environment="AWG_CONFIGS_DIR=/root/awg"
 ExecStart=/usr/local/bin/avari-slave
 Restart=always
 RestartSec=5s
@@ -305,7 +305,7 @@ WorkingDirectory=/opt/avari-keys
 Environment="SLAVE_PORT=8081"
 Environment="SLAVE_API_KEY=<SLAVE_KEY_S2>"
 Environment="AWG_SCRIPT_PATH=/root/awg/manage_amneziawg.sh"
-Environment="AWG_CONFIGS_DIR=/root/awg/clients"
+Environment="AWG_CONFIGS_DIR=/root/awg"
 ExecStart=/usr/local/bin/avari-slave
 Restart=always
 RestartSec=5s

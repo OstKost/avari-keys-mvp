@@ -48,7 +48,7 @@ func (r *RealRunner) AddClient(ctx context.Context, name string, psk bool) (*mod
 		return nil, err
 	}
 
-	args := []string{r.scriptPath, "add", name}
+	args := []string{r.scriptPath, "add", name, "--yes"}
 	if psk {
 		args = append(args, "--psk")
 	}
@@ -70,7 +70,7 @@ func (r *RealRunner) RemoveClient(ctx context.Context, name string) error {
 		return err
 	}
 
-	cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "remove", name)
+	cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "remove", name, "--yes")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -86,36 +86,31 @@ func (r *RealRunner) GetClient(ctx context.Context, name string) (*models.Client
 		return nil, err
 	}
 
-	// 1. Read config file from multiple potential locations
-	possiblePaths := []string{
-		filepath.Join(r.configsDir, fmt.Sprintf("%s.conf", name)),
-		filepath.Join("/root/awg/clients", fmt.Sprintf("%s.conf", name)),
+	scriptDir := filepath.Dir(r.scriptPath)
+	// 1. Candidate paths where manage_amneziawg.sh stores .conf files
+	candidatePaths := []string{
 		filepath.Join("/root/awg", fmt.Sprintf("%s.conf", name)),
+		filepath.Join("/root/awg/clients", fmt.Sprintf("%s.conf", name)),
+		filepath.Join(r.configsDir, fmt.Sprintf("%s.conf", name)),
+		filepath.Join(scriptDir, fmt.Sprintf("%s.conf", name)),
+		filepath.Join(scriptDir, "clients", fmt.Sprintf("%s.conf", name)),
 		filepath.Join("/root", fmt.Sprintf("%s.conf", name)),
-		filepath.Join("/etc/amnezia/amneziawg/clients", fmt.Sprintf("%s.conf", name)),
 		filepath.Join("/etc/amnezia/amneziawg", fmt.Sprintf("%s.conf", name)),
+		filepath.Join("/etc/amnezia/amneziawg/clients", fmt.Sprintf("%s.conf", name)),
 	}
 
 	var rawConfig string
-	foundFile := false
-	for _, p := range possiblePaths {
+	var foundPath string
+	for _, p := range candidatePaths {
 		if confBytes, err := os.ReadFile(p); err == nil && len(confBytes) > 0 {
 			rawConfig = string(confBytes)
-			foundFile = true
+			foundPath = p
 			break
 		}
 	}
 
-	if !foundFile {
-		// Fallback: try reading via `manage_amneziawg.sh show <name>`
-		cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "show", name)
-		var out bytes.Buffer
-		cmd.Stdout = &out
-		if cmdErr := cmd.Run(); cmdErr == nil && out.Len() > 0 {
-			rawConfig = out.String()
-		} else {
-			return nil, fmt.Errorf("could not read client config for '%s'", name)
-		}
+	if foundPath == "" {
+		return nil, fmt.Errorf("client configuration file '%s.conf' not found in standard directories (/root/awg, /root/awg/clients, /root, /etc/amnezia/amneziawg)", name)
 	}
 
 	cleanConfig := SanitizeAWGConfig(rawConfig)
@@ -123,15 +118,21 @@ func (r *RealRunner) GetClient(ctx context.Context, name string) (*models.Client
 		cleanConfig = strings.TrimSpace(rawConfig)
 	}
 
+	if !strings.Contains(cleanConfig, "[Interface]") || !strings.Contains(cleanConfig, "[Peer]") {
+		return nil, fmt.Errorf("file '%s' does not contain a valid WireGuard/AmneziaWG configuration block", foundPath)
+	}
+
 	// 2. Read or generate QR code
 	qrBase64 := ""
-	possibleQRPatterns := []string{
-		filepath.Join(r.configsDir, fmt.Sprintf("%s.png", name)),
-		filepath.Join("/root/awg/clients", fmt.Sprintf("%s.png", name)),
+	candidateQRPatterns := []string{
 		filepath.Join("/root/awg", fmt.Sprintf("%s.png", name)),
+		filepath.Join("/root/awg/clients", fmt.Sprintf("%s.png", name)),
+		filepath.Join(r.configsDir, fmt.Sprintf("%s.png", name)),
+		filepath.Join(scriptDir, fmt.Sprintf("%s.png", name)),
+		filepath.Join(scriptDir, "clients", fmt.Sprintf("%s.png", name)),
 		filepath.Join("/root", fmt.Sprintf("%s.png", name)),
 	}
-	for _, qp := range possibleQRPatterns {
+	for _, qp := range candidateQRPatterns {
 		if qrBytes, qrErr := os.ReadFile(qp); qrErr == nil && len(qrBytes) > 0 {
 			qrBase64 = "data:image/png;base64," + base64.StdEncoding.EncodeToString(qrBytes)
 			break
