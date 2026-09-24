@@ -342,6 +342,8 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		"node_type":   node.Type,
 		"config":      slaveResp.Config,
 		"qr_code":     slaveResp.QRCode,
+		"vpn_uri":     slaveResp.VPNURI,
+		"vpn_qr_code": slaveResp.VPNQRCode,
 		"created_at":  keyRecord.CreatedAt,
 	})
 }
@@ -396,6 +398,8 @@ func (s *Server) handleGetKey(w http.ResponseWriter, r *http.Request) {
 		"node_type":   node.Type,
 		"config":      slaveResp.Config,
 		"qr_code":     slaveResp.QRCode,
+		"vpn_uri":     slaveResp.VPNURI,
+		"vpn_qr_code": slaveResp.VPNQRCode,
 		"created_at":  keyRecord.CreatedAt,
 	})
 }

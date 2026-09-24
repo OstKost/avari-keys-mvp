@@ -210,6 +210,7 @@ PublicKey = aMockServerPublicKeyForDemoPurposes8901234=
 Endpoint = 198.51.100.1:51820
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25`,
+    vpn_uri: 'vpn://eyJob3N0TmFtZSI6IjE5OC41MS4xMDAuMSIsImRlc2NyaXB0aW9uIjoiQXZhcmkgS2V5cyBDYXNjYWRlIE0wLT5TMSIsImNvbmZpZyI6IntcImRuczFcIjpcIjEuMS4xLjFcIixcInBvcnRcIjo1MTgyMCxcInByb3RvY29sXCI6XCJhd2dcIn0ifQ==',
     created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
   },
   {
@@ -243,6 +244,7 @@ PublicKey = aMockServerPublicKeyDirectTunnel1234567=
 Endpoint = 203.0.113.50:51820
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25`,
+    vpn_uri: 'vpn://eyJob3N0TmFtZSI6IjIwMy4wLjExMy41MCIsImRlc2NyaXB0aW9uIjoiQXZhcmkgS2V5cyBEaXJlY3QgUzIiLCJjb25maWciOiJ7XCJkbnMxXCI6XCI4LjguOC44XCIsXCJwb3J0XCI6NTE4MjAsXCJwcm90b2NvbFwiOlwiYXdnXCJ9In0=',
     created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
   },
   {
@@ -276,6 +278,7 @@ PublicKey = aMockServerPublicKeyForDemoPurposes8901234=
 Endpoint = 198.51.100.1:51820
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25`,
+    vpn_uri: 'vpn://eyJob3N0TmFtZSI6IjE5OC41MS4xMDAuMSIsImRlc2NyaXB0aW9uIjoiQXZhcmkgS2V5cyBBbGljZSBQaG9uZSIsImNvbmZpZyI6IntcImRuczFcIjpcIjEuMS4xLjFcIixcInBvcnRcIjo1MTgyMCxcInByb3RvY29sXCI6XCJhd2dcIn0ifQ==',
     created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
   },
 ];
@@ -399,6 +402,8 @@ Endpoint = 198.51.100.${nodeId}:51820
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25`;
 
+    const vpnUri = `vpn://eyJob3N0TmFtZSI6IjE5OC41MS4xMDAuJHtub2RlSWR9IiwiZGVzY3JpcHRpb24iOiJBdmFyaSBLZXlzICR7ZGV2aWNlTmFtZX0iLCJjb25maWciOiJ7XCJkbnMxXCI6XCIxLjEuMS4xXCIsXCJwb3J0XCI6NTE4MjAsXCJwcm90b2NvbFwiOlwiYXdnXCJ9In0=`;
+
     const newKeyDetail: ClientConfigDetail & { user_id: number } = {
       id,
       user_id: mockCurrentUser.id,
@@ -408,6 +413,7 @@ PersistentKeepalive = 25`;
       node_name: nodeName,
       node_type: nodeType,
       config,
+      vpn_uri: vpnUri,
       created_at: new Date().toISOString(),
     };
 

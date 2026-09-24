@@ -67,11 +67,15 @@ PersistentKeepalive = 25
 `, len(m.clients)+3, pskLine)
 
 	mockQR := fmt.Sprintf("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100' height='100' fill='black'/><text x='10' y='50' fill='white'>QR:%s</text></svg>", name)
+	mockVPNURI := fmt.Sprintf("vpn://?payload=mockAmneziaVpnUriForClient_%s", name)
+	mockVPNQR := fmt.Sprintf("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100' height='100' fill='#102833'/><text x='10' y='50' fill='#D9B96E'>VPN:%s</text></svg>", name)
 
 	res := &models.ClientResponse{
 		Name:      name,
 		Config:    config,
 		QRCode:    mockQR,
+		VPNURI:    mockVPNURI,
+		VPNQRCode: mockVPNQR,
 		PublicKey: fmt.Sprintf("mockPubKey-%s", name),
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}

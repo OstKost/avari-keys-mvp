@@ -66,6 +66,8 @@ export interface ClientConfigDetail {
   node_type: 'cascade' | 'direct';
   config: string;
   qr_code?: string;
+  vpn_uri?: string;
+  vpn_qr_code?: string;
   created_at: string;
 }
 

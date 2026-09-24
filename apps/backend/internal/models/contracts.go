@@ -20,7 +20,9 @@ type ClientCreateRequest struct {
 type ClientResponse struct {
 	Name      string `json:"name"`
 	Config    string `json:"config"`
-	QRCode    string `json:"qr_code,omitempty"`    // Base64 PNG or SVG data URI
+	QRCode    string `json:"qr_code,omitempty"`     // Base64 PNG or SVG data URI for AWG
+	VPNURI    string `json:"vpn_uri,omitempty"`     // AmneziaVPN URI (vpn://...)
+	VPNQRCode string `json:"vpn_qr_code,omitempty"` // Base64 PNG or SVG data URI for AmneziaVPN
 	PublicKey string `json:"public_key,omitempty"`
 	CreatedAt string `json:"created_at,omitempty"`
 }
