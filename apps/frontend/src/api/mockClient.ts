@@ -14,6 +14,7 @@ import {
   BillingStatus,
   AdminBillingSummary,
   BillingRequisites,
+  TelegramStatusResponse,
 } from '../types';
 
 // In-memory mock storage for standalone FE development
@@ -978,6 +979,33 @@ PersistentKeepalive = 25`;
   async updateBillingRequisites(req: BillingRequisites): Promise<BillingRequisites> {
     mockRequisites = { ...req };
     return { ...mockRequisites };
+  },
+
+  async getTelegramStatus(): Promise<TelegramStatusResponse> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return {
+      enabled: true,
+      bot_username: 'AvariElfBot',
+      subscribers: [
+        {
+          chat_id: 123456789,
+          username: 'ForveAdmin',
+          first_name: 'Forve',
+          is_admin: true,
+          alerts_enabled: true,
+          created_at: new Date().toISOString(),
+        },
+      ],
+      total_subscribers: 1,
+    };
+  },
+
+  async sendTelegramTestAlert(): Promise<{ success: boolean; message: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return {
+      success: true,
+      message: 'Тестовое оповещение успешно отправлено в Telegram @AvariElfBot',
+    };
   },
 };
 

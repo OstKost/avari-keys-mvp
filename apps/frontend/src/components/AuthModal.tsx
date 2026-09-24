@@ -44,7 +44,7 @@ export function AuthModal({ onSuccess }: Props) {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-[#06141B] overflow-hidden">
+    <div className="relative min-h-screen flex items-center justify-center p-4 sm:p-6 bg-[#06141B] overflow-hidden">
       {/* Fantasy Elven Background Art */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-40 mix-blend-luminosity scale-105 transition duration-1000"
@@ -53,16 +53,21 @@ export function AuthModal({ onSuccess }: Props) {
       <div className="absolute inset-0 bg-gradient-to-t from-[#06141B] via-[#06141B]/80 to-[#06141B]/60" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(217,185,110,0.08)_0%,transparent_60%)]" />
 
-      {/* Main Container: Mascot on Side + Login Card */}
-      <div className="relative z-10 max-w-5xl w-full flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-14 my-auto">
+      {/* Centered Area: Form in Dead Center + Mascot to the Left on Desktop */}
+      <div className="relative z-10 max-w-md w-full my-auto flex flex-col items-center">
         
-        {/* Mascot Character Standing Beside Form */}
-        <div className="flex-shrink-0">
+        {/* Mascot Character Standing to the Left of the Centered Form (Desktop lg+) */}
+        <div className="hidden lg:block absolute right-[calc(100%+2rem)] xl:right-[calc(100%+3.5rem)] bottom-0 w-80">
           <MascotAuthCompanion isRegister={isRegister} />
         </div>
 
-        {/* Login Card */}
-        <div className="max-w-md w-full bg-[#0A1D26]/90 backdrop-blur-xl border border-[#1C3945] hover:border-[#D9B96E]/40 rounded-3xl p-8 sm:p-10 shadow-2xl shadow-black/80 transition-all duration-500">
+        {/* Mascot on Mobile (Above card) */}
+        <div className="lg:hidden mb-4 w-full flex justify-center">
+          <MascotAuthCompanion isRegister={isRegister} />
+        </div>
+
+        {/* Login Card (Exact Center) */}
+        <div className="w-full bg-[#0A1D26]/90 backdrop-blur-xl border border-[#1C3945] hover:border-[#D9B96E]/40 rounded-3xl p-8 sm:p-10 shadow-2xl shadow-black/80 transition-all duration-500">
           
           {/* Brand Logo & Header */}
           <div className="flex flex-col items-center text-center mb-8">

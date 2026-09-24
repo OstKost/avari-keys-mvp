@@ -80,25 +80,17 @@ export function OnboardingTour({
 
   return createPortal(
     <div className="fixed bottom-24 sm:bottom-8 left-4 right-4 sm:left-auto sm:right-8 z-50 max-w-xl w-full flex items-end gap-3 sm:gap-4 animate-slideUp">
-      {/* Standing Character Mascot to the left of the dialog card */}
-      <div className="hidden sm:flex flex-col items-center shrink-0 animate-mascot-float">
-        <div className="relative w-28 h-40 rounded-3xl overflow-hidden border-2 border-[#D9B96E] bg-gradient-to-b from-[#102833] via-[#0A1D26] to-[#06141B] shadow-2xl shadow-black/90">
-          <img 
-            src="/assets/mascot.png" 
-            alt="Avari Companion" 
-            className="w-full h-full object-cover object-top filter contrast-[1.08]"
-          />
-          <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-[#0A1D26] to-transparent" />
-          <div className="absolute bottom-1 inset-x-1 flex justify-center">
-            <span className="bg-[#06141B]/90 border border-[#D9B96E]/50 text-[#F0D48D] text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded-full">
-              Хранитель
-            </span>
-          </div>
-        </div>
+      {/* Standing Cutout Mascot to the left of the dialog card */}
+      <div className="hidden sm:flex flex-col items-center shrink-0 select-none">
+        <img 
+          src="/assets/mascot.png" 
+          alt="Avari Companion" 
+          className="w-28 sm:w-36 max-h-48 object-contain object-bottom filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)] drop-shadow-[0_0_15px_rgba(217,185,110,0.25)] pointer-events-none"
+        />
       </div>
 
-      {/* Speech Dialog Card */}
-      <div className="flex-1 bg-[#0A1D26]/95 border-2 border-[#D9B96E] rounded-3xl p-5 sm:p-6 shadow-2xl backdrop-blur-xl shadow-black/90 relative overflow-hidden">
+      {/* Speech Dialog Card with Shimmering Golden Border */}
+      <div className="flex-1 bg-[#0A1D26]/95 border-2 border-[#D9B96E] animate-border-shimmer rounded-3xl p-5 sm:p-6 shadow-2xl backdrop-blur-xl shadow-black/90 relative overflow-hidden">
         {/* Glow decoration */}
         <div className="absolute top-0 right-0 w-36 h-36 bg-[radial-gradient(circle_at_100%_0%,rgba(217,185,110,0.15)_0%,transparent_70%)] pointer-events-none" />
 

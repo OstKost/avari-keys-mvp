@@ -13,6 +13,7 @@ import {
   BillingStatus,
   AdminBillingSummary,
   BillingRequisites,
+  TelegramStatusResponse,
 } from '../types';
 
 import { mockApi } from './mockClient';
@@ -441,6 +442,21 @@ const realApi = {
       body: JSON.stringify(req),
     });
     return handleResponse<BillingRequisites>(res);
+  },
+
+  async getTelegramStatus(): Promise<TelegramStatusResponse> {
+    const res = await fetch(`${API_BASE}/admin/telegram/status`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<TelegramStatusResponse>(res);
+  },
+
+  async sendTelegramTestAlert(): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/admin/telegram/test`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<{ success: boolean; message: string }>(res);
   },
 };
 

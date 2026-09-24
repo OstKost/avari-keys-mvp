@@ -16,9 +16,12 @@ import {
   ExternalLink,
   Globe,
   ArrowRightLeft,
+  Send,
+  Bot,
+  BellRing,
 } from 'lucide-react';
 import { api } from '../api/client';
-import { AdminNode, EgressStatusResponse } from '../types';
+import { AdminNode, EgressStatusResponse, TelegramStatusResponse } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 
 import { useToast } from '../context/ToastContext';
@@ -31,6 +34,10 @@ export function AdminNodes() {
   const [nodes, setNodes] = useState<AdminNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
+
+  // Telegram status state
+  const [telegramStatus, setTelegramStatus] = useState<TelegramStatusResponse | null>(null);
+  const [isSendingTestAlert, setIsSendingTestAlert] = useState(false);
 
   // Form state for adding node
   const [showAddForm, setShowAddForm] = useState(false);
@@ -109,13 +116,39 @@ export function AdminNodes() {
   };
 
 
+  const fetchTelegramStatus = async () => {
+    try {
+      const status = await api.getTelegramStatus();
+      setTelegramStatus(status);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSendTelegramTestAlert = async () => {
+    try {
+      setIsSendingTestAlert(true);
+      const res = await api.sendTelegramTestAlert();
+      toast.success(res.message || 'Тестовое оповещение отправлено в Telegram');
+      fetchTelegramStatus();
+    } catch (err: any) {
+      toast.error(err.message || 'Ошибка отправки тестового оповещения в Telegram');
+    } finally {
+      setIsSendingTestAlert(false);
+    }
+  };
+
   const fetchNodes = async (showSpin = false, silent = false) => {
     try {
       if (showSpin) setIsChecking(true);
       else if (!silent) setLoading(true);
-      const data = await api.getAdminNodes();
+      const [data, tg] = await Promise.all([
+        api.getAdminNodes(),
+        api.getTelegramStatus().catch(() => null),
+      ]);
       const safeData = Array.isArray(data) ? data : [];
       setNodes(safeData);
+      if (tg) setTelegramStatus(tg);
       if (showSpin) {
         const onlineCount = safeData.filter((n) => n.online).length;
         toast.success(`Health Check завершен: доступно ${onlineCount} из ${safeData.length} серверов`);
@@ -378,6 +411,71 @@ export function AdminNodes() {
             <Plus className="w-4 h-4" />
             <span>Добавить Сервер</span>
           </button>
+        </div>
+      </div>
+
+      {/* Telegram Bot Alert Status Card */}
+      <div className="bg-[#0B1E28] border border-[#1C3945] rounded-2xl p-4 sm:p-5 mb-6 shadow-xl relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center space-x-3.5">
+            <div className="w-10 h-10 rounded-xl bg-[#102833] border border-[#D9B96E]/30 flex items-center justify-center flex-shrink-0 text-[#D9B96E] shadow-md shadow-[#D9B96E]/10">
+              <Bot className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2.5 flex-wrap">
+                <span className="font-serif font-bold text-[#F2F0E8] text-base">
+                  Оповещения в Telegram
+                </span>
+                <span className="text-xs font-mono text-[#D9B96E] bg-[#102833] px-2 py-0.5 rounded-md border border-[#1C3945]">
+                  @{telegramStatus?.bot_username || 'AvariElfBot'}
+                </span>
+                {telegramStatus?.enabled ? (
+                  <span className="inline-flex items-center space-x-1 text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>Бот активен</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center space-x-1 text-xs font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                    <span>Токен не задан</span>
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[#A8B4B7] mt-1">
+                Мгновенные уведомления о сбоях серверов, восстановлении работы и регистрации новых пользователей.
+                {telegramStatus?.total_subscribers ? (
+                  <span className="text-[#D9B96E] ml-1 font-semibold">
+                    (Подключено получателей: {telegramStatus.total_subscribers})
+                  </span>
+                ) : (
+                  <span className="text-amber-300 ml-1">
+                    Откройте бота и отправьте <code className="text-[#F2F0E8]">/start</code> для подписки.
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2.5 flex-wrap sm:flex-nowrap">
+            <a
+              href={`https://t.me/${telegramStatus?.bot_username || 'AvariElfBot'}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center space-x-1.5 text-xs font-mono uppercase tracking-wider bg-[#102833] hover:bg-[#1C3945] text-[#D9B96E] hover:text-[#F0D48D] px-3.5 py-2 rounded-xl border border-[#1C3945] transition cursor-pointer"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Открыть бота</span>
+              <ExternalLink className="w-3 h-3 opacity-60" />
+            </a>
+
+            <button
+              onClick={handleSendTelegramTestAlert}
+              disabled={isSendingTestAlert || !telegramStatus?.enabled}
+              className="flex items-center space-x-1.5 text-xs font-mono uppercase tracking-wider bg-[#163645] hover:bg-[#1E485D] text-[#F2F0E8] px-3.5 py-2 rounded-xl border border-[#2A5266] transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <BellRing className={`w-3.5 h-3.5 ${isSendingTestAlert ? 'animate-bounce text-[#D9B96E]' : ''}`} />
+              <span>{isSendingTestAlert ? 'Отправка...' : 'Тест алерта'}</span>
+            </button>
+          </div>
         </div>
       </div>
 

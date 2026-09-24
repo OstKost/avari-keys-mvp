@@ -1490,16 +1490,6 @@ func (s *Server) handleAdminUpdateBillingRequisites(w http.ResponseWriter, r *ht
 }
 
 func (s *Server) handleAdminGetTelegramStatus(w http.ResponseWriter, r *http.Request) {
-	if s.telegramBot == nil || !s.telegramBot.IsEnabled() {
-		s.writeJSON(w, http.StatusOK, models.TelegramStatusResponse{
-			Enabled:          false,
-			BotUsername:      "",
-			Subscribers:      []models.TelegramChat{},
-			TotalSubscribers: 0,
-		})
-		return
-	}
-
 	chats, err := s.storage.ListTelegramChats(r.Context())
 	if err != nil {
 		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1511,13 +1501,16 @@ func (s *Server) handleAdminGetTelegramStatus(w http.ResponseWriter, r *http.Req
 		botUsername = "AvariElfBot"
 	}
 
+	isEnabled := s.telegramBot != nil && s.telegramBot.IsEnabled()
+
 	s.writeJSON(w, http.StatusOK, models.TelegramStatusResponse{
-		Enabled:          true,
+		Enabled:          isEnabled,
 		BotUsername:      botUsername,
 		Subscribers:      chats,
 		TotalSubscribers: len(chats),
 	})
 }
+
 
 func (s *Server) handleAdminSendTelegramTest(w http.ResponseWriter, r *http.Request) {
 	claims, _ := auth.GetUserFromContext(r.Context())

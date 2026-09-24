@@ -302,16 +302,34 @@ type TelegramChat struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+// TelegramSettings represents configurable Telegram Bot settings in Master Backend.
+type TelegramSettings struct {
+	Enabled             bool   `json:"enabled"`
+	BotToken            string `json:"bot_token"`
+	BotUsername         string `json:"bot_username"`
+	AdminSecret         string `json:"admin_secret"`
+	NotifyOnNodeDown    bool   `json:"notify_on_node_down"`
+	NotifyOnNodeRecover bool   `json:"notify_on_node_recover"`
+	NotifyOnNewUser     bool   `json:"notify_on_new_user"`
+}
+
 // TelegramStatusResponse represents the current status of the Telegram bot.
 type TelegramStatusResponse struct {
-	Enabled       bool           `json:"enabled"`
-	BotUsername   string         `json:"bot_username"`
-	Subscribers   []TelegramChat `json:"subscribers"`
-	TotalSubscribers int         `json:"total_subscribers"`
+	Enabled          bool              `json:"enabled"`
+	BotUsername      string            `json:"bot_username"`
+	Settings         *TelegramSettings `json:"settings,omitempty"`
+	Subscribers      []TelegramChat    `json:"subscribers"`
+	TotalSubscribers int               `json:"total_subscribers"`
 }
 
 // TelegramTestAlertRequest for sending a test notification.
 type TelegramTestAlertRequest struct {
 	Message string `json:"message,omitempty"`
 }
+
+// TelegramSubscriberToggleRequest for enabling/disabling subscriber alerts.
+type TelegramSubscriberToggleRequest struct {
+	AlertsEnabled bool `json:"alerts_enabled"`
+}
+
 

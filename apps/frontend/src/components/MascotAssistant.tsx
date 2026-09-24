@@ -273,25 +273,25 @@ export function MascotModalCompanion({
   );
 }
 
-// Auth Screen Companion (Standing to the side on Desktop, or over card on mobile)
+// Auth Screen Companion (Standing to the left of centered form)
 export function MascotAuthCompanion({
   isRegister = false
 }: {
   isRegister?: boolean;
 }) {
   return (
-    <div className="flex flex-col items-center">
-      {/* Speech Bubble */}
-      <div className="animate-bubble-float mb-3 w-full max-w-sm">
-        <div className="relative bg-[#0A1D26]/95 border-2 border-[#D9B96E] p-4 rounded-3xl shadow-2xl backdrop-blur-xl text-xs sm:text-sm text-[#F2F0E8] font-sans shadow-black/90 text-center">
+    <div className="flex flex-col items-center select-none">
+      {/* Speech Bubble with Shimmering Animated Border */}
+      <div className="mb-2 w-full max-w-[300px] relative z-20">
+        <div className="relative bg-[#0A1D26]/95 border-2 border-[#D9B96E] animate-border-shimmer p-4 rounded-3xl shadow-2xl backdrop-blur-xl text-xs sm:text-sm text-[#F2F0E8] font-sans shadow-black/90 text-center">
           <div className="flex items-center justify-center space-x-1.5 text-xs font-mono font-bold text-[#D9B96E] uppercase tracking-wider mb-1">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Хранитель Avari Keys</span>
+            <span>Хранитель Avari</span>
           </div>
           <p className="leading-relaxed text-[#D9E1E3]">
             {isRegister
-              ? 'Приветствую тебя! Создай учетную запись, и я проведу тебя за руку при создании твоего первого защищенного ключа.'
-              : 'Рад снова приветствовать тебя в Avari Keys! Войди в систему, чтобы продолжить управление твоими ключами.'}
+              ? 'Приветствую тебя! Создай учетную запись, и я помогу настроить твой первый защищенный ключ.'
+              : 'Рад снова приветствовать тебя в Avari Keys! Войди в систему, чтобы управлять своими ключами.'}
           </p>
           {/* Downward Bubble Tail */}
           <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-[#D9B96E]" />
@@ -299,23 +299,13 @@ export function MascotAuthCompanion({
         </div>
       </div>
 
-      {/* Character Figure */}
-      <div className="relative w-48 h-64 sm:w-56 sm:h-80 animate-mascot-float">
-        <div className="absolute -inset-2 bg-gradient-to-t from-[#D9B96E]/40 via-[#F0D48D]/20 to-[#6EA8C4]/30 rounded-3xl blur-xl opacity-80 pointer-events-none" />
-        <div className="relative w-full h-full rounded-3xl overflow-hidden border-2 border-[#D9B96E] bg-gradient-to-b from-[#102833]/90 via-[#0A1D26] to-[#06141B] shadow-2xl shadow-black/90">
-          <img 
-            src="/assets/mascot.png" 
-            alt="Avari Companion" 
-            className="w-full h-full object-cover object-top filter contrast-[1.08]"
-          />
-          <div className="absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-[#0A1D26] to-transparent" />
-          <div className="absolute bottom-3 inset-x-3 flex items-center justify-center">
-            <span className="bg-[#06141B]/95 border border-[#D9B96E]/70 text-[#F0D48D] text-xs font-mono font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-lg flex items-center space-x-1.5">
-              <Shield className="w-3.5 h-3.5 text-[#D9B96E]" />
-              <span>Твой персональный гид</span>
-            </span>
-          </div>
-        </div>
+      {/* Pure Cutout Mascot (No frame/container box, natural shadow & soft glow) */}
+      <div className="relative flex justify-center items-end">
+        <img 
+          src="/assets/mascot.png" 
+          alt="Avari Companion" 
+          className="w-52 sm:w-60 lg:w-72 max-h-[460px] object-contain object-bottom filter drop-shadow-[0_15px_30px_rgba(0,0,0,0.9)] drop-shadow-[0_0_20px_rgba(217,185,110,0.25)] pointer-events-none"
+        />
       </div>
     </div>
   );

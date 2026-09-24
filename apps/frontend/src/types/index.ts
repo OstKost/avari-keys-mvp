@@ -191,6 +191,23 @@ export interface BillingRequisites {
   sbp_bank: string;
 }
 
+export interface TelegramChat {
+  chat_id: number;
+  username: string;
+  first_name: string;
+  is_admin: boolean;
+  alerts_enabled: boolean;
+  created_at: string;
+}
+
+export interface TelegramStatusResponse {
+  enabled: boolean;
+  bot_username: string;
+  subscribers: TelegramChat[];
+  total_subscribers: number;
+}
+
+
 
 
 
