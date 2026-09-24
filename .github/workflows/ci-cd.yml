@@ -16,13 +16,14 @@ on:
       target:
         description: 'Компонент для деплоя на продакшене'
         required: true
-        default: 'all'
+        default: 'all-slaves'
         type: choice
         options:
           - 'all'
-          - 'frontend-only'
-          - 'master-api'
+          - 'all-slaves'
           - 'slave-api'
+          - 'master-api'
+          - 'frontend-only'
       target_host:
         description: 'IP/Хост целевого VPS (по умолчанию Master M0)'
         required: false
@@ -163,10 +164,9 @@ jobs:
   deploy-backend:
     name: ⚙️ Deploy Backend API (Manual Trigger)
     needs: test-and-build
-    # Runs ONLY on manual trigger (workflow_dispatch) when target is all, master-api, or slave-api
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      (github.event.inputs.target == 'all' || github.event.inputs.target == 'master-api' || github.event.inputs.target == 'slave-api')
+      (github.event.inputs.target == 'all' || github.event.inputs.target == 'all-slaves' || github.event.inputs.target == 'master-api' || github.event.inputs.target == 'slave-api')
     runs-on: ubuntu-latest
     concurrency:
       group: production-backend-deploy
@@ -203,6 +203,33 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           DEPLOY_TMP="/tmp/avari-backend-${RUN_ID}"
+
+          # Multi-slave deployment
+          if [ "${TARGET}" = "all-slaves" ]; then
+            SLAVE_HOSTS="157.22.252.225 185.213.240.136 157.228.142.20 157.228.130.7"
+            for HOST in ${SLAVE_HOSTS}; do
+              echo "=================================================="
+              echo "==> Deploying avari-slave to ${HOST}..."
+              echo "=================================================="
+              ssh -i ~/.ssh/id_deploy -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new ${SSH_USER}@${HOST} "mkdir -p ${DEPLOY_TMP} /usr/local/bin /opt/avari-keys/data"
+              scp -i ~/.ssh/id_deploy -P ${SSH_PORT} -o StrictHostKeyChecking=accept-new deploy-artifacts/dist/linux-amd64/avari-slave ${SSH_USER}@${HOST}:${DEPLOY_TMP}/avari-slave
+              ssh -i ~/.ssh/id_deploy -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new ${SSH_USER}@${HOST} "bash -se" << 'EOF'
+                set -e
+                install -m 755 /tmp/avari-backend-*/avari-slave /usr/local/bin/avari-slave
+                rm -rf /tmp/avari-backend-*
+                systemctl daemon-reload
+                if systemctl is-active --quiet avari-slave; then
+                  systemctl restart avari-slave
+                  echo "✅ avari-slave restarted successfully!"
+                else
+                  echo "ℹ️ avari-slave is not active on this host, skipping restart."
+                fi
+EOF
+            done
+            echo "🎉 All slave nodes successfully deployed!"
+            exit 0
+          fi
+
           SSH_CMD="ssh -i ~/.ssh/id_deploy -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new ${SSH_USER}@${TARGET_HOST}"
           SCP_CMD="scp -i ~/.ssh/id_deploy -P ${SSH_PORT} -o StrictHostKeyChecking=accept-new"
 
@@ -210,10 +237,9 @@ jobs:
           $SSH_CMD "mkdir -p ${DEPLOY_TMP} /usr/local/bin /opt/avari-keys/data"
 
           if [ "${TARGET}" = "all" ] || [ "${TARGET}" = "master-api" ]; then
-            echo "==> Uploading avari-master binary..."
+            echo "==> Uploading avari-master binary to ${TARGET_HOST}..."
             $SCP_CMD deploy-artifacts/dist/linux-amd64/avari-master ${SSH_USER}@${TARGET_HOST}:${DEPLOY_TMP}/avari-master
-            $SSH_CMD "chmod +x ${DEPLOY_TMP}/avari-master"
-            $SSH_CMD "install -m 755 ${DEPLOY_TMP}/avari-master /usr/local/bin/avari-master"
+            $SSH_CMD "chmod +x ${DEPLOY_TMP}/avari-master && install -m 755 ${DEPLOY_TMP}/avari-master /usr/local/bin/avari-master"
             
             echo "==> Restarting avari-master service..."
             $SSH_CMD "systemctl daemon-reload && systemctl restart avari-master"
@@ -223,10 +249,9 @@ jobs:
           fi
 
           if [ "${TARGET}" = "all" ] || [ "${TARGET}" = "slave-api" ]; then
-            echo "==> Uploading avari-slave binary..."
+            echo "==> Uploading avari-slave binary to ${TARGET_HOST}..."
             $SCP_CMD deploy-artifacts/dist/linux-amd64/avari-slave ${SSH_USER}@${TARGET_HOST}:${DEPLOY_TMP}/avari-slave
-            $SSH_CMD "chmod +x ${DEPLOY_TMP}/avari-slave"
-            $SSH_CMD "install -m 755 ${DEPLOY_TMP}/avari-slave /usr/local/bin/avari-slave"
+            $SSH_CMD "chmod +x ${DEPLOY_TMP}/avari-slave && install -m 755 ${DEPLOY_TMP}/avari-slave /usr/local/bin/avari-slave"
 
             echo "==> Restarting avari-slave service (if active/configured)..."
             $SSH_CMD "bash -se" << 'EOF'
@@ -237,7 +262,7 @@ jobs:
               else
                 echo "ℹ️ avari-slave is not active on this host, skipping service restart."
               fi
-            EOF
+EOF
           fi
 
           echo "==> Cleaning up temporary staging directory..."
@@ -247,3 +272,4 @@ jobs:
       - name: 🧹 Cleanup SSH Credentials
         if: always()
         run: rm -rf ~/.ssh/id_deploy
+
