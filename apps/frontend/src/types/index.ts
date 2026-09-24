@@ -35,6 +35,7 @@ export interface AdminNode {
 export interface ClientConfigSummary {
   id: number;
   user_id: number;
+  username?: string;
   node_id: number;
   client_name: string;
   device_name: string;
@@ -59,6 +60,8 @@ export interface PaginatedKeysResponse {
 
 export interface ClientConfigDetail {
   id: number;
+  user_id?: number;
+  username?: string;
   client_name: string;
   device_name: string;
   node_id: number;
@@ -181,6 +184,11 @@ export interface AdminBillingSummary {
   users_due_count: number;
   total_users: number;
   records: BillingRecord[];
+}
+
+export interface BillingRequisites {
+  sbp_phone: string;
+  sbp_bank: string;
 }
 
 

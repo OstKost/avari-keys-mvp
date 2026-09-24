@@ -12,6 +12,7 @@ import {
   EgressStatusResponse,
   BillingStatus,
   AdminBillingSummary,
+  BillingRequisites,
 } from '../types';
 
 import { mockApi } from './mockClient';
@@ -424,6 +425,22 @@ const realApi = {
       ...data,
       records: Array.isArray(data?.records) ? data.records : [],
     };
+  },
+
+  async getBillingRequisites(): Promise<BillingRequisites> {
+    const res = await fetch(`${API_BASE}/billing/requisites`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<BillingRequisites>(res);
+  },
+
+  async updateBillingRequisites(req: BillingRequisites): Promise<BillingRequisites> {
+    const res = await fetch(`${API_BASE}/admin/billing/requisites`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(req),
+    });
+    return handleResponse<BillingRequisites>(res);
   },
 };
 

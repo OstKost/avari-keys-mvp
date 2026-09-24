@@ -106,9 +106,11 @@ func (s *Server) routes() {
 
 	// Billing Routes
 	s.mux.HandleFunc("GET /api/v1/billing/status", auth.RequireAuth(s.handleGetBillingStatus))
+	s.mux.HandleFunc("GET /api/v1/billing/requisites", auth.RequireAuth(s.handleGetBillingRequisites))
 	s.mux.HandleFunc("POST /api/v1/billing/pay", auth.RequireAuth(s.handlePayDues))
 	s.mux.HandleFunc("POST /api/v1/billing/snooze", auth.RequireAuth(s.handleSnoozeDues))
 	s.mux.HandleFunc("GET /api/v1/admin/billing", auth.RequireAdmin(s.handleAdminGetBilling))
+	s.mux.HandleFunc("PUT /api/v1/admin/billing/requisites", auth.RequireAdmin(s.handleAdminUpdateBillingRequisites))
 
 	// Shared / Dashboard Routes
 	s.mux.HandleFunc("GET /api/v1/stats/dashboard", auth.RequireAuth(s.handleGetDashboardStats))
@@ -928,7 +930,8 @@ func (s *Server) handleAdminListAllKeys(w http.ResponseWriter, r *http.Request) 
 			matchDevice := strings.Contains(strings.ToLower(k.DeviceName), search)
 			matchClient := strings.Contains(strings.ToLower(k.ClientName), search)
 			matchNode := strings.Contains(strings.ToLower(k.NodeName), search)
-			if !matchDevice && !matchClient && !matchNode {
+			matchUser := strings.Contains(strings.ToLower(k.Username), search)
+			if !matchDevice && !matchClient && !matchNode && !matchUser {
 				continue
 			}
 		}
@@ -1376,6 +1379,34 @@ func (s *Server) handleAdminGetBilling(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, summary)
+}
+
+func (s *Server) handleGetBillingRequisites(w http.ResponseWriter, r *http.Request) {
+	reqs, err := s.storage.GetBillingRequisites(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, reqs)
+}
+
+func (s *Server) handleAdminUpdateBillingRequisites(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	var req models.BillingRequisites
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	updated, err := s.storage.UpdateBillingRequisites(r.Context(), req)
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "billing_requisites_update", fmt.Sprintf("Обновлены платежные реквизиты: СБП %s (%s)", updated.SBPPhone, updated.SBPBank))
+
+	s.writeJSON(w, http.StatusOK, updated)
 }
 
 func (s *Server) writeJSON(w http.ResponseWriter, status int, data any) {

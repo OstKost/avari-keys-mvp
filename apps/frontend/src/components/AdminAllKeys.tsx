@@ -5,6 +5,7 @@ import { ClientConfigSummary, AdminNode } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { useToast } from '../context/ToastContext';
 import { Loader } from './Loader';
+import { Tooltip } from './Tooltip';
 import { formatNodeRouting } from '../utils/country';
 
 export function AdminAllKeys() {
@@ -173,7 +174,10 @@ export function AdminAllKeys() {
                   <div className="font-medium text-[#F2F0E8] text-sm">{k.device_name}</div>
                   <div className="text-sm font-mono text-[#D9B96E] mt-0.5">{k.client_name}</div>
                 </td>
-                <td className="px-5 py-3.5 text-sm text-[#A8B4B7] font-mono">User #{k.user_id}</td>
+                <td className="px-5 py-3.5 text-sm font-mono">
+                  <span className="font-semibold text-[#F2F0E8]">{k.username || 'User'}</span>
+                  <span className="text-[#D9B96E]">#{k.user_id}</span>
+                </td>
                 <td className="px-5 py-3.5">
                   <div className="flex flex-col items-start gap-1">
                     <span
@@ -208,13 +212,15 @@ export function AdminAllKeys() {
                   {new Date(k.created_at).toLocaleDateString()}
                 </td>
                 <td className="px-5 py-3.5 text-right">
-                  <button
-                    onClick={() => setKeyToDelete(k)}
-                    title="Отозвать и удалить ключ"
-                    className="p-2 rounded-xl border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <Tooltip content="Отозвать и удалить VPN-ключ">
+                    <button
+                      onClick={() => setKeyToDelete(k)}
+                      aria-label="Отозвать и удалить ключ"
+                      className="p-2 rounded-xl border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </Tooltip>
                 </td>
               </tr>
             ))}

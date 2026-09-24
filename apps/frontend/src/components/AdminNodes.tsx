@@ -23,6 +23,7 @@ import { ConfirmModal } from './ConfirmModal';
 
 import { useToast } from '../context/ToastContext';
 import { Loader } from './Loader';
+import { Tooltip } from './Tooltip';
 import { COUNTRIES, formatNodeRouting, getCountryInfo } from '../utils/country';
 
 export function AdminNodes() {
@@ -642,61 +643,72 @@ export function AdminNodes() {
                     <div className="flex items-center justify-end space-x-1.5">
                       {/* Egress Switcher (Only for Cascade nodes) */}
                       {node.type === 'cascade' && (
-                        <button
-                          onClick={() => handleOpenEgress(node)}
-                          title="Управление шлюзом выхода каскада (Egress Switcher: S1 <-> S2)"
-                          className="p-2 rounded-xl border border-[#D9B96E]/50 bg-[#102833]/80 text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition shadow-sm"
-                        >
-                          <ArrowRightLeft className="w-4 h-4" />
-                        </button>
+                        <Tooltip content="Управление шлюзом выхода каскада (Egress: S1 ↔ S2)">
+                          <button
+                            onClick={() => handleOpenEgress(node)}
+                            aria-label="Управление шлюзом выхода каскада"
+                            className="p-2 rounded-xl border border-[#D9B96E]/50 bg-[#102833]/80 text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition shadow-sm"
+                          >
+                            <ArrowRightLeft className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
                       )}
 
                       {/* Edit Node */}
-                      <button
-                        onClick={() => handleOpenEdit(node)}
-                        title="Редактировать параметры сервера (страна, название, API, провайдер)"
-                        className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-
+                      <Tooltip content="Редактировать параметры сервера">
+                        <button
+                          onClick={() => handleOpenEdit(node)}
+                          aria-label="Редактировать параметры сервера"
+                          className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
 
                       {/* Restart Service */}
-                      <button
-                        onClick={() => setRestartingNode(node)}
-                        title="Перезапустить службу AmneziaWG"
-                        className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#A8B4B7] hover:bg-[#1C3945] hover:text-[#F0D48D] transition"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
+                      <Tooltip content="Перезапустить службу AmneziaWG">
+                        <button
+                          onClick={() => setRestartingNode(node)}
+                          aria-label="Перезапустить службу AmneziaWG"
+                          className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#A8B4B7] hover:bg-[#1C3945] hover:text-[#F0D48D] transition"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
 
                       {/* Backup */}
-                      <button
-                        onClick={() => handleBackupClick(node)}
-                        disabled={isBackingUp}
-                        title="Экспорт резервной копии (Backup)"
-                        className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#6EA8C4] hover:bg-[#1C3945] hover:text-[#A8B4B7] transition"
-                      >
-                        <Download className="w-4 h-4" />
-                      </button>
+                      <Tooltip content="Экспорт резервной копии (Backup)">
+                        <button
+                          onClick={() => handleBackupClick(node)}
+                          disabled={isBackingUp}
+                          aria-label="Экспорт резервной копии"
+                          className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#6EA8C4] hover:bg-[#1C3945] hover:text-[#A8B4B7] transition disabled:opacity-50"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
 
                       {/* Restore */}
-                      <button
-                        onClick={() => setRestoringNode(node)}
-                        title="Восстановить из копии (Restore)"
-                        className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#A8B4B7] hover:bg-[#1C3945] hover:text-[#F2F0E8] transition"
-                      >
-                        <Upload className="w-4 h-4" />
-                      </button>
+                      <Tooltip content="Восстановить из копии (Restore)">
+                        <button
+                          onClick={() => setRestoringNode(node)}
+                          aria-label="Восстановить из копии"
+                          className="p-2 rounded-xl border border-[#1C3945] bg-[#102833]/80 text-[#A8B4B7] hover:bg-[#1C3945] hover:text-[#F2F0E8] transition"
+                        >
+                          <Upload className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
 
                       {/* Delete */}
-                      <button
-                        onClick={() => setNodeToDelete(node)}
-                        title="Удалить ноду"
-                        className="p-2 rounded-xl border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <Tooltip content="Удалить сервер">
+                        <button
+                          onClick={() => setNodeToDelete(node)}
+                          aria-label="Удалить сервер"
+                          className="p-2 rounded-xl border border-rose-800/50 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
                     </div>
                   </td>
                 </tr>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -124,6 +125,12 @@ func (s *Storage) migrate() error {
 		note TEXT NOT NULL DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+
+	CREATE TABLE IF NOT EXISTS app_settings (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
@@ -504,11 +511,12 @@ func (s *Storage) CreateClientConfig(ctx context.Context, userID, nodeID int64, 
 func (s *Storage) GetClientConfigByID(ctx context.Context, id int64) (*models.ClientConfig, error) {
 	var c models.ClientConfig
 	err := s.db.QueryRowContext(ctx, `
-		SELECT c.id, c.user_id, c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type, n.country_code
+		SELECT c.id, c.user_id, COALESCE(u.username, ''), c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type, n.country_code
 		FROM client_configs c
 		JOIN nodes n ON c.node_id = n.id
+		LEFT JOIN users u ON c.user_id = u.id
 		WHERE c.id = ?
-	`, id).Scan(&c.ID, &c.UserID, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType, &c.NodeCountryCode)
+	`, id).Scan(&c.ID, &c.UserID, &c.Username, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType, &c.NodeCountryCode)
 	if err != nil {
 		return nil, err
 	}
@@ -517,9 +525,10 @@ func (s *Storage) GetClientConfigByID(ctx context.Context, id int64) (*models.Cl
 
 func (s *Storage) ListClientConfigsByUser(ctx context.Context, userID int64) ([]models.ClientConfig, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT c.id, c.user_id, c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type, n.country_code
+		SELECT c.id, c.user_id, COALESCE(u.username, ''), c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type, n.country_code
 		FROM client_configs c
 		JOIN nodes n ON c.node_id = n.id
+		LEFT JOIN users u ON c.user_id = u.id
 		WHERE c.user_id = ?
 		ORDER BY c.id DESC
 	`, userID)
@@ -531,7 +540,7 @@ func (s *Storage) ListClientConfigsByUser(ctx context.Context, userID int64) ([]
 	list := []models.ClientConfig{}
 	for rows.Next() {
 		var c models.ClientConfig
-		if err := rows.Scan(&c.ID, &c.UserID, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType, &c.NodeCountryCode); err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.Username, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType, &c.NodeCountryCode); err != nil {
 			return nil, err
 		}
 		list = append(list, c)
@@ -541,9 +550,10 @@ func (s *Storage) ListClientConfigsByUser(ctx context.Context, userID int64) ([]
 
 func (s *Storage) ListAllClientConfigs(ctx context.Context) ([]models.ClientConfig, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT c.id, c.user_id, c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type, n.country_code
+		SELECT c.id, c.user_id, COALESCE(u.username, ''), c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type, n.country_code
 		FROM client_configs c
 		JOIN nodes n ON c.node_id = n.id
+		LEFT JOIN users u ON c.user_id = u.id
 		ORDER BY c.id DESC
 	`)
 	if err != nil {
@@ -554,7 +564,7 @@ func (s *Storage) ListAllClientConfigs(ctx context.Context) ([]models.ClientConf
 	list := []models.ClientConfig{}
 	for rows.Next() {
 		var c models.ClientConfig
-		if err := rows.Scan(&c.ID, &c.UserID, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType, &c.NodeCountryCode); err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.Username, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType, &c.NodeCountryCode); err != nil {
 			return nil, err
 		}
 		list = append(list, c)
@@ -954,5 +964,42 @@ func (s *Storage) GetAllBillingRecords(ctx context.Context) (*models.AdminBillin
 		TotalUsers:    len(users),
 		Records:       records,
 	}, nil
+}
+
+func (s *Storage) GetBillingRequisites(ctx context.Context) (*models.BillingRequisites, error) {
+	var val string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key = 'billing_requisites'`).Scan(&val)
+	if err != nil {
+		// Default fallback
+		return &models.BillingRequisites{
+			SBPPhone: "+7 (999) 000-00-00",
+			SBPBank:  "Т-Банк / Сбербанк",
+		}, nil
+	}
+
+	var req models.BillingRequisites
+	if err := json.Unmarshal([]byte(val), &req); err != nil {
+		return &models.BillingRequisites{
+			SBPPhone: "+7 (999) 000-00-00",
+			SBPBank:  "Т-Банк / Сбербанк",
+		}, nil
+	}
+	return &req, nil
+}
+
+func (s *Storage) UpdateBillingRequisites(ctx context.Context, req models.BillingRequisites) (*models.BillingRequisites, error) {
+	data, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO app_settings (key, value, updated_at)
+		VALUES ('billing_requisites', ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+	`, string(data))
+	if err != nil {
+		return nil, err
+	}
+	return &req, nil
 }
 

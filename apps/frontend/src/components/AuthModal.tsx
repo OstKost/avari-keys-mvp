@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { LogIn, UserPlus, AlertCircle, CheckCircle2, User as UserIcon, ShieldCheck } from 'lucide-react';
 import { api, loginAsDemoUser } from '../api/client';
 import { User } from '../types';
+import { MascotAuthGreeting } from './MascotAssistant';
 
 interface Props {
   onSuccess: (user: User) => void;
@@ -73,6 +74,9 @@ export function AuthModal({ onSuccess }: Props) {
             {isRegister ? 'Регистрация хранителя' : 'Свобода выбора • Твои ключи'}
           </p>
         </div>
+
+        {/* Mascot Greeting */}
+        <MascotAuthGreeting isRegister={isRegister} />
 
         {/* Status Alerts */}
         {error && (

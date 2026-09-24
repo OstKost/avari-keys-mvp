@@ -65,6 +65,7 @@ type NodeWithStatus struct {
 type ClientConfig struct {
 	ID                    int64     `json:"id"`
 	UserID                int64     `json:"user_id"`
+	Username              string    `json:"username,omitempty"`
 	NodeID                int64     `json:"node_id"`
 	ClientName            string    `json:"client_name"` // e.g. "u1_iphone"
 	DeviceName            string    `json:"device_name"` // e.g. "iPhone"
@@ -284,4 +285,9 @@ type DashboardStatsResponse struct {
 	GeneratedAt           time.Time                `json:"generated_at"`
 }
 
+// BillingRequisites represents customizable payment details for cooperative dues.
+type BillingRequisites struct {
+	SBPPhone string `json:"sbp_phone"`
+	SBPBank  string `json:"sbp_bank"`
+}
 
