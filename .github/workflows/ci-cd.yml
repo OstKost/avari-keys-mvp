@@ -12,6 +12,22 @@ on:
       - master
       - develop
   workflow_dispatch:
+    inputs:
+      target:
+        description: 'Компонент для деплоя на продакшене'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - 'frontend-only'
+          - 'master-api'
+          - 'slave-api'
+      target_host:
+        description: 'IP/Хост целевого VPS (по умолчанию Master M0)'
+        required: false
+        default: '157.22.252.225'
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -19,7 +35,7 @@ concurrency:
 
 jobs:
   # ==========================================
-  # 1. Test, Lint and Build Artifacts
+  # 1. Сборка, линтинг и тестирование
   # ==========================================
   test-and-build:
     name: 🧪 Test & Build Artifacts
@@ -73,16 +89,17 @@ jobs:
             apps/frontend/dist/
 
   # ==========================================
-  # 2. Secure Production Deployment to VPS
+  # 2. Деплой Frontend SPA (Автоматически на push в main или вручную)
   # ==========================================
-  deploy:
-    name: 🚀 Deploy to VPS (157.22.252.225)
+  deploy-frontend:
+    name: 🌐 Deploy Frontend (Web SPA)
     needs: test-and-build
-    # Only deploy on pushes or manual dispatches to master or main
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') || (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+    if: >-
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.target == 'all' || github.event.inputs.target == 'frontend-only'))
     runs-on: ubuntu-latest
     concurrency:
-      group: production-vps-deploy
+      group: production-frontend-deploy
       cancel-in-progress: false
 
     steps:
@@ -102,86 +119,131 @@ jobs:
             echo "❌ Error: Secret SSH_PRIVATE_KEY is not defined in GitHub repository secrets."
             exit 1
           fi
-
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-
-          # Add remote host to known_hosts to prevent MITM warnings
           ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: 📦 Sync Binaries & Frontend to VPS (Atomic Swap)
+      - name: 📦 Sync Frontend Static Files (Atomic Swap)
         env:
           SSH_HOST: ${{ secrets.SSH_HOST || '157.22.252.225' }}
           SSH_USER: ${{ secrets.SSH_USER || 'root' }}
           SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
           RUN_ID: ${{ github.run_id }}
         run: |
-          DEPLOY_TMP="/tmp/avari-deploy-${RUN_ID}"
+          DEPLOY_TMP="/tmp/avari-front-${RUN_ID}"
           SSH_CMD="ssh -i ~/.ssh/id_deploy -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new ${SSH_USER}@${SSH_HOST}"
-          SCP_CMD="scp -i ~/.ssh/id_deploy -P ${SSH_PORT} -o StrictHostKeyChecking=accept-new"
           RSYNC_CMD="rsync -avz --delete -e \"ssh -i ~/.ssh/id_deploy -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new\""
 
-          echo "==> Creating temporary deployment folder on VPS: ${DEPLOY_TMP}..."
-          $SSH_CMD "mkdir -p ${DEPLOY_TMP}/bin ${DEPLOY_TMP}/frontend /var/www/avari-keys/frontend /opt/avari-keys/data"
+          echo "==> Creating temporary frontend staging folder..."
+          $SSH_CMD "mkdir -p ${DEPLOY_TMP} /var/www/avari-keys/frontend"
 
-          echo "==> Uploading compiled binaries..."
-          $SCP_CMD deploy-artifacts/dist/linux-amd64/avari-master ${SSH_USER}@${SSH_HOST}:${DEPLOY_TMP}/bin/avari-master
-          $SCP_CMD deploy-artifacts/dist/linux-amd64/avari-slave ${SSH_USER}@${SSH_HOST}:${DEPLOY_TMP}/bin/avari-slave
-          $SSH_CMD "chmod +x ${DEPLOY_TMP}/bin/avari-master ${DEPLOY_TMP}/bin/avari-slave"
+          echo "==> Uploading Frontend build to staging..."
+          eval $RSYNC_CMD deploy-artifacts/apps/frontend/dist/ ${SSH_USER}@${SSH_HOST}:${DEPLOY_TMP}/
 
-          echo "==> Uploading Frontend SPA static build..."
-          eval $RSYNC_CMD deploy-artifacts/apps/frontend/dist/ ${SSH_USER}@${SSH_HOST}:${DEPLOY_TMP}/frontend/
-
-          echo "==> Atomically applying changes on VPS..."
-          $SSH_CMD "bash -se" << 'EOF'
+          echo "==> Applying frontend update..."
+          $SSH_CMD "bash -se" << EOF
             set -euo pipefail
-
-            # 1. Update binaries safely using install (preserves execution and replaces cleanly)
-            install -m 755 /tmp/avari-deploy-${RUN_ID}/bin/avari-master /usr/local/bin/avari-master
-            install -m 755 /tmp/avari-deploy-${RUN_ID}/bin/avari-slave /usr/local/bin/avari-slave
-
-            # 2. Update frontend SPA files
-            rsync -av --delete /tmp/avari-deploy-${RUN_ID}/frontend/ /var/www/avari-keys/frontend/
-
-            # 3. Clean up staging directory
-            rm -rf /tmp/avari-deploy-${RUN_ID}
-
-            # 4. Restart or reload services
-            systemctl daemon-reload
-            if systemctl is-active --quiet avari-master; then
-              echo "Restarting avari-master..."
-              systemctl restart avari-master
-            else
-              echo "Starting avari-master..."
-              systemctl enable --now avari-master || true
-            fi
-
-            if systemctl is-active --quiet avari-slave; then
-              echo "Restarting avari-slave..."
-              systemctl restart avari-slave
-            fi
-
+            rsync -av --delete ${DEPLOY_TMP}/ /var/www/avari-keys/frontend/
+            rm -rf ${DEPLOY_TMP}
             if systemctl is-active --quiet caddy; then
               echo "Reloading caddy..."
               systemctl reload caddy || true
             fi
           EOF
+          echo "✅ Frontend successfully updated!"
 
-      - name: 🩺 Verify Deployment Health
+      - name: 🧹 Cleanup SSH Credentials
+        if: always()
+        run: rm -rf ~/.ssh/id_deploy
+
+  # ==========================================
+  # 3. Деплой Backend API (Только ручной запуск workflow_dispatch)
+  # ==========================================
+  deploy-backend:
+    name: ⚙️ Deploy Backend API (Manual Trigger)
+    needs: test-and-build
+    # Runs ONLY on manual trigger (workflow_dispatch) when target is all, master-api, or slave-api
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (github.event.inputs.target == 'all' || github.event.inputs.target == 'master-api' || github.event.inputs.target == 'slave-api')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-backend-deploy
+      cancel-in-progress: false
+
+    steps:
+      - name: 📥 Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: avari-build-artifacts
+          path: deploy-artifacts
+
+      - name: 🔑 Configure SSH Key
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST || '157.22.252.225' }}
-          SSH_USER: ${{ secrets.SSH_USER || 'root' }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ github.event.inputs.target_host || secrets.SSH_HOST || '157.22.252.225' }}
           SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
         run: |
-          SSH_CMD="ssh -i ~/.ssh/id_deploy -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new ${SSH_USER}@${SSH_HOST}"
-          
-          echo "==> Checking systemd status of avari-master..."
-          sleep 2
-          $SSH_CMD "systemctl is-active avari-master"
-          echo "✅ Service avari-master is active and healthy!"
+          if [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "❌ Error: Secret SSH_PRIVATE_KEY is not defined in GitHub repository secrets."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: 🧹 Cleanup Local SSH Credentials
-        if: always()
+      - name: 🚀 Deploy Selected Binaries & Restart Services
+        env:
+          TARGET: ${{ github.event.inputs.target }}
+          TARGET_HOST: ${{ github.event.inputs.target_host || secrets.SSH_HOST || '157.22.252.225' }}
+          SSH_USER: ${{ secrets.SSH_USER || 'root' }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          RUN_ID: ${{ github.run_id }}
         run: |
-          rm -rf ~/.ssh/id_deploy
+          DEPLOY_TMP="/tmp/avari-backend-${RUN_ID}"
+          SSH_CMD="ssh -i ~/.ssh/id_deploy -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new ${SSH_USER}@${TARGET_HOST}"
+          SCP_CMD="scp -i ~/.ssh/id_deploy -P ${SSH_PORT} -o StrictHostKeyChecking=accept-new"
+
+          echo "==> Target action: ${TARGET} on host: ${TARGET_HOST}"
+          $SSH_CMD "mkdir -p ${DEPLOY_TMP} /usr/local/bin /opt/avari-keys/data"
+
+          if [ "${TARGET}" = "all" ] || [ "${TARGET}" = "master-api" ]; then
+            echo "==> Uploading avari-master binary..."
+            $SCP_CMD deploy-artifacts/dist/linux-amd64/avari-master ${SSH_USER}@${TARGET_HOST}:${DEPLOY_TMP}/avari-master
+            $SSH_CMD "chmod +x ${DEPLOY_TMP}/avari-master"
+            $SSH_CMD "install -m 755 ${DEPLOY_TMP}/avari-master /usr/local/bin/avari-master"
+            
+            echo "==> Restarting avari-master service..."
+            $SSH_CMD "systemctl daemon-reload && systemctl restart avari-master"
+            sleep 2
+            $SSH_CMD "systemctl is-active avari-master"
+            echo "✅ avari-master is active and running!"
+          fi
+
+          if [ "${TARGET}" = "all" ] || [ "${TARGET}" = "slave-api" ]; then
+            echo "==> Uploading avari-slave binary..."
+            $SCP_CMD deploy-artifacts/dist/linux-amd64/avari-slave ${SSH_USER}@${TARGET_HOST}:${DEPLOY_TMP}/avari-slave
+            $SSH_CMD "chmod +x ${DEPLOY_TMP}/avari-slave"
+            $SSH_CMD "install -m 755 ${DEPLOY_TMP}/avari-slave /usr/local/bin/avari-slave"
+
+            echo "==> Restarting avari-slave service (if active/configured)..."
+            $SSH_CMD "bash -se" << 'EOF'
+              systemctl daemon-reload
+              if systemctl is-active --quiet avari-slave; then
+                systemctl restart avari-slave
+                echo "✅ avari-slave restarted successfully!"
+              else
+                echo "ℹ️ avari-slave is not active on this host, skipping service restart."
+              fi
+            EOF
+          fi
+
+          echo "==> Cleaning up temporary staging directory..."
+          $SSH_CMD "rm -rf ${DEPLOY_TMP}"
+          echo "🎉 Backend deployment completed successfully!"
+
+      - name: 🧹 Cleanup SSH Credentials
+        if: always()
+        run: rm -rf ~/.ssh/id_deploy
