@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -244,8 +245,40 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleGetCascadeEgress(w http.ResponseWriter, r *http.Request) {
+	status, err := s.runner.GetEgressStatus(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, status)
+}
+
+func (s *Server) handleSwitchCascadeEgress(w http.ResponseWriter, r *http.Request) {
+	var req models.SwitchEgressRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if req.Interface == "" {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "interface is required (e.g. 'awg1' or 'awg3')"})
+		return
+	}
+
+	if err := s.runner.SwitchEgress(r.Context(), req.Interface); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: fmt.Sprintf("Cascade egress successfully switched to %s", req.Interface),
+	})
+}
+
 func (s *Server) writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
 }
+

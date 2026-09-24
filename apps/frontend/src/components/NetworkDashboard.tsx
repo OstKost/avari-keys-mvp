@@ -77,7 +77,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
   const concurrencyPct = stats.total_keys > 0 ? Math.round((stats.active_devices_online * 100) / stats.total_keys) : 0;
 
   // Latency gauge
-  const latencyVal = stats.avg_latency_ms || 24;
+  const latencyVal = typeof stats.avg_latency_ms === 'number' ? stats.avg_latency_ms : 0;
 
   return (
     <div className="space-y-8">

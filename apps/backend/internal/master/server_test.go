@@ -408,5 +408,68 @@ func TestAdminNodeEditFlow(t *testing.T) {
 	}
 }
 
+func TestAdminCascadeEgressSwitchFlow(t *testing.T) {
+	srv, _, _, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	handler := srv.Handler()
+
+	// 1. Login as admin
+	adminLoginBody, _ := json.Marshal(models.LoginRequest{
+		Username: "Forve",
+		Password: "AdminPass123!",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(adminLoginBody))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	var loginResp models.LoginResponse
+	_ = json.NewDecoder(rec.Body).Decode(&loginResp)
+	adminToken := loginResp.Token
+
+	// 2. Get initial egress status for cascade node (ID: 1)
+	req = httptest.NewRequest("GET", "/api/v1/admin/nodes/1/egress", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for get egress, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var egressResp models.EgressStatusResponse
+	if err := json.NewDecoder(rec.Body).Decode(&egressResp); err != nil {
+		t.Fatalf("failed to decode egress status: %v", err)
+	}
+	if egressResp.ActiveInterface != "awg1" {
+		t.Fatalf("expected initial active interface 'awg1', got '%s'", egressResp.ActiveInterface)
+	}
+
+	// 3. Switch egress to awg3
+	switchBody, _ := json.Marshal(models.SwitchEgressRequest{Interface: "awg3"})
+	req = httptest.NewRequest("POST", "/api/v1/admin/nodes/1/egress", bytes.NewReader(switchBody))
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for switch egress, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 4. Verify egress status is now awg3
+	req = httptest.NewRequest("GET", "/api/v1/admin/nodes/1/egress", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&egressResp)
+	if egressResp.ActiveInterface != "awg3" {
+		t.Fatalf("expected active interface 'awg3' after switch, got '%s'", egressResp.ActiveInterface)
+	}
+}
+
+
 
 

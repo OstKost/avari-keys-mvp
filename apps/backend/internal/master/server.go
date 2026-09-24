@@ -96,8 +96,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/admin/nodes/{id}/restart", auth.RequireAdmin(s.handleAdminRestartNode))
 	s.mux.HandleFunc("GET /api/v1/admin/nodes/{id}/backup", auth.RequireAdmin(s.handleAdminBackupNode))
 	s.mux.HandleFunc("POST /api/v1/admin/nodes/{id}/restore", auth.RequireAdmin(s.handleAdminRestoreNode))
+	s.mux.HandleFunc("GET /api/v1/admin/nodes/{id}/egress", auth.RequireAdmin(s.handleAdminGetNodeEgress))
+	s.mux.HandleFunc("POST /api/v1/admin/nodes/{id}/egress", auth.RequireAdmin(s.handleAdminSwitchNodeEgress))
 
 	s.mux.HandleFunc("GET /api/v1/admin/keys", auth.RequireAdmin(s.handleAdminListAllKeys))
+
 	s.mux.HandleFunc("GET /api/v1/admin/logs", auth.RequireAdmin(s.handleAdminListAuditLogs))
 	s.mux.HandleFunc("POST /api/v1/admin/logs/cleanup", auth.RequireAdmin(s.handleAdminCleanupAuditLogs))
 
@@ -678,6 +681,80 @@ func (s *Server) handleAdminRestoreNode(w http.ResponseWriter, r *http.Request) 
 		Message: fmt.Sprintf("Node '%s' restored successfully from backup", node.Name),
 	})
 }
+
+func (s *Server) handleAdminGetNodeEgress(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid node ID"})
+		return
+	}
+
+	node, err := s.storage.GetNodeByID(r.Context(), id)
+	if err != nil {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "Node not found"})
+		return
+	}
+
+	if node.Type != "cascade" {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Node is not a cascade node"})
+		return
+	}
+
+	slaveCli := client.NewSlaveClient(node.APIURL, node.APIKey)
+	egress, err := slaveCli.GetCascadeEgress(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("Failed to get egress status: %v", err)})
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, egress)
+}
+
+func (s *Server) handleAdminSwitchNodeEgress(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid node ID"})
+		return
+	}
+
+	node, err := s.storage.GetNodeByID(r.Context(), id)
+	if err != nil {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "Node not found"})
+		return
+	}
+
+	if node.Type != "cascade" {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Node is not a cascade node"})
+		return
+	}
+
+	var req models.SwitchEgressRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
+		return
+	}
+	if req.Interface == "" {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "interface is required (e.g. 'awg1' or 'awg3')"})
+		return
+	}
+
+	slaveCli := client.NewSlaveClient(node.APIURL, node.APIKey)
+	if err := slaveCli.SwitchCascadeEgress(r.Context(), req.Interface); err != nil {
+		s.writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("Failed to switch egress: %v", err)})
+		return
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_switch_egress", fmt.Sprintf("Переключен шлюз выхода каскада для узла «%s» (ID #%d) на интерфейс %s", node.Name, node.ID, req.Interface))
+
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: fmt.Sprintf("Cascade egress on node '%s' switched to %s", node.Name, req.Interface),
+	})
+}
+
 
 func (s *Server) handleAdminAddNode(w http.ResponseWriter, r *http.Request) {
 	claims, _ := auth.GetUserFromContext(r.Context())

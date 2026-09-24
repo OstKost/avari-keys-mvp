@@ -285,3 +285,87 @@ bash /root/awg/manage_amneziawg.sh add myphone
 1. Зайдите на **[2ip.ru](https://2ip.ru)** $\to$ Должен определяться **Российский IP (M0 — `157.22.252.225`)**.
 2. Зайдите на **[whatismyipaddress.com](https://whatismyipaddress.com)** или заблокированные ресурсы $\to$ Должен определяться **Немецкий IP (S1 — `185.213.240.136`)**.
 3. Российские сервисы (банки, Госуслуги, Кинопоиск) работают без ограничений.
+
+---
+
+## 🚀 5. Настройка второго параллельного каскада M0 ➔ S2 (Нидерланды / Другая страна)
+
+Если вам нужен выбор локаций в веб-панели (пользователь может выпустить ключ через Германию S1 или через Нидерланды S2):
+
+### ШАГ 1: Настройка S2 (Egress шлюз)
+1. Установите AmneziaWG на S2 с отдельной каскадной подсетью:
+   ```bash
+   bash <(curl -sSL https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg.sh) \
+     --yes --disallow-ipv6 --route-all --mobile --subnet=172.16.62.1/24
+   ```
+2. Создайте пир для M0:
+   ```bash
+   bash /root/awg/manage_amneziawg.sh add m0_cascade
+   cat /root/awg/m0_cascade.conf
+   ```
+
+### ШАГ 2: Поднятие исходящего туннеля к S2 на M0 (`awg3`)
+1. Создайте `/etc/amnezia/amneziawg/awg3.conf` из `m0_cascade.conf` (добавьте `Table = off` в `[Interface]`, удалите `DNS = ...`).
+2. Запустите интерфейс:
+   ```bash
+   chmod 600 /etc/amnezia/amneziawg/awg3.conf
+   systemctl enable --now awg-quick@awg3
+   ```
+
+### ШАГ 3: Поднятие второго входящего интерфейса на M0 (`awg2`)
+1. Создайте интерфейс `/etc/amnezia/amneziawg/awg2.conf` (порт `444`, подсеть клиентов `172.16.18.1/24`).
+2. Скопируйте скрипт управления в `/root/awg2/manage_amneziawg.sh`.
+3. Запустите интерфейс:
+   ```bash
+   systemctl enable --now awg-quick@awg2
+   ```
+
+### ШАГ 4: Запуск второго экземпляра Slave API (`avari-slave-s2.service`)
+1. Создайте юнит `/etc/systemd/system/avari-slave-s2.service`:
+   ```ini
+   [Unit]
+   Description=Avari Keys Slave API (Cascade 2 -> S2)
+   After=network.target awg-quick@awg2.service
+
+   [Service]
+   Type=simple
+   User=root
+   WorkingDirectory=/opt/avari-keys
+   ExecStart=/opt/avari-keys/avari-slave
+   Restart=always
+   RestartSec=5
+   LimitNOFILE=65535
+
+   Environment=SLAVE_PORT=8083
+   Environment=SLAVE_API_KEY=YOUR_GENERATED_KEY_2
+   Environment=AWG_SCRIPT_PATH=/root/awg2/manage_amneziawg.sh
+   Environment=AWG_CONFIGS_DIR=/root/awg2/clients
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+2. Включите сервис:
+   ```bash
+   systemctl daemon-reload
+   systemctl enable --now avari-slave-s2
+   ```
+3. Зарегистрируйте ноду в Master Web UI как `Каскад РФ ➔ S2 (Нидерланды)` с типом `cascade` и флагом `NLD`.
+
+---
+
+## ⚡ 6. Горячее переключение шлюза выхода (Egress Switcher: S1 <-> S2)
+
+Если S1 заблокирован или перегружен, администратор может в 1 клик переключить зарубежный выход для всех клиентов:
+
+1. **В Master Web UI**:
+   - Откройте раздел **«Серверы / Узлы»**.
+   - В карточке узла типа `Cascade` нажмите кнопку **`⇄` (Управление выходом каскада)**.
+   - Выберите целевой шлюз: `🇩🇪 Шлюз S1 (awg1)` или `🇳🇱 Шлюз S2 (awg3)` и нажмите **«Применить»**.
+2. **Как это работает под капотом**:
+   - Master отправляет защищенный запрос к Slave API: `POST /api/v1/cascade/egress {"interface": "awg3"}`.
+   - Slave API атомарно заменяет маршрут по умолчанию в таблице 100:
+     ```bash
+     ip route replace default dev awg3 table 100
+     ```
+   - Замена происходит за доли секунды без перезапуска интерфейсов и без отключения пользователей.
+

@@ -15,10 +15,12 @@ import {
   Pencil,
   ExternalLink,
   Globe,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { api } from '../api/client';
-import { AdminNode } from '../types';
+import { AdminNode, EgressStatusResponse } from '../types';
 import { ConfirmModal } from './ConfirmModal';
+
 import { useToast } from '../context/ToastContext';
 import { Loader } from './Loader';
 import { COUNTRIES, formatNodeRouting, getCountryInfo } from '../utils/country';
@@ -64,6 +66,47 @@ export function AdminNodes() {
   const [restoringNode, setRestoringNode] = useState<AdminNode | null>(null);
   const [restoreData, setRestoreData] = useState('');
   const [isRestoring, setIsRestoring] = useState(false);
+
+  // Egress Switcher modal state
+  const [egressNode, setEgressNode] = useState<AdminNode | null>(null);
+  const [egressStatus, setEgressStatus] = useState<EgressStatusResponse | null>(null);
+  const [loadingEgress, setLoadingEgress] = useState(false);
+  const [switchingEgress, setSwitchingEgress] = useState(false);
+  const [targetEgressIf, setTargetEgressIf] = useState<string>('awg3');
+
+  const handleOpenEgress = async (node: AdminNode) => {
+    setEgressNode(node);
+    setLoadingEgress(true);
+    setEgressStatus(null);
+    try {
+      const status = await api.getNodeEgress(node.id);
+      setEgressStatus(status);
+      setTargetEgressIf(status.active_interface === 'awg1' ? 'awg3' : 'awg1');
+    } catch (err: any) {
+      toast.error(err.message || 'Ошибка получения данных Egress');
+    } finally {
+      setLoadingEgress(false);
+    }
+  };
+
+  const handleSwitchEgressSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!egressNode || !targetEgressIf) return;
+    try {
+      setSwitchingEgress(true);
+      const res = await api.switchNodeEgress(egressNode.id, targetEgressIf);
+      toast.success(res.message || `Шлюз выхода каскада переключен на ${targetEgressIf}`);
+      const updated = await api.getNodeEgress(egressNode.id);
+      setEgressStatus(updated);
+      setTargetEgressIf(updated.active_interface === 'awg1' ? 'awg3' : 'awg1');
+      fetchNodes(false, true);
+    } catch (err: any) {
+      toast.error(err.message || 'Ошибка переключения шлюза выхода');
+    } finally {
+      setSwitchingEgress(false);
+    }
+  };
+
 
   const fetchNodes = async (showSpin = false, silent = false) => {
     try {
@@ -597,6 +640,17 @@ export function AdminNodes() {
                   {/* Actions */}
                   <td className="px-5 py-3.5 text-right">
                     <div className="flex items-center justify-end space-x-1.5">
+                      {/* Egress Switcher (Only for Cascade nodes) */}
+                      {node.type === 'cascade' && (
+                        <button
+                          onClick={() => handleOpenEgress(node)}
+                          title="Управление шлюзом выхода каскада (Egress Switcher: S1 <-> S2)"
+                          className="p-2 rounded-xl border border-[#D9B96E]/50 bg-[#102833]/80 text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition shadow-sm"
+                        >
+                          <ArrowRightLeft className="w-4 h-4" />
+                        </button>
+                      )}
+
                       {/* Edit Node */}
                       <button
                         onClick={() => handleOpenEdit(node)}
@@ -605,6 +659,7 @@ export function AdminNodes() {
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
+
 
                       {/* Restart Service */}
                       <button
@@ -968,6 +1023,131 @@ export function AdminNodes() {
           </div>,
           document.body
         )}
+
+      {/* Egress Switcher Modal */}
+      {egressNode &&
+        createPortal(
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-[#06141B]/85 backdrop-blur-md overflow-y-auto">
+            <form onSubmit={handleSwitchEgressSubmit} className="bg-[#0A1D26] border border-[#D9B96E]/40 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-4 my-auto">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3 text-[#D9B96E]">
+                  <ArrowRightLeft className="w-6 h-6" />
+                  <h3 className="font-serif text-lg font-bold text-[#F2F0E8]">Управление выходом каскада</h3>
+                </div>
+                <button type="button" onClick={() => setEgressNode(null)} className="text-[#A8B4B7] hover:text-[#F2F0E8] p-1 rounded-lg hover:bg-[#102833]">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-sm text-[#A8B4B7] font-sans">
+                Узел <strong className="text-[#F2F0E8]">«{egressNode.name}»</strong>. Переключение шлюза зарубежного выхода на лету без изменения клиентских ключей.
+              </p>
+
+              {loadingEgress ? (
+                <div className="py-8 flex justify-center">
+                  <Loader size="section" text="Опрос статуса маршрутизации узла..." />
+                </div>
+              ) : egressStatus ? (
+                <div className="space-y-4">
+                  {/* Current Status Box */}
+                  <div className="p-4 rounded-2xl bg-[#06141B] border border-[#1C3945]">
+                    <div className="text-xs font-mono font-bold uppercase tracking-wider text-[#A8B4B7] mb-2">
+                      Текущий активный шлюз (Таблица 100):
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="font-mono font-bold text-base text-[#F2F0E8]">
+                          {egressStatus.active_interface === 'awg1' ? 'awg1 — Выход через S1 (Германия)' : 'awg3 — Выход через S2 (Нидерланды)'}
+                        </span>
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold uppercase bg-emerald-950/80 text-emerald-400 border border-emerald-800/60">
+                        Active Egress
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Switch Target Options */}
+                  <div>
+                    <label className="block text-sm font-mono font-semibold text-[#A8B4B7] uppercase mb-2">
+                      Выберите целевой шлюз выхода:
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setTargetEgressIf('awg1')}
+                        className={`p-3.5 rounded-2xl border text-left transition flex flex-col justify-between space-y-1 ${
+                          targetEgressIf === 'awg1'
+                            ? 'bg-[#102833] border-[#D9B96E] text-[#F2F0E8] shadow-md shadow-[#D9B96E]/10 ring-1 ring-[#D9B96E]'
+                            : 'bg-[#06141B] border-[#1C3945] text-[#A8B4B7] hover:border-[#1C3945]/80'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-bold text-sm">🇩🇪 Шлюз S1</span>
+                          {egressStatus.active_interface === 'awg1' && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/50">
+                              Текущий
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-[#A8B4B7] font-mono">dev awg1 (Германия)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTargetEgressIf('awg3')}
+                        className={`p-3.5 rounded-2xl border text-left transition flex flex-col justify-between space-y-1 ${
+                          targetEgressIf === 'awg3'
+                            ? 'bg-[#102833] border-[#D9B96E] text-[#F2F0E8] shadow-md shadow-[#D9B96E]/10 ring-1 ring-[#D9B96E]'
+                            : 'bg-[#06141B] border-[#1C3945] text-[#A8B4B7] hover:border-[#1C3945]/80'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-bold text-sm">🇳🇱 Шлюз S2</span>
+                          {egressStatus.active_interface === 'awg3' && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/50">
+                              Текущий
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-[#A8B4B7] font-mono">dev awg3 (Нидерланды)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[#102833]/60 border border-[#1C3945] text-xs text-[#A8B4B7] font-sans leading-relaxed">
+                    ℹ️ Маршрут будет мгновенно заменен в таблице 100 ядра Linux. Подключенные клиенты на смартфонах и ПК продолжат работать без необходимости перевыпускать конфигурации.
+                  </div>
+                </div>
+              ) : (
+                <div className="py-4 text-sm text-rose-400 font-mono">
+                  Не удалось получить статус Egress с узла.
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEgressNode(null)}
+                  disabled={switchingEgress}
+                  className="px-4 py-2 text-sm font-mono uppercase text-[#A8B4B7] hover:text-[#F2F0E8] rounded-xl hover:bg-[#102833]"
+                >
+                  Закрыть
+                </button>
+                <button
+                  type="submit"
+                  disabled={switchingEgress || loadingEgress || !egressStatus || targetEgressIf === egressStatus?.active_interface}
+                  className="px-5 py-2.5 text-sm font-mono font-bold uppercase bg-gradient-to-r from-[#F0D48D] to-[#D9B96E] text-[#06141B] rounded-xl shadow-lg transition disabled:opacity-50 flex items-center space-x-1.5"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  <span>{switchingEgress ? 'Переключение...' : `Переключить на ${targetEgressIf}`}</span>
+                </button>
+              </div>
+            </form>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
+

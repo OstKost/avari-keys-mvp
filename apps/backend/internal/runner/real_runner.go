@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/models"
@@ -19,6 +20,10 @@ import (
 type RealRunner struct {
 	scriptPath string
 	configsDir string
+
+	mu             sync.RWMutex
+	lastHealthTime time.Time
+	lastHealthVal  bool
 }
 
 // NewRealRunner creates a new RealRunner instance.
@@ -39,8 +44,29 @@ func (r *RealRunner) CheckHealth(ctx context.Context) bool {
 	if _, err := os.Stat(r.scriptPath); err != nil {
 		return false
 	}
+
+	r.mu.RLock()
+	if time.Since(r.lastHealthTime) < 15*time.Second {
+		val := r.lastHealthVal
+		r.mu.RUnlock()
+		return val
+	}
+	r.mu.RUnlock()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Double-check after acquiring write lock
+	if time.Since(r.lastHealthTime) < 15*time.Second {
+		return r.lastHealthVal
+	}
+
 	cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "status")
-	return cmd.Run() == nil
+	healthy := cmd.Run() == nil
+
+	r.lastHealthVal = healthy
+	r.lastHealthTime = time.Now()
+	return healthy
 }
 
 func (r *RealRunner) AddClient(ctx context.Context, name string, psk bool) (*models.ClientResponse, error) {

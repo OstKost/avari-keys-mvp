@@ -549,6 +549,23 @@ PersistentKeepalive = 25`;
     };
   },
 
+  async getNodeEgress(_id: number): Promise<{ active_interface: string; available_interfaces: string[]; details?: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return {
+      active_interface: 'awg1',
+      available_interfaces: ['awg1', 'awg3'],
+      details: 'Mock active egress dev in table 100 is awg1',
+    };
+  },
+
+  async switchNodeEgress(_id: number, targetInterface: string): Promise<{ success: boolean; message: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return {
+      success: true,
+      message: `Шлюз выхода каскада переключен на ${targetInterface}`,
+    };
+  },
+
   async getAdminKeys(params?: {
     search?: string;
     nodeId?: number;

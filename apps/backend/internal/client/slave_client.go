@@ -12,6 +12,18 @@ import (
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/models"
 )
 
+var (
+	defaultTransport = &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 20,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	sharedHTTPClient = &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: defaultTransport,
+	}
+)
+
 // SlaveClient communicates with a remote or local Slave API instance.
 type SlaveClient struct {
 	baseURL    string
@@ -23,11 +35,9 @@ type SlaveClient struct {
 func NewSlaveClient(baseURL, apiKey string) *SlaveClient {
 	baseURL = strings.TrimRight(baseURL, "/")
 	return &SlaveClient{
-		baseURL: baseURL,
-		apiKey:  apiKey,
-		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
-		},
+		baseURL:    baseURL,
+		apiKey:     apiKey,
+		httpClient: sharedHTTPClient,
 	}
 }
 
@@ -243,3 +253,59 @@ func (c *SlaveClient) Restore(ctx context.Context, backupData string) error {
 	}
 	return nil
 }
+
+// GetCascadeEgress retrieves the active and available egress interfaces for a cascade node.
+func (c *SlaveClient) GetCascadeEgress(ctx context.Context) (*models.EgressStatusResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/cascade/egress", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp map[string]string
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		return nil, fmt.Errorf("slave get cascade egress failed with status %d: %s", resp.StatusCode, errResp["error"])
+	}
+
+	var res models.EgressStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// SwitchCascadeEgress requests the Slave to switch active egress interface (e.g. 'awg1' or 'awg3').
+func (c *SlaveClient) SwitchCascadeEgress(ctx context.Context, devName string) error {
+	body, err := json.Marshal(models.SwitchEgressRequest{Interface: devName})
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/cascade/egress", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp map[string]string
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		return fmt.Errorf("slave switch cascade egress failed with status %d: %s", resp.StatusCode, errResp["error"])
+	}
+	return nil
+}
+
