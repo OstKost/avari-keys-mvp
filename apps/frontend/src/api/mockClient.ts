@@ -801,10 +801,12 @@ PersistentKeepalive = 25`;
     });
 
     const formatB = (b: number) => {
-      if (b >= 1024 * 1024 * 1024 * 1024) {
-        return (b / (1024 * 1024 * 1024 * 1024)).toFixed(2) + ' TB';
-      }
-      return (b / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+      if (b <= 0) return '0 B';
+      if (b < 1024) return b + ' B';
+      if (b < 1024 * 1024) return (b / 1024).toFixed(2) + ' KB';
+      if (b < 1024 * 1024 * 1024) return (b / (1024 * 1024)).toFixed(2) + ' MB';
+      if (b < 1024 * 1024 * 1024 * 1024) return (b / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+      return (b / (1024 * 1024 * 1024 * 1024)).toFixed(2) + ' TB';
     };
 
     return {
