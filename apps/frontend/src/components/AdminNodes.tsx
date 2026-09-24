@@ -41,10 +41,11 @@ export function AdminNodes() {
       if (showSpin) setIsChecking(true);
       else setLoading(true);
       const data = await api.getAdminNodes();
-      setNodes(data);
+      const safeData = Array.isArray(data) ? data : [];
+      setNodes(safeData);
       if (showSpin) {
-        const onlineCount = data.filter((n) => n.online).length;
-        toast.success(`Health Check завершен: доступно ${onlineCount} из ${data.length} серверов`);
+        const onlineCount = safeData.filter((n) => n.online).length;
+        toast.success(`Health Check завершен: доступно ${onlineCount} из ${safeData.length} серверов`);
       }
     } catch (err: any) {
       toast.error(err.message || 'Ошибка загрузки серверов');
@@ -316,7 +317,7 @@ export function AdminNodes() {
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1C3945]/70 bg-[#0A1D26]/40 font-sans">
-            {nodes.map((node) => (
+            {(nodes || []).map((node) => (
               <tr key={node.id} className="hover:bg-[#102833]/50 transition duration-150">
                 <td className="px-5 py-3.5">
                   <div className="flex items-center space-x-2">
@@ -401,7 +402,7 @@ export function AdminNodes() {
             {loading && (
               <Loader size="table" colSpan={6} text="Опрос и получение списка Slave-серверов..." />
             )}
-            {nodes.length === 0 && !loading && (
+            {(nodes || []).length === 0 && !loading && (
               <tr>
                 <td colSpan={6} className="text-center py-10 text-[#718187] text-xs font-mono uppercase tracking-wider">
                   Нет подключенных Slave-серверов.

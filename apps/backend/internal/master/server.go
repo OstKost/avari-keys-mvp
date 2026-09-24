@@ -552,7 +552,7 @@ func (s *Server) handleAdminListNodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var res []models.NodeWithStatus
+	res := []models.NodeWithStatus{}
 	for _, n := range nodes {
 		slaveCli := client.NewSlaveClient(n.APIURL, n.APIKey)
 		start := time.Now()
@@ -995,7 +995,7 @@ func (s *Server) handleGetDashboardStats(w http.ResponseWriter, r *http.Request)
 	var directTrafficBytes int64
 	activeDevicesOnline := 0
 
-	var nodeDashboardList []models.NodeDashboardInfo
+	nodeDashboardList := []models.NodeDashboardInfo{}
 
 	for _, n := range nodes {
 		slaveCli := client.NewSlaveClient(n.APIURL, n.APIKey)

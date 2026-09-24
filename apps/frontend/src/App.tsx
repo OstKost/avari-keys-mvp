@@ -58,8 +58,8 @@ export default function App() {
       setKeysLoading(true);
       setError(null);
       const [keysData, nodesData] = await Promise.all([api.getKeys(), api.getNodes()]);
-      setKeys(keysData);
-      setNodes(nodesData);
+      setKeys(Array.isArray(keysData) ? keysData : []);
+      setNodes(Array.isArray(nodesData) ? nodesData : []);
     } catch (err: any) {
       setError(err.message || 'Ошибка загрузки данных');
     } finally {
@@ -303,7 +303,7 @@ export default function App() {
 
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  disabled={nodes.length === 0}
+                  disabled={(nodes || []).length === 0}
                   className="flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-xs uppercase tracking-wider font-mono px-5 py-3 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300"
                 >
                   <Plus className="w-4 h-4" />
@@ -318,7 +318,7 @@ export default function App() {
                 </div>
               )}
 
-              {nodes.length === 0 && !keysLoading && (
+              {(nodes || []).length === 0 && !keysLoading && (
                 <div className="bg-[#102833] border border-[#D9B96E]/30 text-[#D9B96E] text-xs p-5 rounded-2xl mb-6 flex items-start space-x-3">
                   <Sparkles className="w-5 h-5 flex-shrink-0 mt-0.5 text-[#F0D48D]" />
                   <div>
@@ -335,7 +335,7 @@ export default function App() {
               {/* Keys Grid */}
               {keysLoading ? (
                 <Loader size="section" text="Получение ключей из хранилища..." />
-              ) : keys.length === 0 ? (
+              ) : (keys || []).length === 0 ? (
                 <div className="text-center py-16 border border-dashed border-[#1C3945] rounded-2xl bg-[#06141B]/40">
                   <div className="relative inline-block mb-3">
                     <Key className="w-12 h-12 text-[#718187] mx-auto" />
@@ -347,7 +347,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {keys.map((k) => (
+                  {(keys || []).map((k) => (
                     <div
                       key={k.id}
                       className="bg-[#0D222C]/90 border border-[#1C3945] hover:border-[#D9B96E]/50 rounded-2xl p-5 shadow-xl hover:shadow-2xl hover:shadow-[#D9B96E]/5 flex flex-col justify-between transition-all duration-300 group"

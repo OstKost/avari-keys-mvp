@@ -67,9 +67,9 @@ export function AdminAuditLogs() {
         page,
         limit,
       });
-      setLogs(res.logs);
-      setTotalPages(res.total_pages);
-      setTotalCount(res.total_count);
+      setLogs(Array.isArray(res?.logs) ? res.logs : []);
+      setTotalPages(res?.total_pages || 1);
+      setTotalCount(res?.total_count || 0);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка загрузки журнала аудита');
     } finally {
@@ -328,7 +328,7 @@ export function AdminAuditLogs() {
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1C3945]/70 bg-[#0A1D26]/40 font-sans text-xs">
-            {logs.map((log) => (
+            {(logs || []).map((log) => (
               <tr key={log.id} className="hover:bg-[#102833]/50 transition duration-150">
                 {/* Time */}
                 <td className="px-4 py-3.5 whitespace-nowrap">
@@ -382,7 +382,7 @@ export function AdminAuditLogs() {
               <Loader size="table" colSpan={6} text="Загрузка журнала аудита и событий безопасности..." />
             )}
 
-            {logs.length === 0 && !loading && (
+            {(logs || []).length === 0 && !loading && (
               <tr>
                 <td colSpan={6} className="text-center py-12 text-[#718187] text-xs font-mono uppercase tracking-wider">
                   {hasActiveFilters ? 'По заданным фильтрам события не найдены.' : 'Журнал аудита пуст.'}

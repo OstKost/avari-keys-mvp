@@ -242,7 +242,7 @@ func (s *Storage) ListUsers(ctx context.Context) ([]models.UserPublic, error) {
 	}
 	defer rows.Close()
 
-	var list []models.UserPublic
+	list := []models.UserPublic{}
 	for rows.Next() {
 		var u models.UserPublic
 		var role string
@@ -381,7 +381,7 @@ func (s *Storage) ListNodes(ctx context.Context) ([]models.Node, error) {
 	}
 	defer rows.Close()
 
-	var list []models.Node
+	list := []models.Node{}
 	for rows.Next() {
 		var n models.Node
 		var isActive, isMobile int
@@ -405,7 +405,7 @@ func (s *Storage) ListActiveNodesPublic(ctx context.Context) ([]models.NodePubli
 	}
 	defer rows.Close()
 
-	var list []models.NodePublic
+	list := []models.NodePublic{}
 	for rows.Next() {
 		var n models.NodePublic
 		var isActive, isMobile int
@@ -471,7 +471,7 @@ func (s *Storage) ListClientConfigsByUser(ctx context.Context, userID int64) ([]
 	}
 	defer rows.Close()
 
-	var list []models.ClientConfig
+	list := []models.ClientConfig{}
 	for rows.Next() {
 		var c models.ClientConfig
 		if err := rows.Scan(&c.ID, &c.UserID, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType); err != nil {
@@ -494,7 +494,7 @@ func (s *Storage) ListAllClientConfigs(ctx context.Context) ([]models.ClientConf
 	}
 	defer rows.Close()
 
-	var list []models.ClientConfig
+	list := []models.ClientConfig{}
 	for rows.Next() {
 		var c models.ClientConfig
 		if err := rows.Scan(&c.ID, &c.UserID, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType); err != nil {
