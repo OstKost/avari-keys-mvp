@@ -284,16 +284,15 @@ export function MascotAuthCompanion({
       {/* Speech Bubble with Rotating Gold Sheen Border */}
       <div className="mb-3 w-full max-w-[300px] relative z-20">
         <div className="gold-rotating-border">
-          <div className="gold-rotating-border-content p-4 text-center text-xs sm:text-sm text-[#F2F0E8] font-sans">
-            <div className="flex items-center justify-center space-x-1.5 text-xs font-mono font-bold text-[#D9B96E] uppercase tracking-wider mb-1">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Хранитель Avari</span>
-            </div>
-            <p className="leading-relaxed text-[#D9E1E3]">
+          <div className="gold-rotating-border-content p-4 text-xs sm:text-sm text-[#F2F0E8] font-sans">
+            <p className="leading-relaxed text-[#D9E1E3] text-left">
               {isRegister
                 ? 'Приветствую тебя! Создай учетную запись, и я помогу настроить твой первый защищенный ключ.'
                 : 'Рад снова приветствовать тебя в Avari Keys! Войди в систему, чтобы управлять своими ключами.'}
             </p>
+            <div className="text-right mt-2 text-xs font-serif font-bold text-[#D9B96E] tracking-wider">
+              — Ари
+            </div>
           </div>
         </div>
 
@@ -306,7 +305,7 @@ export function MascotAuthCompanion({
       <div className="relative flex justify-center items-end">
         <img 
           src="/assets/mascot.png" 
-          alt="Avari Companion" 
+          alt="Ари" 
           className="w-52 sm:w-60 lg:w-72 max-h-[460px] object-contain object-bottom filter drop-shadow-[0_15px_30px_rgba(0,0,0,0.9)] drop-shadow-[0_0_20px_rgba(217,185,110,0.25)] pointer-events-none"
         />
       </div>
@@ -357,7 +356,7 @@ export function FloatingMascot({
           <div className="flex items-center justify-between pb-3 border-b border-[#1C3945]">
             <div className="flex items-center space-x-2.5">
               <MascotAvatar size="xs" withGlow={false} />
-              <span className="font-serif font-bold text-base text-[#F2F0E8]">Хранитель Forve</span>
+              <span className="font-serif font-bold text-base text-[#F2F0E8]">Хранитель Ари</span>
             </div>
             <button
               onClick={() => setIsOpen(false)}

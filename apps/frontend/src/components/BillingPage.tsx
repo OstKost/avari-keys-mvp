@@ -164,6 +164,17 @@ export function BillingPage({ currentUser }: BillingPageProps) {
       })
     : 'Нет записей';
 
+  const daysSinceLastPayment = (() => {
+    if (!billingStatus?.last_paid_at) return null;
+    const lastPaidTime = new Date(billingStatus.last_paid_at).getTime();
+    if (isNaN(lastPaidTime)) return null;
+    const diffMs = Date.now() - lastPaidTime;
+    if (diffMs < 0) return 0;
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  })();
+
+  const isRecentPayment = daysSinceLastPayment !== null && daysSinceLastPayment < 20;
+
   const filteredAdminRecords = (adminSummary?.records || []).filter((r) => {
     if (!searchFilter) return true;
     const q = searchFilter.toLowerCase();
@@ -321,6 +332,15 @@ export function BillingPage({ currentUser }: BillingPageProps) {
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Я оплатил взнос</span>
                 </button>
+
+                {isRecentPayment && (
+                  <div className="flex items-center justify-center space-x-1.5 text-[11px] font-mono text-amber-400/90 pt-0.5">
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>
+                      Оплачено {daysSinceLastPayment === 0 ? 'сегодня' : `${daysSinceLastPayment} дн. назад`}
+                    </span>
+                  </div>
+                )}
 
                 {billingStatus?.is_due && (
                   <button
@@ -653,6 +673,24 @@ export function BillingPage({ currentUser }: BillingPageProps) {
               </div>
             </div>
 
+            {isRecentPayment && (
+              <div className="flex items-start space-x-3 bg-amber-950/60 border border-amber-600/60 text-amber-200 text-xs p-4 rounded-2xl mb-5 shadow-lg">
+                <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-400" />
+                <div className="space-y-1">
+                  <div className="font-bold text-amber-300 font-mono uppercase tracking-wider">
+                    Предупреждение: взнос уже оплачен
+                  </div>
+                  <p className="leading-relaxed">
+                    Вы уже подтверждали оплату {daysSinceLastPayment === 0 ? 'сегодня' : daysSinceLastPayment === 1 ? 'вчера' : `${daysSinceLastPayment} дн. назад`} ({lastPaidDate}). 
+                    До следующего расчетного срока осталось <strong className="text-amber-300">{billingStatus?.days_remaining ?? 0} дн.</strong>
+                  </p>
+                  <p className="text-amber-300/80 text-[11px]">
+                    Повторное подтверждение требуется только при внесении дополнительного взноса.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-4 mb-6">
               <div>
                 <label className="block text-xs font-mono uppercase text-[#A8B4B7] mb-1.5">
@@ -696,7 +734,7 @@ export function BillingPage({ currentUser }: BillingPageProps) {
                 disabled={actionLoading}
                 className="flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-xs uppercase tracking-wider font-mono py-3 px-4 rounded-xl shadow-lg shadow-[#D9B96E]/20 transition cursor-pointer"
               >
-                <span>{actionLoading ? 'Сохранение...' : 'Подтвердить'}</span>
+                <span>{actionLoading ? 'Сохранение...' : isRecentPayment ? 'Все равно подтвердить' : 'Подтвердить'}</span>
               </button>
             </div>
           </div>
