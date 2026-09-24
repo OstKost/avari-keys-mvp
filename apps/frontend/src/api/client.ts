@@ -113,14 +113,16 @@ const realApi = {
     const res = await fetch(`${API_BASE}/nodes`, {
       headers: getAuthHeaders(),
     });
-    return handleResponse<NodePublic[]>(res);
+    const data = await handleResponse<NodePublic[]>(res);
+    return Array.isArray(data) ? data : [];
   },
 
   async getKeys(): Promise<ClientConfigSummary[]> {
     const res = await fetch(`${API_BASE}/keys`, {
       headers: getAuthHeaders(),
     });
-    return handleResponse<ClientConfigSummary[]>(res);
+    const data = await handleResponse<ClientConfigSummary[]>(res);
+    return Array.isArray(data) ? data : [];
   },
 
   async createKey(nodeId: number, deviceName: string, psk?: boolean): Promise<ClientConfigDetail> {
@@ -152,7 +154,8 @@ const realApi = {
     const res = await fetch(`${API_BASE}/admin/users`, {
       headers: getAuthHeaders(),
     });
-    return handleResponse<User[]>(res);
+    const data = await handleResponse<User[]>(res);
+    return Array.isArray(data) ? data : [];
   },
 
   async activateUser(id: number): Promise<{ success: boolean }> {
@@ -192,7 +195,8 @@ const realApi = {
     const res = await fetch(`${API_BASE}/admin/nodes`, {
       headers: getAuthHeaders(),
     });
-    return handleResponse<AdminNode[]>(res);
+    const data = await handleResponse<AdminNode[]>(res);
+    return Array.isArray(data) ? data : [];
   },
 
   async addAdminNode(name: string, type: 'cascade' | 'direct', apiUrl: string, apiKey: string, isMobileOptimized?: boolean): Promise<AdminNode> {
@@ -252,7 +256,15 @@ const realApi = {
     const res = await fetch(`${API_BASE}/admin/keys${qs}`, {
       headers: getAuthHeaders(),
     });
-    return handleResponse<PaginatedKeysResponse>(res);
+    const data = await handleResponse<PaginatedKeysResponse>(res);
+    return {
+      ...data,
+      keys: Array.isArray(data?.keys) ? data.keys : [],
+      total_count: data?.total_count || 0,
+      page: data?.page || 1,
+      limit: data?.limit || 10,
+      total_pages: data?.total_pages || 1,
+    };
   },
 
   async getAdminAuditLogs(params?: AuditLogFilterParams): Promise<PaginatedAuditLogsResponse> {
@@ -270,7 +282,15 @@ const realApi = {
     const res = await fetch(`${API_BASE}/admin/logs${qs}`, {
       headers: getAuthHeaders(),
     });
-    return handleResponse<PaginatedAuditLogsResponse>(res);
+    const data = await handleResponse<PaginatedAuditLogsResponse>(res);
+    return {
+      ...data,
+      logs: Array.isArray(data?.logs) ? data.logs : [],
+      total_count: data?.total_count || 0,
+      page: data?.page || 1,
+      limit: data?.limit || 50,
+      total_pages: data?.total_pages || 1,
+    };
   },
 
   async cleanupAdminAuditLogs(days: number = 90): Promise<CleanupLogsResponse> {
@@ -286,7 +306,11 @@ const realApi = {
     const res = await fetch(`${API_BASE}/stats/dashboard`, {
       headers: getAuthHeaders(),
     });
-    return handleResponse<DashboardStats>(res);
+    const data = await handleResponse<DashboardStats>(res);
+    return {
+      ...data,
+      nodes: Array.isArray(data?.nodes) ? data.nodes : [],
+    };
   },
 };
 

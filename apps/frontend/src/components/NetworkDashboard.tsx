@@ -350,7 +350,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {stats.nodes.map((n) => (
+            {(stats.nodes || []).map((n) => (
               <div
                 key={n.id}
                 className="bg-[#06141B]/80 border border-[#1C3945] hover:border-[#D9B96E]/40 rounded-2xl p-4 flex flex-col justify-between transition group"
@@ -410,7 +410,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
               </div>
             ))}
 
-            {stats.nodes.length === 0 && (
+            {(stats.nodes || []).length === 0 && (
               <div className="col-span-2 text-center py-8 text-[#718187] text-xs font-mono uppercase tracking-wider">
                 Узлы сети еще не настроены.
               </div>

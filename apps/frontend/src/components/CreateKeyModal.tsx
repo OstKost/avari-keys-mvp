@@ -10,7 +10,8 @@ interface Props {
 }
 
 export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
-  const [selectedNodeId, setSelectedNodeId] = useState<number>(nodes[0]?.id || 0);
+  const safeNodes = Array.isArray(nodes) ? nodes : [];
+  const [selectedNodeId, setSelectedNodeId] = useState<number>(safeNodes[0]?.id || 0);
   const [deviceName, setDeviceName] = useState<string>('');
   const [psk, setPsk] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -84,7 +85,7 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
               Тип подключения / Сервер
             </label>
             <div className="space-y-3">
-              {nodes.map((node) => (
+              {safeNodes.map((node) => (
                 <label
                   key={node.id}
                   className={`flex items-start p-4 rounded-2xl border cursor-pointer transition-all duration-200 ${
