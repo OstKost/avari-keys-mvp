@@ -833,6 +833,161 @@ PersistentKeepalive = 25`;
       generated_at: new Date().toISOString(),
     };
   },
+
+  // Billing Mock Methods
+  async getBillingStatus(): Promise<BillingStatus> {
+    await new Promise((r) => setTimeout(r, 100));
+    const user = mockCurrentUser;
+    const history = mockBillingRecords.filter((r) => r.user_id === user.id);
+    
+    let lastPaidAt: string | undefined = undefined;
+    let nextDueAt: Date;
+    
+    if (history.length > 0) {
+      lastPaidAt = history[0].created_at;
+      nextDueAt = new Date(new Date(lastPaidAt).getTime() + 30 * 24 * 3600 * 1000);
+    } else {
+      nextDueAt = new Date(new Date(user.created_at).getTime() + 30 * 24 * 3600 * 1000);
+    }
+
+    const now = Date.now();
+    const daysRemaining = Math.ceil((nextDueAt.getTime() - now) / (1000 * 3600 * 24));
+    const snoozedUntil = mockSnoozeMap[user.id];
+
+    let isDue = false;
+    let status: 'paid' | 'due' | 'snoozed' = 'paid';
+
+    if (now >= nextDueAt.getTime() || daysRemaining <= 0) {
+      if (snoozedUntil && now < new Date(snoozedUntil).getTime()) {
+        isDue = false;
+        status = 'snoozed';
+      } else {
+        isDue = true;
+        status = 'due';
+      }
+    } else {
+      isDue = false;
+      status = 'paid';
+    }
+
+    return {
+      is_due: isDue,
+      days_remaining: daysRemaining,
+      next_due_at: nextDueAt.toISOString(),
+      last_paid_at: lastPaidAt,
+      snoozed_until: snoozedUntil,
+      status: status,
+      history: history,
+    };
+  },
+
+  async payDues(amount?: number, note?: string): Promise<BillingStatus> {
+    await new Promise((r) => setTimeout(r, 150));
+    const user = mockCurrentUser;
+    const currentMonth = new Date().toISOString().substring(0, 7);
+    
+    const newRecord: BillingRecord = {
+      id: mockBillingRecords.length + 1,
+      user_id: user.id,
+      username: user.username,
+      amount: amount || 0,
+      currency: 'RUB',
+      period_month: currentMonth,
+      status: 'confirmed',
+      note: note || '',
+      created_at: new Date().toISOString(),
+    };
+
+    mockBillingRecords.unshift(newRecord);
+    delete mockSnoozeMap[user.id];
+
+    mockLogs.unshift({
+      id: mockLogs.length + 1,
+      user_id: user.id,
+      username: user.username,
+      action: 'payment_recorded',
+      category: 'billing',
+      ip_address: '192.168.1.10',
+      details: `Подтверждение оплаты взноса: период ${currentMonth}`,
+      created_at: new Date().toISOString(),
+    });
+
+    return this.getBillingStatus();
+  },
+
+  async snoozeReminder(days: number = 3): Promise<BillingStatus> {
+    await new Promise((r) => setTimeout(r, 100));
+    const user = mockCurrentUser;
+    const snoozeDate = new Date(Date.now() + (days || 3) * 24 * 3600 * 1000).toISOString();
+    mockSnoozeMap[user.id] = snoozeDate;
+
+    mockLogs.unshift({
+      id: mockLogs.length + 1,
+      user_id: user.id,
+      username: user.username,
+      action: 'reminder_snoozed',
+      category: 'billing',
+      ip_address: '192.168.1.10',
+      details: `Напоминание о взносе отложено на ${days || 3} дн.`,
+      created_at: new Date().toISOString(),
+    });
+
+    return this.getBillingStatus();
+  },
+
+  async getAdminBilling(): Promise<AdminBillingSummary> {
+    await new Promise((r) => setTimeout(r, 150));
+    const totalPayments = mockBillingRecords.length;
+    let dueCount = 0;
+    
+    for (const u of mockUsers) {
+      if (!u.is_active) continue;
+      const history = mockBillingRecords.filter((r) => r.user_id === u.id);
+      let nextDue = new Date(new Date(u.created_at).getTime() + 30 * 24 * 3600 * 1000);
+      if (history.length > 0) {
+        nextDue = new Date(new Date(history[0].created_at).getTime() + 30 * 24 * 3600 * 1000);
+      }
+      if (Date.now() >= nextDue.getTime()) {
+        dueCount++;
+      }
+    }
+
+    return {
+      total_payments: totalPayments,
+      users_due_count: dueCount,
+      total_users: mockUsers.length,
+      records: [...mockBillingRecords],
+    };
+  },
 };
+
+// Mock state helpers
+const mockBillingRecords: BillingRecord[] = [
+  {
+    id: 1,
+    user_id: 2,
+    username: 'alice',
+    amount: 150,
+    currency: 'RUB',
+    period_month: '2026-08',
+    status: 'confirmed',
+    note: 'Кооперативный взнос (СБП)',
+    created_at: new Date(Date.now() - 32 * 86400000).toISOString(),
+  },
+  {
+    id: 2,
+    user_id: 1,
+    username: 'Forve',
+    amount: 300,
+    currency: 'RUB',
+    period_month: '2026-09',
+    status: 'confirmed',
+    note: 'Поддержание VPS нод M0/S1',
+    created_at: new Date(Date.now() - 10 * 86400000).toISOString(),
+  }
+];
+
+const mockSnoozeMap: Record<number, string> = {};
+
 
 
