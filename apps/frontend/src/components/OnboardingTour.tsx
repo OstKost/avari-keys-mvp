@@ -79,7 +79,7 @@ export function OnboardingTour({
   };
 
   return createPortal(
-    <div className="fixed bottom-24 sm:bottom-8 left-4 right-4 sm:left-auto sm:right-8 z-50 max-w-xl w-full flex items-end gap-3 sm:gap-4 animate-slideUp">
+    <div className="fixed bottom-24 sm:bottom-8 left-4 right-4 sm:left-auto sm:right-8 z-[10000] max-w-xl w-full flex items-end gap-3 sm:gap-4 animate-slideUp">
       {/* Standing Cutout Mascot to the left of the dialog card */}
       <div className="hidden sm:flex flex-col items-center shrink-0 select-none">
         <img 

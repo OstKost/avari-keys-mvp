@@ -33,9 +33,9 @@ export function MascotAvatar({
       )}
       <div className={`relative ${sizeClasses[size]} rounded-full overflow-hidden border-2 border-[#D9B96E] bg-[#0A1D26] shadow-xl shadow-black/80 transition-transform duration-300 group-hover:scale-105`}>
         <img 
-          src="/assets/mascot.png" 
-          alt="Avari Keys Assistant" 
-          className="w-full h-full object-cover object-top filter contrast-[1.05]"
+          src="/assets/mascot_avatar.png" 
+          alt="Ари" 
+          className="w-full h-full object-cover filter contrast-[1.05]"
         />
       </div>
     </div>
@@ -227,48 +227,60 @@ export function MascotFaqModal({
   );
 }
 
-// Modal Companion Character (Peeks / stands beside CreateKeyModal)
+// Modal Companion Character (Stands to the left of CreateKeyModal with gold rotating bubble)
 export function MascotModalCompanion({
   onClickFaq,
 }: {
   onClickFaq: () => void;
 }) {
   return (
-    <div className="relative mb-6">
-      <div className="gold-rotating-border">
-        <div 
-          onClick={onClickFaq}
-          className="gold-rotating-border-content p-3.5 sm:p-4 flex items-center space-x-4 cursor-pointer transition-all duration-300 group hover:bg-[#102833]/90"
-        >
-          {/* Mascot Avatar with clean glow */}
-          <div className="relative shrink-0">
-            <MascotAvatar size="md" />
-          </div>
-
-          {/* Speech Bubble Content */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center space-x-2">
-              <span className="font-serif font-bold text-base text-[#F0D48D] group-hover:text-gold-gradient transition">
+    <div className="flex flex-col items-center select-none">
+      {/* Speech Bubble with Rotating Gold Sheen Border */}
+      <div 
+        onClick={onClickFaq}
+        className="mb-3 w-full max-w-[300px] relative z-20 cursor-pointer group transition-transform hover:scale-[1.02]"
+        title="Нажмите, чтобы открыть 5 частых вопросов (FAQ)"
+      >
+        <div className="gold-rotating-border">
+          <div className="gold-rotating-border-content p-4 text-xs sm:text-sm text-[#F2F0E8] font-sans">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <span className="font-serif font-bold text-sm text-[#F0D48D] group-hover:text-gold-gradient transition">
                 Нужна помощь с выбором?
               </span>
-              <span className="bg-[#06141B] text-[#D9B96E] text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-[#D9B96E]/40">
+              <span className="bg-[#06141B] text-[#D9B96E] text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-[#D9B96E]/40 shrink-0">
                 5 ответов
               </span>
             </div>
-            <p className="text-xs sm:text-sm text-[#D9E1E3] font-sans mt-0.5 leading-snug">
-              Нажмите, и я объясню разницу между серверами, имя устройства и настройку PSK.
+            <p className="leading-relaxed text-[#D9E1E3] text-left text-xs">
+              Нажмите сюда, и я объясню разницу между каскадом и прямым сервером, имя устройства и опцию PSK.
             </p>
-            <div className="text-right mt-1 text-xs font-serif font-bold text-[#D9B96E]">
-              — Ари
+            <div className="flex items-center justify-between mt-2 pt-1 border-t border-[#1C3945]/40 text-xs">
+              <span className="text-[#D9B96E] font-mono text-[11px] group-hover:underline flex items-center gap-1">
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Открыть FAQ</span>
+              </span>
+              <span className="font-serif font-bold text-[#D9B96E] tracking-wider">
+                — Ари
+              </span>
             </div>
           </div>
-
-          {/* Action Button */}
-          <div className="shrink-0 hidden sm:flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-[#06141B] group-hover:bg-[#D9B96E] text-[#D9B96E] group-hover:text-[#06141B] border border-[#D9B96E]/40 font-mono text-xs font-bold uppercase tracking-wider transition">
-            <BookOpen className="w-4 h-4" />
-            <span>Спросить</span>
-          </div>
         </div>
+
+        {/* Downward Bubble Tail */}
+        <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-[#D9B96E] z-10" />
+        <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0 border-x-6 border-x-transparent border-t-6 border-t-[#0A1D26] z-10" />
+      </div>
+
+      {/* Pure Cutout Mascot (No frame/container box, natural shadow & soft glow) */}
+      <div 
+        onClick={onClickFaq}
+        className="relative flex justify-center items-end cursor-pointer group"
+      >
+        <img 
+          src="/assets/mascot.png" 
+          alt="Ари" 
+          className="w-52 sm:w-60 lg:w-72 max-h-[460px] object-contain object-bottom filter drop-shadow-[0_15px_30px_rgba(0,0,0,0.9)] drop-shadow-[0_0_20px_rgba(217,185,110,0.25)] transition-transform duration-300 group-hover:scale-105 pointer-events-none"
+        />
       </div>
     </div>
   );
@@ -283,7 +295,7 @@ export function MascotAuthCompanion({
   return (
     <div className="flex flex-col items-center select-none">
       {/* Speech Bubble with Rotating Gold Sheen Border */}
-      <div className="mb-3 w-full max-w-[300px] relative z-20">
+      <div className="mb-3 w-full max-w-[300px] relative z-20 cursor-pointer group transition-transform hover:scale-[1.02]">
         <div className="gold-rotating-border">
           <div className="gold-rotating-border-content p-4 text-xs sm:text-sm text-[#F2F0E8] font-sans">
             <p className="leading-relaxed text-[#D9E1E3] text-left">
@@ -303,11 +315,11 @@ export function MascotAuthCompanion({
       </div>
 
       {/* Pure Cutout Mascot (No frame/container box, natural shadow & soft glow) */}
-      <div className="relative flex justify-center items-end">
+      <div className="relative flex justify-center items-end cursor-pointer group">
         <img 
           src="/assets/mascot.png" 
           alt="Ари" 
-          className="w-52 sm:w-60 lg:w-72 max-h-[460px] object-contain object-bottom filter drop-shadow-[0_15px_30px_rgba(0,0,0,0.9)] drop-shadow-[0_0_20px_rgba(217,185,110,0.25)] pointer-events-none"
+          className="w-52 sm:w-60 lg:w-72 max-h-[460px] object-contain object-bottom filter drop-shadow-[0_15px_30px_rgba(0,0,0,0.9)] drop-shadow-[0_0_20px_rgba(217,185,110,0.25)] transition-transform duration-300 group-hover:scale-105 pointer-events-none"
         />
       </div>
     </div>
@@ -339,98 +351,115 @@ export function FloatingMascot({
       <div className="fixed bottom-5 right-5 z-40">
         <button
           onClick={handleToggleCollapse}
-          title="Открыть помощника"
-          className="relative group p-2 rounded-full bg-[#0A1D26] border-2 border-[#D9B96E]/60 hover:border-[#D9B96E] shadow-2xl text-[#D9B96E] hover:text-[#F0D48D] transition-transform duration-300 hover:scale-110 flex items-center justify-center cursor-pointer"
+          title="Открыть помощника Ари"
+          className="relative group p-0.5 rounded-full overflow-hidden border-2 border-[#D9B96E] bg-[#0A1D26] shadow-2xl shadow-black/90 hover:scale-110 transition-transform duration-300 cursor-pointer"
         >
-          <MascotAvatar size="sm" withGlow={false} />
-          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-[#D9B96E] rounded-full border-2 border-[#06141B] animate-ping" />
+          <div className="w-14 h-14 rounded-full overflow-hidden">
+            <img 
+              src="/assets/mascot_avatar.png" 
+              alt="Ари" 
+              className="w-full h-full object-cover filter contrast-[1.05]"
+            />
+          </div>
+          <span className="absolute top-0 right-0 w-3.5 h-3.5 bg-[#D9B96E] rounded-full border-2 border-[#06141B] animate-ping" />
         </button>
       </div>
     );
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end">
+    <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end select-none">
       {/* Quick Menu Popover */}
       {isOpen && (
-        <div className="mb-3 w-80 bg-[#0A1D26]/95 border-2 border-[#D9B96E] rounded-3xl p-5 shadow-2xl backdrop-blur-xl shadow-black/90 animate-slideUp">
-          <div className="flex items-center justify-between pb-3 border-b border-[#1C3945]">
-            <div className="flex items-center space-x-2.5">
-              <MascotAvatar size="xs" withGlow={false} />
-              <span className="font-serif font-bold text-base text-[#F2F0E8]">Хранитель Ари</span>
+        <div className="mb-3 w-80 gold-rotating-border animate-slideUp">
+          <div className="gold-rotating-border-content p-5">
+            <div className="flex items-center justify-between pb-3 border-b border-[#1C3945]">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-full overflow-hidden border border-[#D9B96E] bg-[#06141B] shrink-0">
+                  <img src="/assets/mascot_avatar.png" alt="Ари" className="w-full h-full object-cover" />
+                </div>
+                <span className="font-serif font-bold text-base text-[#F2F0E8]">Хранитель Ари</span>
+              </div>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="text-[#A8B4B7] hover:text-[#F2F0E8] p-1 rounded-lg transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="text-[#A8B4B7] hover:text-[#F2F0E8] p-1 rounded-lg transition cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
 
-          <p className="text-xs text-[#A8B4B7] my-3 font-sans leading-relaxed">
-            Я всегда рядом, чтобы помочь с настройкой и ответить на любые вопросы по работе AmneziaWG.
-          </p>
+            <p className="text-xs text-[#A8B4B7] my-3 font-sans leading-relaxed">
+              Я помогу с настройкой и отвечу на любые вопросы по работе AmneziaWG VPN.
+            </p>
 
-          <div className="space-y-2">
-            <button
-              onClick={() => {
-                setIsOpen(false);
-                onOpenFaq();
-              }}
-              className="w-full text-left p-3 rounded-2xl bg-[#102833] hover:bg-[#163442] border border-[#1C3945] hover:border-[#D9B96E]/60 text-[#F2F0E8] text-xs font-medium flex items-center justify-between transition cursor-pointer group"
-            >
-              <div className="flex items-center space-x-2.5">
-                <HelpCircle className="w-4 h-4 text-[#D9B96E]" />
-                <span className="font-semibold">5 частых вопросов (FAQ)</span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[#718187] group-hover:text-[#D9B96E] transition" />
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  onOpenFaq();
+                }}
+                className="w-full text-left p-3 rounded-2xl bg-[#102833] hover:bg-[#163442] border border-[#1C3945] hover:border-[#D9B96E]/60 text-[#F2F0E8] text-xs font-medium flex items-center justify-between transition cursor-pointer group"
+              >
+                <div className="flex items-center space-x-2.5">
+                  <HelpCircle className="w-4 h-4 text-[#D9B96E]" />
+                  <span className="font-semibold">5 частых вопросов (FAQ)</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-[#718187] group-hover:text-[#D9B96E] transition" />
+              </button>
 
-            <button
-              onClick={() => {
-                setIsOpen(false);
-                onStartOnboarding();
-              }}
-              className="w-full text-left p-3 rounded-2xl bg-[#102833] hover:bg-[#163442] border border-[#1C3945] hover:border-[#D9B96E]/60 text-[#F2F0E8] text-xs font-medium flex items-center justify-between transition cursor-pointer group"
-            >
-              <div className="flex items-center space-x-2.5">
-                <RotateCcw className="w-4 h-4 text-[#6EA8C4]" />
-                <span className="font-semibold">Пройти обучение заново</span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[#718187] group-hover:text-[#6EA8C4] transition" />
-            </button>
-          </div>
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  onStartOnboarding();
+                }}
+                className="w-full text-left p-3 rounded-2xl bg-[#102833] hover:bg-[#163442] border border-[#1C3945] hover:border-[#D9B96E]/60 text-[#F2F0E8] text-xs font-medium flex items-center justify-between transition cursor-pointer group"
+              >
+                <div className="flex items-center space-x-2.5">
+                  <RotateCcw className="w-4 h-4 text-[#6EA8C4]" />
+                  <span className="font-semibold">Пройти обучение заново</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-[#718187] group-hover:text-[#6EA8C4] transition" />
+              </button>
+            </div>
 
-          <div className="mt-4 pt-3 text-center border-t border-[#1C3945]/50 flex justify-between items-center text-[11px] text-[#718187]">
-            <button
-              onClick={handleToggleCollapse}
-              className="hover:text-[#A8B4B7] transition cursor-pointer"
-            >
-              Свернуть персонажа
-            </button>
-            <span className="font-mono">Avari v0.1</span>
+            <div className="mt-4 pt-3 text-center border-t border-[#1C3945]/50 flex justify-between items-center text-[11px] text-[#718187]">
+              <button
+                onClick={handleToggleCollapse}
+                className="hover:text-[#A8B4B7] transition cursor-pointer"
+              >
+                Свернуть в иконку
+              </button>
+              <span className="font-serif font-bold text-[#D9B96E]">— Ари</span>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Floating Trigger Button with Speech Bubble */}
-      <div className="flex items-center space-x-3">
+      {/* Floating Trigger Button with Circular Face Avatar and Rotating Sheen Bubble */}
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center space-x-3 cursor-pointer group"
+      >
         {!isOpen && (
-          <div 
-            onClick={() => setIsOpen(true)}
-            className="cursor-pointer bg-[#0A1D26]/95 border-2 border-[#D9B96E] py-2.5 px-4 rounded-2xl shadow-2xl backdrop-blur-md text-xs text-[#F2F0E8] font-sans flex items-center space-x-2 transition hover:scale-105 animate-bubble-float"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-serif font-bold text-[#F0D48D]">Нужна помощь?</span>
+          <div className="gold-rotating-border">
+            <div className="gold-rotating-border-content py-2 px-3.5 text-xs font-sans flex items-center space-x-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="font-serif font-bold text-[#F0D48D]">Нужна помощь?</span>
+            </div>
           </div>
         )}
 
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="relative group p-1 rounded-full bg-[#0A1D26] border-2 border-[#D9B96E] shadow-2xl hover:scale-110 transition-transform duration-300 cursor-pointer animate-mascot-float"
-        >
-          <MascotAvatar size="md" withGlow={true} />
-        </button>
+        {/* Circular Portrait Avatar of Ari's Face */}
+        <div className="relative flex-shrink-0 transition-transform duration-300 group-hover:scale-110">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-[#D9B96E] bg-[#0A1D26] shadow-2xl shadow-black/90 group-hover:border-[#F0D48D] group-hover:shadow-[0_0_25px_rgba(217,185,110,0.4)] transition-all duration-300">
+            <img 
+              src="/assets/mascot_avatar.png" 
+              alt="Ари" 
+              className="w-full h-full object-cover filter contrast-[1.05] pointer-events-none"
+            />
+          </div>
+          <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-[#06141B]" />
+        </div>
       </div>
     </div>
   );
