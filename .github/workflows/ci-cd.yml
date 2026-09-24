@@ -143,15 +143,7 @@ jobs:
           eval $RSYNC_CMD deploy-artifacts/apps/frontend/dist/ ${SSH_USER}@${SSH_HOST}:${DEPLOY_TMP}/
 
           echo "==> Applying frontend update..."
-          $SSH_CMD "bash -se" << EOF
-            set -euo pipefail
-            rsync -av --delete ${DEPLOY_TMP}/ /var/www/avari-keys/frontend/
-            rm -rf ${DEPLOY_TMP}
-            if systemctl is-active --quiet caddy; then
-              echo "Reloading caddy..."
-              systemctl reload caddy || true
-            fi
-          EOF
+          $SSH_CMD "rsync -av --delete ${DEPLOY_TMP}/ /var/www/avari-keys/frontend/ && rm -rf ${DEPLOY_TMP} && systemctl reload caddy 2>/dev/null || true"
           echo "✅ Frontend successfully updated!"
 
       - name: 🧹 Cleanup SSH Credentials
@@ -213,18 +205,7 @@ jobs:
               echo "=================================================="
               ssh -i ~/.ssh/id_deploy -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new ${SSH_USER}@${HOST} "mkdir -p ${DEPLOY_TMP} /usr/local/bin /opt/avari-keys/data"
               scp -i ~/.ssh/id_deploy -P ${SSH_PORT} -o StrictHostKeyChecking=accept-new deploy-artifacts/dist/linux-amd64/avari-slave ${SSH_USER}@${HOST}:${DEPLOY_TMP}/avari-slave
-              ssh -i ~/.ssh/id_deploy -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new ${SSH_USER}@${HOST} "bash -se" << 'EOF'
-                set -e
-                install -m 755 /tmp/avari-backend-*/avari-slave /usr/local/bin/avari-slave
-                rm -rf /tmp/avari-backend-*
-                systemctl daemon-reload
-                if systemctl is-active --quiet avari-slave; then
-                  systemctl restart avari-slave
-                  echo "✅ avari-slave restarted successfully!"
-                else
-                  echo "ℹ️ avari-slave is not active on this host, skipping restart."
-                fi
-EOF
+              ssh -i ~/.ssh/id_deploy -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new ${SSH_USER}@${HOST} "install -m 755 ${DEPLOY_TMP}/avari-slave /usr/local/bin/avari-slave && rm -rf ${DEPLOY_TMP} && systemctl daemon-reload && (systemctl is-active --quiet avari-slave && systemctl restart avari-slave && echo '✅ avari-slave restarted successfully!' || echo 'ℹ️ avari-slave service is not active')"
             done
             echo "🎉 All slave nodes successfully deployed!"
             exit 0
@@ -254,15 +235,7 @@ EOF
             $SSH_CMD "chmod +x ${DEPLOY_TMP}/avari-slave && install -m 755 ${DEPLOY_TMP}/avari-slave /usr/local/bin/avari-slave"
 
             echo "==> Restarting avari-slave service (if active/configured)..."
-            $SSH_CMD "bash -se" << 'EOF'
-              systemctl daemon-reload
-              if systemctl is-active --quiet avari-slave; then
-                systemctl restart avari-slave
-                echo "✅ avari-slave restarted successfully!"
-              else
-                echo "ℹ️ avari-slave is not active on this host, skipping service restart."
-              fi
-EOF
+            $SSH_CMD "systemctl daemon-reload && (systemctl is-active --quiet avari-slave && systemctl restart avari-slave && echo '✅ avari-slave restarted successfully!' || echo 'ℹ️ avari-slave is not active on this host')"
           fi
 
           echo "==> Cleaning up temporary staging directory..."
@@ -272,4 +245,5 @@ EOF
       - name: 🧹 Cleanup SSH Credentials
         if: always()
         run: rm -rf ~/.ssh/id_deploy
+
 
