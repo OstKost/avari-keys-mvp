@@ -19,10 +19,12 @@ import {
   Send,
   Bot,
   BellRing,
+  Settings,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { AdminNode, EgressStatusResponse, TelegramStatusResponse } from '../types';
 import { ConfirmModal } from './ConfirmModal';
+import { TelegramSettingsModal } from './TelegramSettingsModal';
 
 import { useToast } from '../context/ToastContext';
 import { Loader } from './Loader';
@@ -38,6 +40,7 @@ export function AdminNodes() {
   // Telegram status state
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatusResponse | null>(null);
   const [isSendingTestAlert, setIsSendingTestAlert] = useState(false);
+  const [showTelegramSettingsModal, setShowTelegramSettingsModal] = useState(false);
 
   // Form state for adding node
   const [showAddForm, setShowAddForm] = useState(false);
@@ -456,11 +459,19 @@ export function AdminNodes() {
           </div>
 
           <div className="flex items-center space-x-2.5 flex-wrap sm:flex-nowrap">
+            <button
+              onClick={() => setShowTelegramSettingsModal(true)}
+              className="flex items-center space-x-1.5 text-xs font-mono uppercase tracking-wider bg-[#102833] hover:bg-[#1C3945] text-[#D9B96E] hover:text-[#F0D48D] px-3.5 py-2 rounded-xl border border-[#1C3945] transition cursor-pointer"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>Настройки бота</span>
+            </button>
+
             <a
               href={`https://t.me/${telegramStatus?.bot_username || 'AvariElfBot'}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center space-x-1.5 text-xs font-mono uppercase tracking-wider bg-[#102833] hover:bg-[#1C3945] text-[#D9B96E] hover:text-[#F0D48D] px-3.5 py-2 rounded-xl border border-[#1C3945] transition cursor-pointer"
+              className="flex items-center space-x-1.5 text-xs font-mono uppercase tracking-wider bg-[#102833] hover:bg-[#1C3945] text-[#A8B4B7] hover:text-[#F2F0E8] px-3.5 py-2 rounded-xl border border-[#1C3945] transition cursor-pointer"
             >
               <Send className="w-3.5 h-3.5" />
               <span>Открыть бота</span>
@@ -1257,7 +1268,15 @@ export function AdminNodes() {
           </div>,
           document.body
         )}
+
+      {/* Telegram Settings Modal */}
+      <TelegramSettingsModal
+        isOpen={showTelegramSettingsModal}
+        onClose={() => setShowTelegramSettingsModal(false)}
+        onSaved={() => fetchNodes(false, true)}
+      />
     </div>
   );
 }
+
 

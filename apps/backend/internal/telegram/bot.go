@@ -19,41 +19,54 @@ import (
 
 // Bot manages Telegram notifications and command interaction.
 type Bot struct {
-	token       string
-	botUsername string
+	token               string
+	botUsername         string
+	adminSecret         string
+	enabled             bool
+	notifyOnNodeDown    bool
+	notifyOnNodeRecover bool
+	notifyOnNewUser     bool
+
 	httpClient  *http.Client
 	storage     *storage.Storage
 	nodeLister  func(ctx context.Context) ([]models.NodeWithStatus, error)
 	statsLister func(ctx context.Context) (*models.DashboardStatsResponse, error)
-	adminSecret string
 
-	stopChan chan struct{}
-	wg       sync.WaitGroup
-	mu       sync.RWMutex
+	stopChan  chan struct{}
+	isRunning bool
+	wg        sync.WaitGroup
+	mu        sync.RWMutex
 }
 
 // Config holds Telegram bot parameters.
 type Config struct {
-	Token       string
-	BotUsername string
-	AdminSecret string
-	AdminChatID string
-	Storage     *storage.Storage
-	NodeLister  func(ctx context.Context) ([]models.NodeWithStatus, error)
-	StatsLister func(ctx context.Context) (*models.DashboardStatsResponse, error)
+	Token               string
+	BotUsername         string
+	AdminSecret         string
+	AdminChatID         string
+	Enabled             bool
+	NotifyOnNodeDown    bool
+	NotifyOnNodeRecover bool
+	NotifyOnNewUser     bool
+	Storage             *storage.Storage
+	NodeLister          func(ctx context.Context) ([]models.NodeWithStatus, error)
+	StatsLister         func(ctx context.Context) (*models.DashboardStatsResponse, error)
 }
 
 // NewBot creates a new Telegram Bot instance.
 func NewBot(cfg Config) *Bot {
 	bot := &Bot{
-		token:       cfg.Token,
-		botUsername: cfg.BotUsername,
-		httpClient:  &http.Client{Timeout: 35 * time.Second},
-		storage:     cfg.Storage,
-		nodeLister:  cfg.NodeLister,
-		statsLister: cfg.StatsLister,
-		adminSecret: cfg.AdminSecret,
-		stopChan:    make(chan struct{}),
+		token:               cfg.Token,
+		botUsername:         cfg.BotUsername,
+		adminSecret:         cfg.AdminSecret,
+		enabled:             cfg.Enabled || cfg.Token != "",
+		notifyOnNodeDown:    true,
+		notifyOnNodeRecover: true,
+		notifyOnNewUser:     true,
+		httpClient:          &http.Client{Timeout: 35 * time.Second},
+		storage:             cfg.Storage,
+		nodeLister:          cfg.NodeLister,
+		statsLister:         cfg.StatsLister,
 	}
 
 	if bot.botUsername == "" {
@@ -76,18 +89,129 @@ func NewBot(cfg Config) *Bot {
 	return bot
 }
 
-// IsEnabled returns true if the bot token is configured.
+// IsEnabled returns true if the bot is enabled and token is present.
 func (b *Bot) IsEnabled() bool {
-	return b != nil && b.token != ""
+	if b == nil {
+		return false
+	}
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.enabled && b.token != ""
+}
+
+// GetSettings returns the current Telegram settings snapshot.
+func (b *Bot) GetSettings() models.TelegramSettings {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return models.TelegramSettings{
+		Enabled:             b.enabled,
+		BotToken:            b.token,
+		BotUsername:         b.botUsername,
+		AdminSecret:         b.adminSecret,
+		NotifyOnNodeDown:    b.notifyOnNodeDown,
+		NotifyOnNodeRecover: b.notifyOnNodeRecover,
+		NotifyOnNewUser:     b.notifyOnNewUser,
+	}
+}
+
+// ValidateToken tests the token against Telegram getMe endpoint and returns bot username.
+func (b *Bot) ValidateToken(token string) (username string, firstName string, err error) {
+	if token == "" {
+		return "", "", fmt.Errorf("token cannot be empty")
+	}
+
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/getMe", token)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return "", "", err
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("network error connecting to Telegram API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("invalid token (Telegram API returned status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var meResp struct {
+		OK     bool `json:"ok"`
+		Result struct {
+			ID        int64  `json:"id"`
+			IsBot     bool   `json:"is_bot"`
+			FirstName string `json:"first_name"`
+			Username  string `json:"username"`
+		} `json:"result"`
+	}
+
+	if err := json.Unmarshal(body, &meResp); err != nil || !meResp.OK {
+		return "", "", fmt.Errorf("failed to parse Telegram getMe response: %w", err)
+	}
+
+	return meResp.Result.Username, meResp.Result.FirstName, nil
+}
+
+// UpdateConfig updates bot credentials and hot-reloads the polling worker.
+func (b *Bot) UpdateConfig(ctx context.Context, s models.TelegramSettings) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	tokenChanged := b.token != s.BotToken
+	enabledChanged := b.enabled != s.Enabled
+
+	b.token = strings.TrimSpace(s.BotToken)
+	b.botUsername = strings.TrimSpace(s.BotUsername)
+	b.adminSecret = strings.TrimSpace(s.AdminSecret)
+	b.enabled = s.Enabled
+	b.notifyOnNodeDown = s.NotifyOnNodeDown
+	b.notifyOnNodeRecover = s.NotifyOnNodeRecover
+	b.notifyOnNewUser = s.NotifyOnNewUser
+
+	if b.botUsername == "" {
+		b.botUsername = "AvariElfBot"
+	}
+
+	// Hot reload polling worker if token or enabled status changed
+	if tokenChanged || enabledChanged {
+		if b.isRunning {
+			close(b.stopChan)
+			b.wg.Wait()
+			b.isRunning = false
+			log.Printf("[TELEGRAM] Stopped previous polling worker")
+		}
+
+		if b.enabled && b.token != "" {
+			b.stopChan = make(chan struct{})
+			b.isRunning = true
+			b.wg.Add(1)
+			go b.pollUpdates(ctx)
+			log.Printf("[TELEGRAM] Hot-reloaded and started polling worker for @%s", b.botUsername)
+		}
+	}
+
+	return nil
 }
 
 // Start launches the background polling worker.
 func (b *Bot) Start(ctx context.Context) {
-	if !b.IsEnabled() {
-		log.Println("[TELEGRAM] Bot token not provided, Telegram notifications disabled")
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if !b.enabled || b.token == "" {
+		log.Println("[TELEGRAM] Bot token not provided or bot disabled, Telegram notifications inactive")
 		return
 	}
 
+	if b.isRunning {
+		return
+	}
+
+	b.stopChan = make(chan struct{})
+	b.isRunning = true
 	b.wg.Add(1)
 	go b.pollUpdates(ctx)
 	log.Printf("[TELEGRAM] Bot @%s started successfully (Polling)", b.botUsername)
@@ -95,11 +219,16 @@ func (b *Bot) Start(ctx context.Context) {
 
 // Stop gracefully terminates the polling loop.
 func (b *Bot) Stop() {
-	if !b.IsEnabled() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if !b.isRunning {
 		return
 	}
+
 	close(b.stopChan)
 	b.wg.Wait()
+	b.isRunning = false
 	log.Printf("[TELEGRAM] Bot @%s stopped", b.botUsername)
 }
 
@@ -137,15 +266,24 @@ func (b *Bot) pollUpdates(ctx context.Context) {
 	var offset int64 = 0
 
 	for {
+		b.mu.RLock()
+		token := b.token
+		stopCh := b.stopChan
+		b.mu.RUnlock()
+
+		if token == "" {
+			return
+		}
+
 		select {
-		case <-b.stopChan:
+		case <-stopCh:
 			return
 		case <-ctx.Done():
 			return
 		default:
 		}
 
-		url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?timeout=25&offset=%d", b.token, offset)
+		url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?timeout=25&offset=%d", token, offset)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
 			time.Sleep(3 * time.Second)
@@ -155,7 +293,7 @@ func (b *Bot) pollUpdates(ctx context.Context) {
 		resp, err := b.httpClient.Do(req)
 		if err != nil {
 			select {
-			case <-b.stopChan:
+			case <-stopCh:
 				return
 			case <-time.After(3 * time.Second):
 				continue
@@ -185,12 +323,6 @@ func (b *Bot) pollUpdates(ctx context.Context) {
 	}
 }
 
-type tgUser struct {
-	ID        int64
-	FirstName string
-	Username  string
-}
-
 func (b *Bot) handleIncomingMessage(ctx context.Context, chatID int64, from *struct {
 	ID        int64  `json:"id"`
 	IsBot     bool   `json:"is_bot"`
@@ -211,23 +343,25 @@ func (b *Bot) handleIncomingMessage(ctx context.Context, chatID int64, from *str
 	}
 
 	command := strings.ToLower(parts[0])
-	// Strip bot mention e.g. /status@AvariElfBot
 	if idx := strings.Index(command, "@"); idx != -1 {
 		command = command[:idx]
 	}
 
+	b.mu.RLock()
+	adminSecret := b.adminSecret
+	botUsername := b.botUsername
+	b.mu.RUnlock()
+
 	switch command {
 	case "/start":
-		// Check if start has payload: /start <secret>
-		if len(parts) > 1 && b.adminSecret != "" && parts[1] == b.adminSecret {
+		if len(parts) > 1 && adminSecret != "" && parts[1] == adminSecret {
 			b.registerChat(ctx, chatID, username, firstName, true)
-			_ = b.SendMessage(chatID, fmt.Sprintf("✨ <b>Добро пожаловать в Avari Keys Alerts!</b>\n\nВаш чат успешно привязан с правами <b>Администратора</b>.\nВы будете получать оповещения о доступности серверов и событиях системы.\n\nИспользуйте /status для проверки серверов или /help для списка команд.",), "HTML")
+			_ = b.SendMessage(chatID, "✨ <b>Добро пожаловать в Avari Keys Alerts!</b>\n\nВаш чат успешно привязан с правами <b>Администратора</b>.\nВы будете получать оповещения о доступности серверов и событиях системы.\n\nИспользуйте /status для проверки серверов или /help для списка команд.", "HTML")
 			return
 		}
 
-		// Auto register if no secret set, or welcome
 		b.registerChat(ctx, chatID, username, firstName, true)
-		msg := "🌿 <b>Avari Keys Monitor Bot (@" + b.botUsername + ")</b>\n\n" +
+		msg := "🌿 <b>Avari Keys Monitor Bot (@" + botUsername + ")</b>\n\n" +
 			"Бот активен и готов присылать мгновенные уведомления о состоянии серверов AmneziaWG (Cascade & Direct).\n\n" +
 			"<b>Доступные команды:</b>\n" +
 			"📊 /status — Состояние и пинг всех серверов\n" +
@@ -237,10 +371,10 @@ func (b *Bot) handleIncomingMessage(ctx context.Context, chatID int64, from *str
 		_ = b.SendMessage(chatID, msg, "HTML")
 
 	case "/bind":
-		if len(parts) > 1 && b.adminSecret != "" && parts[1] == b.adminSecret {
+		if len(parts) > 1 && adminSecret != "" && parts[1] == adminSecret {
 			b.registerChat(ctx, chatID, username, firstName, true)
 			_ = b.SendMessage(chatID, "✅ <b>Успешно!</b> Чат привязан к системе оповещений администратора.", "HTML")
-		} else if b.adminSecret == "" {
+		} else if adminSecret == "" {
 			b.registerChat(ctx, chatID, username, firstName, true)
 			_ = b.SendMessage(chatID, "✅ Чат зарегистрирован в списке получателей уведомлений.", "HTML")
 		} else {
@@ -367,8 +501,13 @@ func (b *Bot) handleNodesCommand(ctx context.Context, chatID int64) {
 
 // SendMessage sends an individual text message via Telegram API.
 func (b *Bot) SendMessage(chatID int64, text string, parseMode string) error {
-	if !b.IsEnabled() {
-		return fmt.Errorf("telegram bot is not configured")
+	b.mu.RLock()
+	token := b.token
+	enabled := b.enabled
+	b.mu.RUnlock()
+
+	if !enabled || token == "" {
+		return fmt.Errorf("telegram bot is not configured or disabled")
 	}
 
 	payload := map[string]any{
@@ -384,7 +523,7 @@ func (b *Bot) SendMessage(chatID int64, text string, parseMode string) error {
 		return err
 	}
 
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", b.token)
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
 	resp, err := b.httpClient.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("failed to send telegram message: %w", err)
@@ -425,6 +564,14 @@ func (b *Bot) BroadcastAlert(text string) error {
 
 // NotifyNodeDown sends a critical downtime alert.
 func (b *Bot) NotifyNodeDown(node models.Node, reason string) {
+	b.mu.RLock()
+	notify := b.notifyOnNodeDown
+	b.mu.RUnlock()
+
+	if !notify {
+		return
+	}
+
 	msg := fmt.Sprintf(
 		"🚨 <b>[Avari Alert] СЕРВЕР НЕДОСТУПЕН!</b>\n"+
 			"━━━━━━━━━━━━━━━━━━━━━\n"+
@@ -448,6 +595,14 @@ func (b *Bot) NotifyNodeDown(node models.Node, reason string) {
 
 // NotifyNodeRecovered sends a recovery notification.
 func (b *Bot) NotifyNodeRecovered(node models.Node, latencyMs int64) {
+	b.mu.RLock()
+	notify := b.notifyOnNodeRecover
+	b.mu.RUnlock()
+
+	if !notify {
+		return
+	}
+
 	msg := fmt.Sprintf(
 		"✅ <b>[Avari Alert] СЕРВЕР СНОВА ОНЛАЙН!</b>\n"+
 			"━━━━━━━━━━━━━━━━━━━━━\n"+
@@ -467,6 +622,14 @@ func (b *Bot) NotifyNodeRecovered(node models.Node, latencyMs int64) {
 
 // NotifyNewUser sends an alert about new user registration pending approval.
 func (b *Bot) NotifyNewUser(user models.User) {
+	b.mu.RLock()
+	notify := b.notifyOnNewUser
+	b.mu.RUnlock()
+
+	if !notify {
+		return
+	}
+
 	msg := fmt.Sprintf(
 		"👤 <b>[Avari Keys] Новый пользователь!</b>\n"+
 			"━━━━━━━━━━━━━━━━━━━━━\n"+
@@ -483,13 +646,17 @@ func (b *Bot) NotifyNewUser(user models.User) {
 
 // SendTestAlert sends a test message to a specific chat or broadcasts.
 func (b *Bot) SendTestAlert(chatID int64) error {
+	b.mu.RLock()
+	botUsername := b.botUsername
+	b.mu.RUnlock()
+
 	msg := fmt.Sprintf(
 		"🔔 <b>[Avari Test Alert] Проверка связи с ботом @%s</b>\n"+
 			"━━━━━━━━━━━━━━━━━━━━━\n"+
 			"✅ Бот успешно подключен к Master-серверу.\n"+
 			"📡 Оповещения о статусе серверов и падениях настроены.\n"+
 			"⏱ <b>Время:</b> %s",
-		b.botUsername,
+		botUsername,
 		time.Now().Format("02.01.2006 15:04:05"),
 	)
 

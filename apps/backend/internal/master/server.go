@@ -54,13 +54,38 @@ func NewServer(cfg Config, s *storage.Storage) *Server {
 		mux:     http.NewServeMux(),
 	}
 
+	// Load stored Telegram settings if available
+	var tgToken, tgUsername, tgSecret string
+	var notifyDown, notifyRecover, notifyNewUser bool = true, true, true
+	tgEnabled := false
+
+	savedSettings, err := s.GetTelegramSettings(context.Background())
+	if err == nil && savedSettings != nil && (savedSettings.BotToken != "" || savedSettings.Enabled) {
+		tgToken = savedSettings.BotToken
+		tgUsername = savedSettings.BotUsername
+		tgSecret = savedSettings.AdminSecret
+		tgEnabled = savedSettings.Enabled
+		notifyDown = savedSettings.NotifyOnNodeDown
+		notifyRecover = savedSettings.NotifyOnNodeRecover
+		notifyNewUser = savedSettings.NotifyOnNewUser
+	} else {
+		tgToken = cfg.TelegramBotToken
+		tgUsername = cfg.TelegramBotUsername
+		tgSecret = cfg.TelegramAdminSecret
+		tgEnabled = cfg.TelegramBotToken != ""
+	}
+
 	// Initialize Telegram Bot & HealthChecker
 	tgCfg := telegram.Config{
-		Token:       cfg.TelegramBotToken,
-		BotUsername: cfg.TelegramBotUsername,
-		AdminSecret: cfg.TelegramAdminSecret,
-		AdminChatID: cfg.TelegramAdminChatID,
-		Storage:     s,
+		Token:               tgToken,
+		BotUsername:         tgUsername,
+		AdminSecret:         tgSecret,
+		AdminChatID:         cfg.TelegramAdminChatID,
+		Enabled:             tgEnabled,
+		NotifyOnNodeDown:    notifyDown,
+		NotifyOnNodeRecover: notifyRecover,
+		NotifyOnNewUser:     notifyNewUser,
+		Storage:             s,
 		NodeLister: func(ctx context.Context) ([]models.NodeWithStatus, error) {
 			if srv.healthChecker != nil {
 				return srv.healthChecker.CheckAllNodes(ctx)
@@ -186,7 +211,11 @@ func (s *Server) routes() {
 
 	// Telegram Bot Routes
 	s.mux.HandleFunc("GET /api/v1/admin/telegram/status", auth.RequireAdmin(s.handleAdminGetTelegramStatus))
+	s.mux.HandleFunc("GET /api/v1/admin/telegram/settings", auth.RequireAdmin(s.handleAdminGetTelegramSettings))
+	s.mux.HandleFunc("PUT /api/v1/admin/telegram/settings", auth.RequireAdmin(s.handleAdminUpdateTelegramSettings))
 	s.mux.HandleFunc("POST /api/v1/admin/telegram/test", auth.RequireAdmin(s.handleAdminSendTelegramTest))
+	s.mux.HandleFunc("DELETE /api/v1/admin/telegram/subscribers/{id}", auth.RequireAdmin(s.handleAdminDeleteTelegramSubscriber))
+	s.mux.HandleFunc("POST /api/v1/admin/telegram/subscribers/{id}/toggle", auth.RequireAdmin(s.handleAdminToggleTelegramSubscriber))
 
 	// Shared / Dashboard Routes
 	s.mux.HandleFunc("GET /api/v1/stats/dashboard", auth.RequireAuth(s.handleGetDashboardStats))
@@ -1501,16 +1530,137 @@ func (s *Server) handleAdminGetTelegramStatus(w http.ResponseWriter, r *http.Req
 		botUsername = "AvariElfBot"
 	}
 
+	var settings *models.TelegramSettings
+	if s.telegramBot != nil {
+		snap := s.telegramBot.GetSettings()
+		settings = &snap
+		if snap.BotUsername != "" {
+			botUsername = snap.BotUsername
+		}
+	}
+
 	isEnabled := s.telegramBot != nil && s.telegramBot.IsEnabled()
 
 	s.writeJSON(w, http.StatusOK, models.TelegramStatusResponse{
 		Enabled:          isEnabled,
 		BotUsername:      botUsername,
+		Settings:         settings,
 		Subscribers:      chats,
 		TotalSubscribers: len(chats),
 	})
 }
 
+func (s *Server) handleAdminGetTelegramSettings(w http.ResponseWriter, r *http.Request) {
+	settings, err := s.storage.GetTelegramSettings(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Also sync live bot username if known
+	if s.telegramBot != nil {
+		snap := s.telegramBot.GetSettings()
+		if snap.BotUsername != "" && settings.BotUsername == "" {
+			settings.BotUsername = snap.BotUsername
+		}
+	}
+
+	s.writeJSON(w, http.StatusOK, settings)
+}
+
+func (s *Server) handleAdminUpdateTelegramSettings(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	var req models.TelegramSettings
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	req.BotToken = strings.TrimSpace(req.BotToken)
+	req.BotUsername = strings.TrimSpace(req.BotUsername)
+	req.AdminSecret = strings.TrimSpace(req.AdminSecret)
+
+	// If token is provided and enabled, validate with Telegram getMe API
+	if req.Enabled && req.BotToken != "" && s.telegramBot != nil {
+		detectedUsername, _, err := s.telegramBot.ValidateToken(req.BotToken)
+		if err != nil {
+			s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("Ошибка валидации токена Telegram: %v", err)})
+			return
+		}
+		if detectedUsername != "" {
+			req.BotUsername = detectedUsername
+		}
+	}
+
+	saved, err := s.storage.UpdateTelegramSettings(r.Context(), req)
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Hot reload running Telegram bot instance
+	if s.telegramBot != nil {
+		_ = s.telegramBot.UpdateConfig(context.Background(), *saved)
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_telegram_settings_update", fmt.Sprintf("Обновлены настройки Telegram-бота @%s (Enabled: %v)", saved.BotUsername, saved.Enabled))
+
+	s.writeJSON(w, http.StatusOK, saved)
+}
+
+func (s *Server) handleAdminDeleteTelegramSubscriber(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid chat ID"})
+		return
+	}
+
+	if err := s.storage.DeleteTelegramChat(r.Context(), id); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_telegram_subscriber_delete", fmt.Sprintf("Удален получатель Telegram-оповещений (Chat ID #%d)", id))
+
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: "Получатель успешно удален из списка рассылки",
+	})
+}
+
+func (s *Server) handleAdminToggleTelegramSubscriber(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid chat ID"})
+		return
+	}
+
+	var req models.TelegramSubscriberToggleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	if err := s.storage.SetTelegramAlertsEnabled(r.Context(), id, req.AlertsEnabled); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	statusText := "отключены"
+	if req.AlertsEnabled {
+		statusText = "включены"
+	}
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_telegram_subscriber_toggle", fmt.Sprintf("Оповещения для Telegram-чата #%d %s", id, statusText))
+
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: fmt.Sprintf("Оповещения для чата %s", statusText),
+	})
+}
 
 func (s *Server) handleAdminSendTelegramTest(w http.ResponseWriter, r *http.Request) {
 	claims, _ := auth.GetUserFromContext(r.Context())
@@ -1532,11 +1682,11 @@ func (s *Server) handleAdminSendTelegramTest(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) writeJSON(w http.ResponseWriter, status int, data any) {
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
 }
+
 
 
 

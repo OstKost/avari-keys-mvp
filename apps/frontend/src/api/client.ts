@@ -14,6 +14,7 @@ import {
   AdminBillingSummary,
   BillingRequisites,
   TelegramStatusResponse,
+  TelegramSettings,
 } from '../types';
 
 import { mockApi } from './mockClient';
@@ -449,6 +450,39 @@ const realApi = {
       headers: getAuthHeaders(),
     });
     return handleResponse<TelegramStatusResponse>(res);
+  },
+
+  async getTelegramSettings(): Promise<TelegramSettings> {
+    const res = await fetch(`${API_BASE}/admin/telegram/settings`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<TelegramSettings>(res);
+  },
+
+  async updateTelegramSettings(settings: TelegramSettings): Promise<TelegramSettings> {
+    const res = await fetch(`${API_BASE}/admin/telegram/settings`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(settings),
+    });
+    return handleResponse<TelegramSettings>(res);
+  },
+
+  async deleteTelegramSubscriber(chatId: number): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/admin/telegram/subscribers/${chatId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<{ success: boolean; message: string }>(res);
+  },
+
+  async toggleTelegramSubscriber(chatId: number, alertsEnabled: boolean): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/admin/telegram/subscribers/${chatId}/toggle`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ alerts_enabled: alertsEnabled }),
+    });
+    return handleResponse<{ success: boolean; message: string }>(res);
   },
 
   async sendTelegramTestAlert(): Promise<{ success: boolean; message: string }> {

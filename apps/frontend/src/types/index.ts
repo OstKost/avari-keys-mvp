@@ -200,12 +200,24 @@ export interface TelegramChat {
   created_at: string;
 }
 
+export interface TelegramSettings {
+  enabled: boolean;
+  bot_token: string;
+  bot_username: string;
+  admin_secret: string;
+  notify_on_node_down: boolean;
+  notify_on_node_recover: boolean;
+  notify_on_new_user: boolean;
+}
+
 export interface TelegramStatusResponse {
   enabled: boolean;
   bot_username: string;
+  settings?: TelegramSettings;
   subscribers: TelegramChat[];
   total_subscribers: number;
 }
+
 
 
 

@@ -666,7 +666,70 @@ func TestTelegramAdminEndpoints(t *testing.T) {
 	if statusResp.TotalSubscribers != 1 {
 		t.Fatalf("expected 1 subscriber, got %d", statusResp.TotalSubscribers)
 	}
+
+	// 4. GET /api/v1/admin/telegram/settings
+	req = httptest.NewRequest("GET", "/api/v1/admin/telegram/settings", nil)
+	req.Header.Set("Authorization", "Bearer "+adminLoginResp.Token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for telegram settings, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 5. PUT /api/v1/admin/telegram/settings
+	updatePayload, _ := json.Marshal(models.TelegramSettings{
+		Enabled:             false, // Disable so getMe is not hit with fake token during test
+		BotToken:            "test_dummy_token_123",
+		BotUsername:         "AvariTestBot",
+		AdminSecret:         "secret789",
+		NotifyOnNodeDown:    true,
+		NotifyOnNodeRecover: true,
+		NotifyOnNewUser:     true,
+	})
+	req = httptest.NewRequest("PUT", "/api/v1/admin/telegram/settings", bytes.NewReader(updatePayload))
+	req.Header.Set("Authorization", "Bearer "+adminLoginResp.Token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for update telegram settings, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var updatedSettings models.TelegramSettings
+	_ = json.NewDecoder(rec.Body).Decode(&updatedSettings)
+	if updatedSettings.BotUsername != "AvariTestBot" || updatedSettings.AdminSecret != "secret789" {
+		t.Fatalf("unexpected updated settings: %+v", updatedSettings)
+	}
+
+	// 6. POST /api/v1/admin/telegram/subscribers/777888999/toggle
+	toggleBody, _ := json.Marshal(models.TelegramSubscriberToggleRequest{AlertsEnabled: false})
+	req = httptest.NewRequest("POST", "/api/v1/admin/telegram/subscribers/777888999/toggle", bytes.NewReader(toggleBody))
+	req.Header.Set("Authorization", "Bearer "+adminLoginResp.Token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for subscriber toggle, got %d", rec.Code)
+	}
+
+	// 7. DELETE /api/v1/admin/telegram/subscribers/777888999
+	req = httptest.NewRequest("DELETE", "/api/v1/admin/telegram/subscribers/777888999", nil)
+	req.Header.Set("Authorization", "Bearer "+adminLoginResp.Token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for subscriber delete, got %d", rec.Code)
+	}
+
+	// Verify subscriber count is now 0
+	subscribers, _ := store.ListTelegramChats(context.Background())
+	if len(subscribers) != 0 {
+		t.Fatalf("expected 0 subscribers after delete, got %d", len(subscribers))
+	}
 }
+
 
 
 

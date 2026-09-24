@@ -15,6 +15,8 @@ import {
   AdminBillingSummary,
   BillingRequisites,
   TelegramStatusResponse,
+  TelegramSettings,
+  TelegramChat,
 } from '../types';
 
 // In-memory mock storage for standalone FE development
@@ -984,32 +986,71 @@ PersistentKeepalive = 25`;
   async getTelegramStatus(): Promise<TelegramStatusResponse> {
     await new Promise((resolve) => setTimeout(resolve, 200));
     return {
-      enabled: true,
-      bot_username: 'AvariElfBot',
-      subscribers: [
-        {
-          chat_id: 123456789,
-          username: 'ForveAdmin',
-          first_name: 'Forve',
-          is_admin: true,
-          alerts_enabled: true,
-          created_at: new Date().toISOString(),
-        },
-      ],
-      total_subscribers: 1,
+      enabled: mockTelegramSettings.enabled,
+      bot_username: mockTelegramSettings.bot_username || 'AvariElfBot',
+      settings: { ...mockTelegramSettings },
+      subscribers: [...mockTelegramSubscribers],
+      total_subscribers: mockTelegramSubscribers.length,
     };
+  },
+
+  async getTelegramSettings(): Promise<TelegramSettings> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return { ...mockTelegramSettings };
+  },
+
+  async updateTelegramSettings(settings: TelegramSettings): Promise<TelegramSettings> {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    mockTelegramSettings = { ...settings };
+    return { ...mockTelegramSettings };
+  },
+
+  async deleteTelegramSubscriber(chatId: number): Promise<{ success: boolean; message: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    mockTelegramSubscribers = mockTelegramSubscribers.filter((s) => s.chat_id !== chatId);
+    return { success: true, message: 'Получатель удален' };
+  },
+
+  async toggleTelegramSubscriber(chatId: number, alertsEnabled: boolean): Promise<{ success: boolean; message: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const sub = mockTelegramSubscribers.find((s) => s.chat_id === chatId);
+    if (sub) {
+      sub.alerts_enabled = alertsEnabled;
+    }
+    return { success: true, message: alertsEnabled ? 'Оповещения включены' : 'Оповещения отключены' };
   },
 
   async sendTelegramTestAlert(): Promise<{ success: boolean; message: string }> {
     await new Promise((resolve) => setTimeout(resolve, 500));
     return {
       success: true,
-      message: 'Тестовое оповещение успешно отправлено в Telegram @AvariElfBot',
+      message: `Тестовое оповещение успешно отправлено в Telegram @${mockTelegramSettings.bot_username || 'AvariElfBot'}`,
     };
   },
 };
 
 // Mock state helpers
+let mockTelegramSettings: TelegramSettings = {
+  enabled: true,
+  bot_token: '8402833005:AAEZ4eJ6KKb0qErWK05gLnIrS1lyjY3b_i4',
+  bot_username: 'AvariElfBot',
+  admin_secret: 'elfsecret123',
+  notify_on_node_down: true,
+  notify_on_node_recover: true,
+  notify_on_new_user: true,
+};
+
+let mockTelegramSubscribers: TelegramChat[] = [
+  {
+    chat_id: 123456789,
+    username: 'ForveAdmin',
+    first_name: 'Forve',
+    is_admin: true,
+    alerts_enabled: true,
+    created_at: new Date().toISOString(),
+  },
+];
+
 let mockRequisites: BillingRequisites = {
   sbp_phone: '+7 (999) 000-00-00',
   sbp_bank: 'Т-Банк / Сбербанк',

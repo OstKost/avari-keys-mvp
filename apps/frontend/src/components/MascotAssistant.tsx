@@ -281,22 +281,25 @@ export function MascotAuthCompanion({
 }) {
   return (
     <div className="flex flex-col items-center select-none">
-      {/* Speech Bubble with Shimmering Animated Border */}
-      <div className="mb-2 w-full max-w-[300px] relative z-20">
-        <div className="relative bg-[#0A1D26]/95 border-2 border-[#D9B96E] animate-border-shimmer p-4 rounded-3xl shadow-2xl backdrop-blur-xl text-xs sm:text-sm text-[#F2F0E8] font-sans shadow-black/90 text-center">
-          <div className="flex items-center justify-center space-x-1.5 text-xs font-mono font-bold text-[#D9B96E] uppercase tracking-wider mb-1">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Хранитель Avari</span>
+      {/* Speech Bubble with Rotating Gold Sheen Border */}
+      <div className="mb-3 w-full max-w-[300px] relative z-20">
+        <div className="gold-rotating-border">
+          <div className="gold-rotating-border-content p-4 text-center text-xs sm:text-sm text-[#F2F0E8] font-sans">
+            <div className="flex items-center justify-center space-x-1.5 text-xs font-mono font-bold text-[#D9B96E] uppercase tracking-wider mb-1">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Хранитель Avari</span>
+            </div>
+            <p className="leading-relaxed text-[#D9E1E3]">
+              {isRegister
+                ? 'Приветствую тебя! Создай учетную запись, и я помогу настроить твой первый защищенный ключ.'
+                : 'Рад снова приветствовать тебя в Avari Keys! Войди в систему, чтобы управлять своими ключами.'}
+            </p>
           </div>
-          <p className="leading-relaxed text-[#D9E1E3]">
-            {isRegister
-              ? 'Приветствую тебя! Создай учетную запись, и я помогу настроить твой первый защищенный ключ.'
-              : 'Рад снова приветствовать тебя в Avari Keys! Войди в систему, чтобы управлять своими ключами.'}
-          </p>
-          {/* Downward Bubble Tail */}
-          <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-[#D9B96E]" />
-          <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0 border-x-6 border-x-transparent border-t-6 border-t-[#0A1D26]" />
         </div>
+
+        {/* Downward Bubble Tail */}
+        <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-[#D9B96E] z-10" />
+        <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0 border-x-6 border-x-transparent border-t-6 border-t-[#0A1D26] z-10" />
       </div>
 
       {/* Pure Cutout Mascot (No frame/container box, natural shadow & soft glow) */}

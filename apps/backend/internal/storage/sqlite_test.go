@@ -352,4 +352,49 @@ func TestTelegramChatsStorage(t *testing.T) {
 	}
 }
 
+func TestTelegramSettingsStorage(t *testing.T) {
+	store, cleanup := createTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// 1. Initial settings
+	st, err := store.GetTelegramSettings(ctx)
+	if err != nil {
+		t.Fatalf("failed to get default telegram settings: %v", err)
+	}
+	if st == nil {
+		t.Fatalf("expected non-nil settings")
+	}
+
+	// 2. Update settings
+	newSettings := models.TelegramSettings{
+		Enabled:             true,
+		BotToken:            "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
+		BotUsername:         "MyCustomBot",
+		AdminSecret:         "SuperSecretCode42",
+		NotifyOnNodeDown:    true,
+		NotifyOnNodeRecover: false,
+		NotifyOnNewUser:     true,
+	}
+
+	saved, err := store.UpdateTelegramSettings(ctx, newSettings)
+	if err != nil {
+		t.Fatalf("failed to update telegram settings: %v", err)
+	}
+	if saved.BotToken != newSettings.BotToken || saved.BotUsername != "MyCustomBot" || !saved.Enabled || saved.NotifyOnNodeRecover {
+		t.Fatalf("unexpected saved settings: %+v", saved)
+	}
+
+	// 3. Fetch again from DB
+	fetched, err := store.GetTelegramSettings(ctx)
+	if err != nil {
+		t.Fatalf("failed to get updated settings: %v", err)
+	}
+	if fetched.BotToken != newSettings.BotToken || fetched.AdminSecret != "SuperSecretCode42" {
+		t.Fatalf("unexpected fetched settings: %+v", fetched)
+	}
+}
+
+
 
