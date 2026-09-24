@@ -10,6 +10,9 @@ import {
   CleanupLogsResponse,
   DashboardStats,
   EgressStatusResponse,
+  BillingStatus,
+  BillingRecord,
+  AdminBillingSummary,
 } from '../types';
 
 import { mockApi } from './mockClient';
@@ -372,6 +375,55 @@ const realApi = {
     return {
       ...data,
       nodes: Array.isArray(data?.nodes) ? data.nodes : [],
+    };
+  },
+
+  // Billing
+  async getBillingStatus(): Promise<BillingStatus> {
+    const res = await fetch(`${API_BASE}/billing/status`, {
+      headers: getAuthHeaders(),
+    });
+    const data = await handleResponse<BillingStatus>(res);
+    return {
+      ...data,
+      history: Array.isArray(data?.history) ? data.history : [],
+    };
+  },
+
+  async payDues(amount?: number, note?: string): Promise<BillingStatus> {
+    const res = await fetch(`${API_BASE}/billing/pay`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ amount: amount || 0, note: note || '' }),
+    });
+    const data = await handleResponse<BillingStatus>(res);
+    return {
+      ...data,
+      history: Array.isArray(data?.history) ? data.history : [],
+    };
+  },
+
+  async snoozeReminder(days: number = 3): Promise<BillingStatus> {
+    const res = await fetch(`${API_BASE}/billing/snooze`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ days }),
+    });
+    const data = await handleResponse<BillingStatus>(res);
+    return {
+      ...data,
+      history: Array.isArray(data?.history) ? data.history : [],
+    };
+  },
+
+  async getAdminBilling(): Promise<AdminBillingSummary> {
+    const res = await fetch(`${API_BASE}/admin/billing`, {
+      headers: getAuthHeaders(),
+    });
+    const data = await handleResponse<AdminBillingSummary>(res);
+    return {
+      ...data,
+      records: Array.isArray(data?.records) ? data.records : [],
     };
   },
 };

@@ -470,6 +470,117 @@ func TestAdminCascadeEgressSwitchFlow(t *testing.T) {
 	}
 }
 
+func TestBillingEndpoints(t *testing.T) {
+	masterSrv, _, store, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	handler := masterSrv.Handler()
+
+	// 1. Unauthenticated access
+	req := httptest.NewRequest("GET", "/api/v1/billing/status", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for unauthenticated billing status, got %d", rec.Code)
+	}
+
+	// 2. Create and activate a regular user
+	ctx := context.Background()
+	user, err := store.CreateUser(ctx, "dave", "davePassword123!")
+	if err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+	if err := store.SetUserActive(ctx, user.ID, true); err != nil {
+		t.Fatalf("failed to activate user: %v", err)
+	}
+
+	// Login user
+	loginBody, _ := json.Marshal(models.LoginRequest{Username: "dave", Password: "davePassword123!"})
+	req = httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(loginBody))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	var loginResp models.LoginResponse
+	_ = json.NewDecoder(rec.Body).Decode(&loginResp)
+	userToken := loginResp.Token
+
+	// 3. GET /api/v1/billing/status
+	req = httptest.NewRequest("GET", "/api/v1/billing/status", nil)
+	req.Header.Set("Authorization", "Bearer "+userToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var bStatus models.BillingStatusResponse
+	if err := json.NewDecoder(rec.Body).Decode(&bStatus); err != nil {
+		t.Fatalf("failed to decode billing status: %v", err)
+	}
+	if bStatus.DaysRemaining <= 0 {
+		t.Fatalf("expected positive days remaining, got %d", bStatus.DaysRemaining)
+	}
+
+	// 4. POST /api/v1/billing/pay
+	payBody, _ := json.Marshal(models.PayDuesRequest{Amount: 100, Note: "Взнос за ноду"})
+	req = httptest.NewRequest("POST", "/api/v1/billing/pay", bytes.NewReader(payBody))
+	req.Header.Set("Authorization", "Bearer "+userToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for pay, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var afterPayStatus models.BillingStatusResponse
+	_ = json.NewDecoder(rec.Body).Decode(&afterPayStatus)
+	if len(afterPayStatus.History) != 1 {
+		t.Fatalf("expected 1 history record, got %d", len(afterPayStatus.History))
+	}
+
+	// 5. POST /api/v1/billing/snooze
+	snoozeBody, _ := json.Marshal(models.SnoozeDuesRequest{Days: 5})
+	req = httptest.NewRequest("POST", "/api/v1/billing/snooze", bytes.NewReader(snoozeBody))
+	req.Header.Set("Authorization", "Bearer "+userToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for snooze, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var afterSnooze models.BillingStatusResponse
+	_ = json.NewDecoder(rec.Body).Decode(&afterSnooze)
+	if afterSnooze.SnoozedUntil == nil {
+		t.Fatalf("expected snoozedUntil to be set")
+	}
+
+	// 6. Regular user cannot access /api/v1/admin/billing
+	req = httptest.NewRequest("GET", "/api/v1/admin/billing", nil)
+	req.Header.Set("Authorization", "Bearer "+userToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for non-admin on admin billing, got %d", rec.Code)
+	}
+
+	// 7. Admin can access /api/v1/admin/billing
+	adminLoginBody, _ := json.Marshal(models.LoginRequest{Username: "Forve", Password: "AdminPass123!"})
+	req = httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(adminLoginBody))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	var adminLoginResp models.LoginResponse
+	_ = json.NewDecoder(rec.Body).Decode(&adminLoginResp)
+
+	req = httptest.NewRequest("GET", "/api/v1/admin/billing", nil)
+	req.Header.Set("Authorization", "Bearer "+adminLoginResp.Token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for admin billing, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var adminSummary models.AdminBillingSummaryResponse
+	_ = json.NewDecoder(rec.Body).Decode(&adminSummary)
+	if adminSummary.TotalPayments < 1 {
+		t.Fatalf("expected at least 1 payment record, got %d", adminSummary.TotalPayments)
+	}
+}
+
+
 
 
 

@@ -71,7 +71,7 @@ export interface ClientConfigDetail {
   created_at: string;
 }
 
-export type AuditLogCategory = 'auth' | 'keys' | 'profile' | 'admin';
+export type AuditLogCategory = 'auth' | 'keys' | 'profile' | 'admin' | 'billing';
 
 export interface AuditLog {
   id: number;
@@ -153,6 +153,36 @@ export interface EgressStatusResponse {
   available_interfaces: string[];
   details?: string;
 }
+
+export interface BillingRecord {
+  id: number;
+  user_id: number;
+  username: string;
+  amount: number;
+  currency: string;
+  period_month: string;
+  status: 'confirmed' | 'pending';
+  note?: string;
+  created_at: string;
+}
+
+export interface BillingStatus {
+  is_due: boolean;
+  days_remaining: number;
+  next_due_at: string;
+  last_paid_at?: string;
+  snoozed_until?: string;
+  status: 'paid' | 'due' | 'snoozed';
+  history: BillingRecord[];
+}
+
+export interface AdminBillingSummary {
+  total_payments: number;
+  users_due_count: number;
+  total_users: number;
+  records: BillingRecord[];
+}
+
 
 
 

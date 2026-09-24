@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/models"
 	"golang.org/x/crypto/bcrypt"
@@ -71,6 +73,7 @@ func (s *Storage) migrate() error {
 		password_hash TEXT NOT NULL,
 		role TEXT NOT NULL DEFAULT 'user',
 		is_active INTEGER NOT NULL DEFAULT 0,
+		billing_snoozed_until DATETIME DEFAULT NULL,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
@@ -110,17 +113,33 @@ func (s *Storage) migrate() error {
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 	);
 
+	CREATE TABLE IF NOT EXISTS billing_records (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		username TEXT NOT NULL,
+		amount REAL NOT NULL DEFAULT 0,
+		currency TEXT NOT NULL DEFAULT 'RUB',
+		period_month TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'confirmed',
+		note TEXT NOT NULL DEFAULT '',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_category ON audit_logs(category);
+	CREATE INDEX IF NOT EXISTS idx_billing_records_user_id ON billing_records(user_id);
+	CREATE INDEX IF NOT EXISTS idx_billing_records_created_at ON billing_records(created_at);
 	`
 	if _, err := s.db.Exec(schema); err != nil {
 		return err
 	}
-	// Migrate existing nodes table if new columns are missing
+	// Migrate existing nodes & users tables if new columns are missing
 	_, _ = s.db.Exec(`ALTER TABLE nodes ADD COLUMN is_mobile_optimized INTEGER NOT NULL DEFAULT 0;`)
 	_, _ = s.db.Exec(`ALTER TABLE nodes ADD COLUMN country_code TEXT NOT NULL DEFAULT '';`)
 	_, _ = s.db.Exec(`ALTER TABLE nodes ADD COLUMN provider_url TEXT NOT NULL DEFAULT '';`)
+	_, _ = s.db.Exec(`ALTER TABLE users ADD COLUMN billing_snoozed_until DATETIME DEFAULT NULL;`)
 	return nil
 }
 
@@ -709,3 +728,231 @@ func (s *Storage) PurgeAuditLogsOlderThan(ctx context.Context, days int) (int64,
 	}
 	return res.RowsAffected()
 }
+
+// Billing Methods
+
+// RecordPayment records that a user has paid their cooperative dues.
+func (s *Storage) RecordPayment(ctx context.Context, userID int64, username string, amount float64, note string) (*models.BillingRecord, error) {
+	if username == "" {
+		u, err := s.GetUserByID(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user for billing: %w", err)
+		}
+		username = u.Username
+	}
+
+	periodMonth := time.Now().Format("2006-01")
+	status := "confirmed"
+
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO billing_records (user_id, username, amount, currency, period_month, status, note)
+		VALUES (?, ?, ?, 'RUB', ?, ?, ?)
+	`, userID, username, amount, periodMonth, status, strings.TrimSpace(note))
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert billing record: %w", err)
+	}
+
+	// Reset snooze timer upon payment
+	_, _ = s.db.ExecContext(ctx, `UPDATE users SET billing_snoozed_until = NULL WHERE id = ?`, userID)
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	var rec models.BillingRecord
+	err = s.db.QueryRowContext(ctx, `
+		SELECT id, user_id, username, amount, currency, period_month, status, note, created_at
+		FROM billing_records WHERE id = ?
+	`, id).Scan(
+		&rec.ID,
+		&rec.UserID,
+		&rec.Username,
+		&rec.Amount,
+		&rec.Currency,
+		&rec.PeriodMonth,
+		&rec.Status,
+		&rec.Note,
+		&rec.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan inserted billing record: %w", err)
+	}
+
+	return &rec, nil
+}
+
+// SnoozeBillingReminder postpones the 30-day dues reminder for a given number of days.
+func (s *Storage) SnoozeBillingReminder(ctx context.Context, userID int64, days int) error {
+	if days <= 0 {
+		days = 3
+	}
+
+	query := fmt.Sprintf("UPDATE users SET billing_snoozed_until = datetime('now', '+%d days') WHERE id = ?", days)
+	_, err := s.db.ExecContext(ctx, query, userID)
+	if err != nil {
+		return fmt.Errorf("failed to snooze billing reminder: %w", err)
+	}
+	return nil
+}
+
+// GetBillingRecords returns all billing records for a specific user.
+func (s *Storage) GetBillingRecords(ctx context.Context, userID int64) ([]models.BillingRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, user_id, username, amount, currency, period_month, status, note, created_at
+		FROM billing_records WHERE user_id = ? ORDER BY id DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []models.BillingRecord
+	for rows.Next() {
+		var r models.BillingRecord
+		if err := rows.Scan(
+			&r.ID,
+			&r.UserID,
+			&r.Username,
+			&r.Amount,
+			&r.Currency,
+			&r.PeriodMonth,
+			&r.Status,
+			&r.Note,
+			&r.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	if records == nil {
+		records = []models.BillingRecord{}
+	}
+
+	return records, nil
+}
+
+// GetBillingStatus calculates user's dues status, next due date (every 30 days) and history.
+func (s *Storage) GetBillingStatus(ctx context.Context, userID int64) (*models.BillingStatusResponse, error) {
+	var userCreatedAt time.Time
+	var rawSnoozed sql.NullTime
+
+	err := s.db.QueryRowContext(ctx, `
+		SELECT created_at, billing_snoozed_until FROM users WHERE id = ?
+	`, userID).Scan(&userCreatedAt, &rawSnoozed)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	history, err := s.GetBillingRecords(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	var lastPaidAt *time.Time
+	var nextDueAt time.Time
+
+	if len(history) > 0 {
+		t := history[0].CreatedAt
+		lastPaidAt = &t
+		nextDueAt = t.Add(30 * 24 * time.Hour)
+	} else {
+		nextDueAt = userCreatedAt.Add(30 * 24 * time.Hour)
+	}
+
+	daysRemaining := int(math.Ceil(time.Until(nextDueAt).Hours() / 24.0))
+
+	var snoozedUntil *time.Time
+	if rawSnoozed.Valid {
+		st := rawSnoozed.Time
+		snoozedUntil = &st
+	}
+
+	isDue := false
+	status := "paid"
+
+	if now.After(nextDueAt) || daysRemaining <= 0 {
+		if snoozedUntil != nil && now.Before(*snoozedUntil) {
+			isDue = false
+			status = "snoozed"
+		} else {
+			isDue = true
+			status = "due"
+		}
+	} else {
+		isDue = false
+		status = "paid"
+	}
+
+	return &models.BillingStatusResponse{
+		IsDue:         isDue,
+		DaysRemaining: daysRemaining,
+		NextDueAt:     nextDueAt,
+		LastPaidAt:    lastPaidAt,
+		SnoozedUntil:  snoozedUntil,
+		Status:        status,
+		History:       history,
+	}, nil
+}
+
+// GetAllBillingRecords returns billing overview for administrators.
+func (s *Storage) GetAllBillingRecords(ctx context.Context) (*models.AdminBillingSummaryResponse, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, user_id, username, amount, currency, period_month, status, note, created_at
+		FROM billing_records ORDER BY id DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []models.BillingRecord
+	for rows.Next() {
+		var r models.BillingRecord
+		if err := rows.Scan(
+			&r.ID,
+			&r.UserID,
+			&r.Username,
+			&r.Amount,
+			&r.Currency,
+			&r.PeriodMonth,
+			&r.Status,
+			&r.Note,
+			&r.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+
+	if records == nil {
+		records = []models.BillingRecord{}
+	}
+
+	// Calculate due users count
+	users, err := s.ListUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	dueCount := 0
+	for _, u := range users {
+		if !u.IsActive {
+			continue
+		}
+		st, err := s.GetBillingStatus(ctx, u.ID)
+		if err == nil && (st.IsDue || st.DaysRemaining <= 0) {
+			dueCount++
+		}
+	}
+
+	return &models.AdminBillingSummaryResponse{
+		TotalPayments: len(records),
+		UsersDueCount: dueCount,
+		TotalUsers:    len(users),
+		Records:       records,
+	}, nil
+}
+

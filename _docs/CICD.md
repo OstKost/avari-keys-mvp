@@ -16,24 +16,26 @@ flowchart TD
         A --> D["Сборка React SPA (npm run build)"]
     end
 
-    subgraph CD_Front["2. Frontend Web UI (Автоматически)"]
+    subgraph CD_Auto["2. Автоматический деплой на push в main"]
         D --> E{"Push в main / master?"}
-        E -- Да --> F["Атомарный деплой статики на VPS 157.22.252.225"]
+        E -- Да --> F["Деплой Frontend SPA на Master VPS 157.22.252.225"]
+        E -- Да --> G["Деплой avari-master на Master VPS 157.22.252.225"]
+        E -- Да --> H["Атомарный деплой avari-slave на ВСЕ Slave-ноды"]
     end
 
-    subgraph CD_Back["3. Master / Slave API (Вручную / On-Demand)"]
-        G["Вкладка Actions -> Run workflow"] --> H{"Выбор цели (Target)"}
-        H -- master-api --> I["Деплой avari-master & рестарт сервиса"]
-        H -- slave-api --> J["Деплой avari-slave на указанный хост"]
-        H -- all --> K["Полный деплой всех компонентов"]
+    subgraph CD_Manual["3. Ручной деплой (On-Demand / Dispatch)"]
+        I["Вкладка Actions -> Run workflow"] --> J{"Выбор цели (Target)"}
+        J -- master-api --> K["Деплой avari-master"]
+        J -- slave-api / all-slaves --> L["Деплой avari-slave на один или все хосты"]
+        J -- all --> M["Полный деплой всех компонентов"]
     end
 ```
 
-| Компонент | Как обновляется | Почему так настроено |
+| Компонент | Как обновляется | Описание |
 |---|---|---|
-| **Frontend Web SPA** | **Автоматически** при каждом push/merge в `main` | Статические файлы, нулевой риск потери состояния или разрыва соединений базы данных. |
-| **Master API (`avari-master`)** | **Вручную** (кнопка `Run workflow`) | Управляет SQLite базой данных и сессиями. Требует осознанного обновления администратором. |
-| **Slave API (`avari-slave`)** | **Вручную** (кнопка `Run workflow`) | Управляет интерфейсами AmneziaWG (на Master M0 или внешних узлах S2). |
+| **Frontend Web SPA** | **Автоматически** при каждом push/merge в `main` | Атомарный swap статики на Master сервере. |
+| **Master API (`avari-master`)** | **Автоматически** при push в `main` (или вручную) | Обновляет бинарник и перезапускает systemd сервис `avari-master`. |
+| **Slave API (`avari-slave`)** | **Автоматически** при push в `main` (или вручную) | Атомарно обновляет бинарник и перезапускает `avari-slave` на всех нодах сети (`157.22.252.225`, `185.213.240.136`, `157.228.142.20`, `157.228.130.7`). |
 
 ---
 

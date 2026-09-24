@@ -104,6 +104,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/admin/logs", auth.RequireAdmin(s.handleAdminListAuditLogs))
 	s.mux.HandleFunc("POST /api/v1/admin/logs/cleanup", auth.RequireAdmin(s.handleAdminCleanupAuditLogs))
 
+	// Billing Routes
+	s.mux.HandleFunc("GET /api/v1/billing/status", auth.RequireAuth(s.handleGetBillingStatus))
+	s.mux.HandleFunc("POST /api/v1/billing/pay", auth.RequireAuth(s.handlePayDues))
+	s.mux.HandleFunc("POST /api/v1/billing/snooze", auth.RequireAuth(s.handleSnoozeDues))
+	s.mux.HandleFunc("GET /api/v1/admin/billing", auth.RequireAdmin(s.handleAdminGetBilling))
+
 	// Shared / Dashboard Routes
 	s.mux.HandleFunc("GET /api/v1/stats/dashboard", auth.RequireAuth(s.handleGetDashboardStats))
 }
@@ -1252,10 +1258,82 @@ func (s *Server) handleGetDashboardStats(w http.ResponseWriter, r *http.Request)
 	s.writeJSON(w, http.StatusOK, resp)
 }
 
+// Billing Handlers
+
+func (s *Server) handleGetBillingStatus(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	status, err := s.storage.GetBillingStatus(r.Context(), claims.UserID)
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, status)
+}
+
+func (s *Server) handlePayDues(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	var req models.PayDuesRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	rec, err := s.storage.RecordPayment(r.Context(), claims.UserID, claims.Username, req.Amount, req.Note)
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	details := fmt.Sprintf("Подтверждение оплаты взноса: период %s", rec.PeriodMonth)
+	if req.Note != "" {
+		details += fmt.Sprintf(" (%s)", req.Note)
+	}
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryBilling, "payment_recorded", details)
+
+	status, err := s.storage.GetBillingStatus(r.Context(), claims.UserID)
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, status)
+}
+
+func (s *Server) handleSnoozeDues(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	var req models.SnoozeDuesRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	if req.Days <= 0 {
+		req.Days = 3
+	}
+
+	if err := s.storage.SnoozeBillingReminder(r.Context(), claims.UserID, req.Days); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryBilling, "reminder_snoozed", fmt.Sprintf("Напоминание о взносе отложено на %d дн.", req.Days))
+
+	status, err := s.storage.GetBillingStatus(r.Context(), claims.UserID)
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, status)
+}
+
+func (s *Server) handleAdminGetBilling(w http.ResponseWriter, r *http.Request) {
+	summary, err := s.storage.GetAllBillingRecords(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, summary)
+}
+
 func (s *Server) writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
 }
+
 
 

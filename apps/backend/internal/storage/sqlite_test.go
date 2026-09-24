@@ -231,3 +231,74 @@ func TestAuditLogsStorageAndPurge(t *testing.T) {
 		t.Fatalf("expected 0 deleted logs for fresh entries, got %d", deleted)
 	}
 }
+
+func TestBillingStorage(t *testing.T) {
+	store, cleanup := createTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// 1. Create a user
+	user, err := store.CreateUser(ctx, "charlie", "password123")
+	if err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// 2. Initial billing status (30 days from creation, not due)
+	status, err := store.GetBillingStatus(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("failed to get billing status: %v", err)
+	}
+	if status.IsDue {
+		t.Fatalf("expected fresh user not to be due, got isDue=true")
+	}
+	if status.DaysRemaining <= 0 {
+		t.Fatalf("expected days remaining > 0, got %d", status.DaysRemaining)
+	}
+	if len(status.History) != 0 {
+		t.Fatalf("expected empty history, got %d", len(status.History))
+	}
+
+	// 3. Record payment ("Оплачено")
+	rec, err := store.RecordPayment(ctx, user.ID, user.Username, 0, "Оплачено за сентябрь")
+	if err != nil {
+		t.Fatalf("failed to record payment: %v", err)
+	}
+	if rec.ID == 0 || rec.Status != "confirmed" {
+		t.Fatalf("invalid record: %+v", rec)
+	}
+
+	// 4. Verify updated billing status
+	statusAfterPay, err := store.GetBillingStatus(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("failed to get updated status: %v", err)
+	}
+	if len(statusAfterPay.History) != 1 {
+		t.Fatalf("expected 1 history record, got %d", len(statusAfterPay.History))
+	}
+	if statusAfterPay.LastPaidAt == nil {
+		t.Fatalf("expected lastPaidAt to be set")
+	}
+
+	// 5. Snooze reminder
+	if err := store.SnoozeBillingReminder(ctx, user.ID, 3); err != nil {
+		t.Fatalf("failed to snooze: %v", err)
+	}
+	statusSnooze, err := store.GetBillingStatus(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("failed to get status after snooze: %v", err)
+	}
+	if statusSnooze.SnoozedUntil == nil {
+		t.Fatalf("expected snoozedUntil to be set")
+	}
+
+	// 6. Admin summary
+	adminSummary, err := store.GetAllBillingRecords(ctx)
+	if err != nil {
+		t.Fatalf("failed to get admin billing summary: %v", err)
+	}
+	if adminSummary.TotalPayments != 1 {
+		t.Fatalf("expected 1 total payment, got %d", adminSummary.TotalPayments)
+	}
+}
+

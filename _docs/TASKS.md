@@ -4,7 +4,7 @@
 
 | 📥 Backlog | 📝 To Do | ⚙️ In Progress | 🔍 In Review / Testing | ✅ Done |
 |---|---|---|---|---|
-| | | | | [TASK-001](./tasks/TASK-001-project-scaffolding.md) |
+| | | [TASK-009](./tasks/TASK-009-billing-system.md) | | [TASK-001](./tasks/TASK-001-project-scaffolding.md) |
 | | | | | [TASK-002](./tasks/TASK-002-slave-api-core.md) |
 | | | | | [TASK-003](./tasks/TASK-003-master-backend-auth-db.md) |
 | | | | | [TASK-004](./tasks/TASK-004-master-backend-node-client-manager.md) |
@@ -25,3 +25,4 @@
 - **[TASK-006](./tasks/TASK-006-contract-integration-tests.md)**: ✅ Контрактные тесты Master $\leftrightarrow$ Slave API, тесты модерации и прав доступа.
 - **[TASK-007](./tasks/TASK-007-deployment-and-docs.md)**: ✅ Документация развертывания, Caddy auto-HTTPS конфиги, systemd unit-файлы.
 - **[TASK-008](./tasks/TASK-008-cicd-github-actions.md)**: ✅ Безопасный CI/CD пайплайн в GitHub Actions с атомарным деплоем на VPS 157.22.252.225.
+- **[TASK-009](./tasks/TASK-009-billing-system.md)**: ⚙️ Кооперативные взносы (каждые 30 дней) и страница «Биллинг».

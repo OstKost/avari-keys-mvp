@@ -151,7 +151,51 @@ const (
 	CategoryKeys    AuditLogCategory = "keys"
 	CategoryProfile AuditLogCategory = "profile"
 	CategoryAdmin   AuditLogCategory = "admin"
+	CategoryBilling AuditLogCategory = "billing"
 )
+
+// BillingRecord represents a recorded payment/dues entry in the system.
+type BillingRecord struct {
+	ID          int64     `json:"id"`
+	UserID      int64     `json:"user_id"`
+	Username    string    `json:"username"`
+	Amount      float64   `json:"amount"`
+	Currency    string    `json:"currency"`
+	PeriodMonth string    `json:"period_month"` // e.g. "2026-09"
+	Status      string    `json:"status"`       // "confirmed", "pending"
+	Note        string    `json:"note"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// BillingStatusResponse represents current user's dues state and reminder countdown.
+type BillingStatusResponse struct {
+	IsDue         bool            `json:"is_due"`
+	DaysRemaining int             `json:"days_remaining"`
+	NextDueAt     time.Time       `json:"next_due_at"`
+	LastPaidAt    *time.Time      `json:"last_paid_at,omitempty"`
+	SnoozedUntil  *time.Time      `json:"snoozed_until,omitempty"`
+	Status        string          `json:"status"` // "paid", "due", "snoozed"
+	History       []BillingRecord `json:"history"`
+}
+
+// PayDuesRequest DTO for confirming dues payment.
+type PayDuesRequest struct {
+	Amount float64 `json:"amount,omitempty"`
+	Note   string  `json:"note,omitempty"`
+}
+
+// SnoozeDuesRequest DTO for postponing the reminder.
+type SnoozeDuesRequest struct {
+	Days int `json:"days,omitempty"` // Default 3
+}
+
+// AdminBillingSummaryResponse for admin billing overview.
+type AdminBillingSummaryResponse struct {
+	TotalPayments  int             `json:"total_payments"`
+	UsersDueCount  int             `json:"users_due_count"`
+	TotalUsers     int             `json:"total_users"`
+	Records        []BillingRecord `json:"records"`
+}
 
 // AuditLog represents a single action performed in the system.
 type AuditLog struct {
@@ -239,4 +283,5 @@ type DashboardStatsResponse struct {
 	Nodes                 []NodeDashboardInfo      `json:"nodes"`
 	GeneratedAt           time.Time                `json:"generated_at"`
 }
+
 
