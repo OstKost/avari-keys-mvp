@@ -12,6 +12,7 @@ import (
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/auth"
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/client"
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/models"
+	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/runner"
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/storage"
 )
 
@@ -324,6 +325,11 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 	}
 	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryKeys, "key_create", fmt.Sprintf("Создан VPN-ключ «%s» (%s)%s на сервере «%s»", req.DeviceName, clientName, pskDetails, node.Name))
 
+	cleanConfig := runner.SanitizeAWGConfig(slaveResp.Config)
+	if cleanConfig != "" {
+		slaveResp.Config = cleanConfig
+	}
+
 	s.writeJSON(w, http.StatusCreated, map[string]any{
 		"id":          keyRecord.ID,
 		"client_name": clientName,
@@ -369,6 +375,11 @@ func (s *Server) handleGetKey(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("Failed to retrieve config from slave: %v", err)})
 		return
+	}
+
+	cleanKeyConfig := runner.SanitizeAWGConfig(slaveResp.Config)
+	if cleanKeyConfig != "" {
+		slaveResp.Config = cleanKeyConfig
 	}
 
 	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryKeys, "key_view", fmt.Sprintf("Просмотр конфигурации / QR-кода ключа «%s» (%s)", keyRecord.DeviceName, keyRecord.ClientName))

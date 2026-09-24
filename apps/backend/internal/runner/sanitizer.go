@@ -90,9 +90,10 @@ func SanitizeAWGConfig(raw string) string {
 		resultLines = resultLines[:len(resultLines)-1]
 	}
 
-	if len(resultLines) == 0 {
-		return strings.TrimSpace(clean)
+	if len(resultLines) == 0 || !inConfig {
+		return ""
 	}
 
 	return strings.Join(resultLines, "\n")
 }
+

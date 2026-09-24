@@ -54,6 +54,7 @@ func (r *RealRunner) AddClient(ctx context.Context, name string, psk bool) (*mod
 	}
 
 	cmd := exec.CommandContext(ctx, "bash", args...)
+	cmd.Dir = filepath.Dir(r.scriptPath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -71,6 +72,7 @@ func (r *RealRunner) RemoveClient(ctx context.Context, name string) error {
 	}
 
 	cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "remove", name, "--yes")
+	cmd.Dir = filepath.Dir(r.scriptPath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -94,6 +96,7 @@ func (r *RealRunner) GetClient(ctx context.Context, name string) (*models.Client
 		filepath.Join(r.configsDir, fmt.Sprintf("%s.conf", name)),
 		filepath.Join(scriptDir, fmt.Sprintf("%s.conf", name)),
 		filepath.Join(scriptDir, "clients", fmt.Sprintf("%s.conf", name)),
+		filepath.Join("/opt/avari-keys", fmt.Sprintf("%s.conf", name)),
 		filepath.Join("/root", fmt.Sprintf("%s.conf", name)),
 		filepath.Join("/etc/amnezia/amneziawg", fmt.Sprintf("%s.conf", name)),
 		filepath.Join("/etc/amnezia/amneziawg/clients", fmt.Sprintf("%s.conf", name)),
@@ -114,12 +117,8 @@ func (r *RealRunner) GetClient(ctx context.Context, name string) (*models.Client
 	}
 
 	cleanConfig := SanitizeAWGConfig(rawConfig)
-	if cleanConfig == "" {
-		cleanConfig = strings.TrimSpace(rawConfig)
-	}
-
-	if !strings.Contains(cleanConfig, "[Interface]") || !strings.Contains(cleanConfig, "[Peer]") {
-		return nil, fmt.Errorf("file '%s' does not contain a valid WireGuard/AmneziaWG configuration block", foundPath)
+	if cleanConfig == "" || !strings.Contains(cleanConfig, "[Interface]") || !strings.Contains(cleanConfig, "[Peer]") {
+		return nil, fmt.Errorf("file '%s' does not contain a valid WireGuard/AmneziaWG configuration block ([Interface] and [Peer])", foundPath)
 	}
 
 	// 2. Read or generate QR code
@@ -130,6 +129,7 @@ func (r *RealRunner) GetClient(ctx context.Context, name string) (*models.Client
 		filepath.Join(r.configsDir, fmt.Sprintf("%s.png", name)),
 		filepath.Join(scriptDir, fmt.Sprintf("%s.png", name)),
 		filepath.Join(scriptDir, "clients", fmt.Sprintf("%s.png", name)),
+		filepath.Join("/opt/avari-keys", fmt.Sprintf("%s.png", name)),
 		filepath.Join("/root", fmt.Sprintf("%s.png", name)),
 	}
 	for _, qp := range candidateQRPatterns {
@@ -159,6 +159,7 @@ func (r *RealRunner) GetClient(ctx context.Context, name string) (*models.Client
 
 func (r *RealRunner) ListClients(ctx context.Context) ([]models.ClientListItem, error) {
 	cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "list")
+	cmd.Dir = filepath.Dir(r.scriptPath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -188,6 +189,7 @@ func (r *RealRunner) ListClients(ctx context.Context) ([]models.ClientListItem, 
 
 func (r *RealRunner) GetStats(ctx context.Context) (*models.StatsSummaryResponse, error) {
 	cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "stats", "--json")
+	cmd.Dir = filepath.Dir(r.scriptPath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
