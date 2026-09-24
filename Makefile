@@ -2,19 +2,30 @@
 
 all: build
 
-build: build-backend build-frontend
+build: build-backend build-linux build-frontend
 
 build-backend:
-	@echo "==> Building Go binaries..."
-	mkdir -p dist
-	cd apps/backend && CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/avari-master ./cmd/master
-	cd apps/backend && CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/avari-slave ./cmd/slave
+	@echo "==> Building Native Go binaries..."
+	mkdir -p dist/native
+	cd apps/backend && CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/native/avari-master ./cmd/master
+	cd apps/backend && CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/native/avari-slave ./cmd/slave
+
+build-linux:
+	@echo "==> Building Linux (amd64 / arm64) binaries..."
+	mkdir -p dist/linux-amd64 dist/linux-arm64
+	cd apps/backend && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/linux-amd64/avari-master ./cmd/master
+	cd apps/backend && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/linux-amd64/avari-slave ./cmd/slave
+	cd apps/backend && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/linux-arm64/avari-master ./cmd/master
+	cd apps/backend && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../dist/linux-arm64/avari-slave ./cmd/slave
+	cp dist/linux-amd64/avari-master dist/avari-master
+	cp dist/linux-amd64/avari-slave dist/avari-slave
 
 build-frontend:
 	@echo "==> Building Frontend SPA..."
 	if [ -d "apps/frontend" ] && [ -f "apps/frontend/package.json" ]; then \
-		cd apps/frontend && npm run build ; \
+		cd apps/frontend && npm run build && mkdir -p ../../dist/frontend && cp -r dist/* ../../dist/frontend/ ; \
 	fi
+
 
 test:
 	@echo "==> Running backend contract & unit tests..."

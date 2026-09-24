@@ -12,6 +12,7 @@ import { AdminNodes } from './components/AdminNodes';
 import { AdminAllKeys } from './components/AdminAllKeys';
 import { AdminAuditLogs } from './components/AdminAuditLogs';
 import { NetworkDashboard } from './components/NetworkDashboard';
+import { Loader } from './components/Loader';
 import { UserProfile } from './components/UserProfile';
 
 export default function App() {
@@ -115,14 +116,7 @@ export default function App() {
   };
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen bg-[#06141B] flex flex-col items-center justify-center text-[#A8B4B7] text-sm">
-        <div className="relative mb-4">
-          <img src="/assets/logo_star.png" alt="Star" className="w-12 h-12 animate-pulse filter drop-shadow-[0_0_10px_rgba(217,185,110,0.4)]" />
-        </div>
-        <span className="font-serif tracking-widest uppercase text-xs text-[#D9B96E]">Загрузка Avari Keys...</span>
-      </div>
-    );
+    return <Loader size="fullscreen" text="Загрузка Avari Keys..." />;
   }
 
   if (!currentUser) {
@@ -330,7 +324,9 @@ export default function App() {
                   <div>
                     <div className="font-semibold text-sm text-[#F0D48D]">Нет доступных серверов</div>
                     <p className="text-[#A8B4B7] mt-0.5">
-                      В системе пока нет активных Slave-нод. Добавьте первую ноду во вкладке «Серверы (Ноды)» или войдите в Demo Mock режим.
+                      {isMockMode() || import.meta.env.DEV
+                        ? 'В системе пока нет активных Slave-нод. Добавьте первую ноду во вкладке «Серверы (Ноды)» или войдите в Demo Mock режим.'
+                        : 'В системе пока нет активных серверов. Обратитесь к администратору или добавьте узел во вкладке «Серверы (Ноды)». '}
                     </p>
                   </div>
                 </div>
@@ -338,9 +334,7 @@ export default function App() {
 
               {/* Keys Grid */}
               {keysLoading ? (
-                <div className="text-center py-16 text-[#A8B4B7] text-xs font-mono tracking-widest uppercase">
-                  Получение ключей из хранилища...
-                </div>
+                <Loader size="section" text="Получение ключей из хранилища..." />
               ) : keys.length === 0 ? (
                 <div className="text-center py-16 border border-dashed border-[#1C3945] rounded-2xl bg-[#06141B]/40">
                   <div className="relative inline-block mb-3">

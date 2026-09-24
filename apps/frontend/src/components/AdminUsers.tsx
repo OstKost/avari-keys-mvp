@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { User } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { useToast } from '../context/ToastContext';
+import { Loader } from './Loader';
 
 export function AdminUsers() {
   const { toast } = useToast();
@@ -80,11 +81,7 @@ export function AdminUsers() {
   };
 
   if (loading) {
-    return (
-      <div className="text-center py-12 text-[#A8B4B7] text-xs font-mono uppercase tracking-widest">
-        Загрузка списка пользователей...
-      </div>
-    );
+    return <Loader size="section" text="Загрузка списка пользователей..." />;
   }
 
   return (

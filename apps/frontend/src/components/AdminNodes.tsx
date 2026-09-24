@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import { AdminNode } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { useToast } from '../context/ToastContext';
+import { Loader } from './Loader';
 
 export function AdminNodes() {
   const { toast } = useToast();
@@ -397,6 +398,9 @@ export function AdminNodes() {
                 </td>
               </tr>
             ))}
+            {loading && (
+              <Loader size="table" colSpan={6} text="Опрос и получение списка Slave-серверов..." />
+            )}
             {nodes.length === 0 && !loading && (
               <tr>
                 <td colSpan={6} className="text-center py-10 text-[#718187] text-xs font-mono uppercase tracking-wider">
