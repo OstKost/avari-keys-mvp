@@ -1061,4 +1061,55 @@ func (s *Storage) SetTelegramAlertsEnabled(ctx context.Context, chatID int64, en
 	return err
 }
 
+func (s *Storage) GetTelegramSettings(ctx context.Context) (*models.TelegramSettings, error) {
+	var val string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key = 'telegram_settings'`).Scan(&val)
+	if err != nil {
+		// Fallback to environment variables or defaults
+		token := os.Getenv("TELEGRAM_BOT_TOKEN")
+		username := os.Getenv("TELEGRAM_BOT_USERNAME")
+		secret := os.Getenv("TELEGRAM_ADMIN_SECRET")
+
+		enabled := token != ""
+		if username == "" && token != "" {
+			username = "AvariElfBot"
+		}
+
+		return &models.TelegramSettings{
+			Enabled:             enabled,
+			BotToken:            token,
+			BotUsername:         username,
+			AdminSecret:         secret,
+			NotifyOnNodeDown:    true,
+			NotifyOnNodeRecover: true,
+			NotifyOnNewUser:     true,
+		}, nil
+	}
+
+	var settings models.TelegramSettings
+	if err := json.Unmarshal([]byte(val), &settings); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal telegram settings: %w", err)
+	}
+	return &settings, nil
+}
+
+func (s *Storage) UpdateTelegramSettings(ctx context.Context, settings models.TelegramSettings) (*models.TelegramSettings, error) {
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal telegram settings: %w", err)
+	}
+
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO app_settings (key, value, updated_at)
+		VALUES ('telegram_settings', ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+	`, string(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to save telegram settings: %w", err)
+	}
+
+	return &settings, nil
+}
+
+
 

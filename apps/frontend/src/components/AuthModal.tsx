@@ -84,7 +84,7 @@ export function AuthModal({ onSuccess }: Props) {
               Avari Keys
             </h1>
             <p className="text-sm text-[#A8B4B7] tracking-wider uppercase mt-1.5 font-mono">
-              {isRegister ? 'Регистрация хранителя' : 'Свобода выбора • Твои ключи'}
+              {isRegister ? 'Регистрация аккаунта' : 'Управление конфигурациями'}
             </p>
           </div>
 
