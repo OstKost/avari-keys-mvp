@@ -86,29 +86,61 @@ func (r *RealRunner) GetClient(ctx context.Context, name string) (*models.Client
 		return nil, err
 	}
 
-	// 1. Read config file from configsDir/<name>.conf
-	confPath := filepath.Join(r.configsDir, fmt.Sprintf("%s.conf", name))
-	confBytes, err := os.ReadFile(confPath)
-	if err != nil {
+	// 1. Read config file from multiple potential locations
+	possiblePaths := []string{
+		filepath.Join(r.configsDir, fmt.Sprintf("%s.conf", name)),
+		filepath.Join("/root/awg/clients", fmt.Sprintf("%s.conf", name)),
+		filepath.Join("/root/awg", fmt.Sprintf("%s.conf", name)),
+		filepath.Join("/root", fmt.Sprintf("%s.conf", name)),
+		filepath.Join("/etc/amnezia/amneziawg/clients", fmt.Sprintf("%s.conf", name)),
+		filepath.Join("/etc/amnezia/amneziawg", fmt.Sprintf("%s.conf", name)),
+	}
+
+	var rawConfig string
+	foundFile := false
+	for _, p := range possiblePaths {
+		if confBytes, err := os.ReadFile(p); err == nil && len(confBytes) > 0 {
+			rawConfig = string(confBytes)
+			foundFile = true
+			break
+		}
+	}
+
+	if !foundFile {
 		// Fallback: try reading via `manage_amneziawg.sh show <name>`
 		cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "show", name)
 		var out bytes.Buffer
 		cmd.Stdout = &out
 		if cmdErr := cmd.Run(); cmdErr == nil && out.Len() > 0 {
-			confBytes = out.Bytes()
+			rawConfig = out.String()
 		} else {
-			return nil, fmt.Errorf("could not read client config for '%s': %w", name, err)
+			return nil, fmt.Errorf("could not read client config for '%s'", name)
 		}
+	}
+
+	cleanConfig := SanitizeAWGConfig(rawConfig)
+	if cleanConfig == "" {
+		cleanConfig = strings.TrimSpace(rawConfig)
 	}
 
 	// 2. Read or generate QR code
 	qrBase64 := ""
-	qrPath := filepath.Join(r.configsDir, fmt.Sprintf("%s.png", name))
-	if qrBytes, qrErr := os.ReadFile(qrPath); qrErr == nil {
-		qrBase64 = "data:image/png;base64," + base64.StdEncoding.EncodeToString(qrBytes)
-	} else {
-		// Try qrencode if available
-		qrCmd := exec.CommandContext(ctx, "qrencode", "-t", "PNG", "-o", "-", string(confBytes))
+	possibleQRPatterns := []string{
+		filepath.Join(r.configsDir, fmt.Sprintf("%s.png", name)),
+		filepath.Join("/root/awg/clients", fmt.Sprintf("%s.png", name)),
+		filepath.Join("/root/awg", fmt.Sprintf("%s.png", name)),
+		filepath.Join("/root", fmt.Sprintf("%s.png", name)),
+	}
+	for _, qp := range possibleQRPatterns {
+		if qrBytes, qrErr := os.ReadFile(qp); qrErr == nil && len(qrBytes) > 0 {
+			qrBase64 = "data:image/png;base64," + base64.StdEncoding.EncodeToString(qrBytes)
+			break
+		}
+	}
+
+	if qrBase64 == "" {
+		// Try qrencode if available using the sanitized config
+		qrCmd := exec.CommandContext(ctx, "qrencode", "-t", "PNG", "-o", "-", cleanConfig)
 		var qrOut bytes.Buffer
 		qrCmd.Stdout = &qrOut
 		if qrCmd.Run() == nil && qrOut.Len() > 0 {
@@ -118,7 +150,7 @@ func (r *RealRunner) GetClient(ctx context.Context, name string) (*models.Client
 
 	return &models.ClientResponse{
 		Name:      name,
-		Config:    string(confBytes),
+		Config:    cleanConfig,
 		QRCode:    qrBase64,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}, nil

@@ -21,6 +21,7 @@ import { api } from '../api/client';
 import { AuditLog, User, AuditLogCategory } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { useToast } from '../context/ToastContext';
+import { Loader } from './Loader';
 
 export function AdminAuditLogs() {
   const { toast } = useToast();
@@ -376,6 +377,10 @@ export function AdminAuditLogs() {
                 </td>
               </tr>
             ))}
+
+            {loading && (
+              <Loader size="table" colSpan={6} text="Загрузка журнала аудита и событий безопасности..." />
+            )}
 
             {logs.length === 0 && !loading && (
               <tr>

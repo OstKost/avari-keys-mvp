@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { ClientConfigSummary, AdminNode } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { useToast } from '../context/ToastContext';
+import { Loader } from './Loader';
 
 export function AdminAllKeys() {
   const { toast } = useToast();
@@ -206,6 +207,9 @@ export function AdminAllKeys() {
                 </td>
               </tr>
             ))}
+            {loading && (
+              <Loader size="table" colSpan={8} text="Загрузка реестра VPN-ключей..." />
+            )}
             {keys.length === 0 && !loading && (
               <tr>
                 <td colSpan={8} className="text-center py-12 text-[#718187] text-xs font-mono uppercase tracking-wider">
