@@ -175,10 +175,60 @@ func (r *RealRunner) GetClient(ctx context.Context, name string) (*models.Client
 		}
 	}
 
+	// 3. Read AmneziaVPN URI (.vpnuri) if available
+	candidateVpnUriPaths := []string{
+		filepath.Join("/root/awg", fmt.Sprintf("%s.vpnuri", name)),
+		filepath.Join("/root/awg/clients", fmt.Sprintf("%s.vpnuri", name)),
+		filepath.Join(r.configsDir, fmt.Sprintf("%s.vpnuri", name)),
+		filepath.Join(scriptDir, fmt.Sprintf("%s.vpnuri", name)),
+		filepath.Join(scriptDir, "clients", fmt.Sprintf("%s.vpnuri", name)),
+		filepath.Join("/opt/avari-keys", fmt.Sprintf("%s.vpnuri", name)),
+		filepath.Join("/root", fmt.Sprintf("%s.vpnuri", name)),
+		filepath.Join("/etc/amnezia/amneziawg", fmt.Sprintf("%s.vpnuri", name)),
+		filepath.Join("/etc/amnezia/amneziawg/clients", fmt.Sprintf("%s.vpnuri", name)),
+	}
+
+	var vpnURI string
+	for _, vp := range candidateVpnUriPaths {
+		if vpnBytes, err := os.ReadFile(vp); err == nil && len(vpnBytes) > 0 {
+			vpnURI = strings.TrimSpace(string(vpnBytes))
+			break
+		}
+	}
+
+	// 4. Read AmneziaVPN QR code (.vpnuri.png) if available
+	vpnQRBase64 := ""
+	candidateVpnQRPatterns := []string{
+		filepath.Join("/root/awg", fmt.Sprintf("%s.vpnuri.png", name)),
+		filepath.Join("/root/awg/clients", fmt.Sprintf("%s.vpnuri.png", name)),
+		filepath.Join(r.configsDir, fmt.Sprintf("%s.vpnuri.png", name)),
+		filepath.Join(scriptDir, fmt.Sprintf("%s.vpnuri.png", name)),
+		filepath.Join(scriptDir, "clients", fmt.Sprintf("%s.vpnuri.png", name)),
+		filepath.Join("/opt/avari-keys", fmt.Sprintf("%s.vpnuri.png", name)),
+		filepath.Join("/root", fmt.Sprintf("%s.vpnuri.png", name)),
+	}
+	for _, vqp := range candidateVpnQRPatterns {
+		if qrBytes, qrErr := os.ReadFile(vqp); qrErr == nil && len(qrBytes) > 0 {
+			vpnQRBase64 = "data:image/png;base64," + base64.StdEncoding.EncodeToString(qrBytes)
+			break
+		}
+	}
+
+	if vpnQRBase64 == "" && vpnURI != "" {
+		qrCmd := exec.CommandContext(ctx, "qrencode", "-t", "PNG", "-o", "-", vpnURI)
+		var qrOut bytes.Buffer
+		qrCmd.Stdout = &qrOut
+		if qrCmd.Run() == nil && qrOut.Len() > 0 {
+			vpnQRBase64 = "data:image/png;base64," + base64.StdEncoding.EncodeToString(qrOut.Bytes())
+		}
+	}
+
 	return &models.ClientResponse{
 		Name:      name,
 		Config:    cleanConfig,
 		QRCode:    qrBase64,
+		VPNURI:    vpnURI,
+		VPNQRCode: vpnQRBase64,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}, nil
 }
