@@ -53,10 +53,10 @@ export default function App() {
   }, []);
 
   // Load keys & nodes when user logs in
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (silent = false) => {
     if (!currentUser) return;
     try {
-      setKeysLoading(true);
+      if (!silent) setKeysLoading(true);
       setError(null);
       const [keysData, nodesData] = await Promise.all([api.getKeys(), api.getNodes()]);
       setKeys(Array.isArray(keysData) ? keysData : []);
@@ -64,7 +64,7 @@ export default function App() {
     } catch (err: any) {
       setError(err.message || 'Ошибка загрузки данных');
     } finally {
-      setKeysLoading(false);
+      if (!silent) setKeysLoading(false);
     }
   };
 
@@ -86,7 +86,24 @@ export default function App() {
       const newKey = await api.createKey(nodeId, deviceName, psk);
       setViewingKey(newKey);
       toast.success(`Ключ «${deviceName}» успешно создан`);
-      await loadDashboardData();
+      const targetNode = nodes.find((n) => n.id === nodeId);
+      const newSummary: ClientConfigSummary = {
+        id: newKey.id,
+        user_id: currentUser ? currentUser.id : 0,
+        node_id: newKey.node_id,
+        node_name: newKey.node_name || (targetNode ? targetNode.name : 'Node'),
+        node_type: newKey.node_type || (targetNode ? targetNode.type : 'direct'),
+        node_country_code: targetNode ? targetNode.country_code : undefined,
+        client_name: newKey.client_name,
+        device_name: newKey.device_name,
+        created_at: newKey.created_at,
+        total_traffic_bytes: 0,
+        month_traffic_bytes: 0,
+        total_traffic_formatted: '0 B',
+        month_traffic_formatted: '0 B',
+      };
+      setKeys((prev) => [newSummary, ...(prev || []).filter((k) => k.id !== newKey.id)]);
+      loadDashboardData(true);
     } catch (err: any) {
       toast.error(err.message || 'Не удалось создать ключ');
     }
@@ -103,14 +120,18 @@ export default function App() {
 
   const handleConfirmDeleteKey = async () => {
     if (!keyToDelete) return;
+    const targetKey = keyToDelete;
+    // Optimistically remove from list and close modal
+    setKeys((prev) => prev.filter((k) => k.id !== targetKey.id));
+    setKeyToDelete(null);
     try {
       setDeletingKey(true);
-      await api.deleteKey(keyToDelete.id);
-      toast.success(`Ключ «${keyToDelete.device_name}» успешно отозван`);
-      setKeyToDelete(null);
-      await loadDashboardData();
+      await api.deleteKey(targetKey.id);
+      toast.success(`Ключ «${targetKey.device_name}» успешно отозван`);
+      loadDashboardData(true);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка удаления ключа');
+      loadDashboardData(true);
     } finally {
       setDeletingKey(false);
     }
@@ -144,16 +165,16 @@ export default function App() {
                 <span className="font-serif text-xl font-bold tracking-wider text-gold-gradient uppercase">
                   Avari Keys
                 </span>
-                <span className="text-[10px] font-mono uppercase tracking-widest px-2 py-0.5 rounded-full bg-[#102833] text-[#D9B96E] border border-[#1C3945]">
+                <span className="text-sm font-mono font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#102833] text-[#D9B96E] border border-[#1C3945]">
                   AmneziaWG
                 </span>
                 {isMockMode() && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-600/40 shadow-sm">
+                  <span className="text-sm font-bold px-2.5 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-600/40 shadow-sm font-mono">
                     ⚡ Demo Mock
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-[#A8B4B7] tracking-wider font-mono">
+              <p className="text-sm text-[#A8B4B7] tracking-wider font-mono">
                 Кооперативная виртуальная сеть
               </p>
             </div>
@@ -169,12 +190,12 @@ export default function App() {
               <div className="text-sm font-semibold text-[#F2F0E8] group-hover:text-gold-gradient flex items-center justify-end space-x-1.5 transition">
                 <span>{currentUser.username}</span>
                 {currentUser.role === 'admin' ? (
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#D9B96E]" />
+                  <ShieldCheck className="w-4 h-4 text-[#D9B96E]" />
                 ) : (
-                  <UserIcon className="w-3.5 h-3.5 text-[#A8B4B7] group-hover:text-[#D9B96E]" />
+                  <UserIcon className="w-4 h-4 text-[#A8B4B7] group-hover:text-[#D9B96E]" />
                 )}
               </div>
-              <div className="text-[10px] text-[#D9B96E] uppercase tracking-widest font-mono">
+              <div className="text-sm text-[#D9B96E] uppercase tracking-wider font-mono font-medium">
                 {currentUser.role === 'admin' ? 'Администратор' : 'Хранитель'}
               </div>
             </button>
@@ -197,7 +218,7 @@ export default function App() {
         <div className="flex flex-wrap gap-2 border-b border-[#1C3945]/80 pb-4 mb-8">
           <button
             onClick={() => setActiveTab('keys')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-xs uppercase tracking-wider font-mono transition duration-200 ${
+            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
               activeTab === 'keys'
                 ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                 : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -209,7 +230,7 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-xs uppercase tracking-wider font-mono transition duration-200 ${
+            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
               activeTab === 'dashboard'
                 ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                 : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -223,7 +244,7 @@ export default function App() {
             <>
               <button
                 onClick={() => setActiveTab('nodes')}
-                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-xs uppercase tracking-wider font-mono transition duration-200 ${
+                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
                   activeTab === 'nodes'
                     ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                     : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -235,7 +256,7 @@ export default function App() {
 
               <button
                 onClick={() => setActiveTab('users')}
-                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-xs uppercase tracking-wider font-mono transition duration-200 ${
+                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
                   activeTab === 'users'
                     ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                     : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -247,7 +268,7 @@ export default function App() {
 
               <button
                 onClick={() => setActiveTab('all-keys')}
-                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-xs uppercase tracking-wider font-mono transition duration-200 ${
+                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
                   activeTab === 'all-keys'
                     ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                     : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -259,7 +280,7 @@ export default function App() {
 
               <button
                 onClick={() => setActiveTab('logs')}
-                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-xs uppercase tracking-wider font-mono transition duration-200 ${
+                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
                   activeTab === 'logs'
                     ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                     : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -273,7 +294,7 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('profile')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-xs uppercase tracking-wider font-mono transition duration-200 ${
+            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
               activeTab === 'profile'
                 ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
                 : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
@@ -297,7 +318,7 @@ export default function App() {
                   <h2 className="font-serif text-2xl font-bold text-[#F2F0E8] tracking-wide flex items-center space-x-2">
                     <span>VPN Конфигурации</span>
                   </h2>
-                  <p className="text-xs text-[#A8B4B7] mt-1 font-sans">
+                  <p className="text-sm text-[#A8B4B7] mt-1 font-sans">
                     Создавайте и управляйте конфигурациями доступа к виртуальной сети
                   </p>
                 </div>
@@ -305,7 +326,7 @@ export default function App() {
                 <button
                   onClick={() => setShowCreateModal(true)}
                   disabled={(nodes || []).length === 0}
-                  className="flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-xs uppercase tracking-wider font-mono px-5 py-3 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300"
+                  className="flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-sm uppercase tracking-wider font-mono px-5 py-3 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Создать новый ключ</span>
@@ -313,17 +334,17 @@ export default function App() {
               </div>
 
               {error && (
-                <div className="flex items-center space-x-2 bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs p-4 rounded-xl mb-6 shadow-lg">
+                <div className="flex items-center space-x-2 bg-rose-950/60 border border-rose-800/80 text-rose-300 text-sm p-4 rounded-xl mb-6 shadow-lg">
                   <AlertCircle className="w-4 h-4" />
                   <span>{error}</span>
                 </div>
               )}
 
               {(nodes || []).length === 0 && !keysLoading && (
-                <div className="bg-[#102833] border border-[#D9B96E]/30 text-[#D9B96E] text-xs p-5 rounded-2xl mb-6 flex items-start space-x-3">
+                <div className="bg-[#102833] border border-[#D9B96E]/30 text-[#D9B96E] text-sm p-5 rounded-2xl mb-6 flex items-start space-x-3">
                   <Sparkles className="w-5 h-5 flex-shrink-0 mt-0.5 text-[#F0D48D]" />
                   <div>
-                    <div className="font-semibold text-sm text-[#F0D48D]">Нет доступных серверов</div>
+                    <div className="font-semibold text-base text-[#F0D48D]">Нет доступных серверов</div>
                     <p className="text-[#A8B4B7] mt-0.5">
                       {isMockMode() || import.meta.env.DEV
                         ? 'В системе пока нет активных Slave-нод. Добавьте первую ноду во вкладке «Серверы (Ноды)» или войдите в Demo Mock режим.'
@@ -342,7 +363,7 @@ export default function App() {
                     <Key className="w-12 h-12 text-[#718187] mx-auto" />
                   </div>
                   <h4 className="font-serif text-lg font-semibold text-[#F2F0E8]">У вас пока нет созданных ключей</h4>
-                  <p className="text-xs text-[#A8B4B7] mt-1 max-w-sm mx-auto font-sans">
+                  <p className="text-sm text-[#A8B4B7] mt-1 max-w-sm mx-auto font-sans">
                     Нажмите кнопку «Создать новый ключ», чтобы получить AmneziaWG конфигурацию для смартфона или компьютера.
                   </p>
                 </div>
@@ -367,12 +388,12 @@ export default function App() {
                               <h4 className="font-serif font-bold text-[#F2F0E8] text-base group-hover:text-gold-gradient transition">
                                 {k.device_name}
                               </h4>
-                              <span className="text-[10px] text-[#718187] font-mono tracking-wider">{k.client_name}</span>
+                              <span className="text-sm text-[#718187] font-mono tracking-wider">{k.client_name}</span>
                             </div>
                           </div>
 
                           <span
-                            className={`text-[9px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
+                            className={`text-sm font-mono font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full ${
                               k.node_type === 'cascade'
                                 ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40 shadow-sm'
                                 : 'bg-[#102833] text-[#6EA8C4] border border-[#6EA8C4]/40 shadow-sm'
@@ -382,24 +403,24 @@ export default function App() {
                           </span>
                         </div>
 
-                        <div className="text-xs text-[#A8B4B7] space-y-1.5 mb-5 bg-[#06141B]/70 p-3.5 rounded-xl border border-[#1C3945]/70 font-sans">
+                        <div className="text-sm text-[#A8B4B7] space-y-2 mb-5 bg-[#06141B]/70 p-3.5 rounded-xl border border-[#1C3945]/70 font-sans">
                           <div className="flex justify-between items-center">
-                            <span className="text-[11px] text-[#718187]">Сервер:</span>
+                            <span className="text-sm text-[#718187]">Сервер:</span>
                             <span className="text-[#F2F0E8] font-medium truncate max-w-[180px]">{k.node_name || 'Node'}</span>
                           </div>
                           <div className="flex justify-between items-center">
-                            <span className="text-[11px] text-[#718187]">Трафик:</span>
-                            <span className="text-[#F2F0E8] font-mono text-[11px]">
+                            <span className="text-sm text-[#718187]">Трафик:</span>
+                            <span className="text-[#F2F0E8] font-mono text-sm">
                               {k.total_traffic_formatted || '0 B'} <span className="text-[#718187]">({k.month_traffic_formatted || '0 B'}/мес)</span>
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
-                            <span className="text-[11px] text-[#718187]">Срок действия:</span>
-                            <span className="text-emerald-400 font-mono text-[11px]">∞ Бессрочный</span>
+                            <span className="text-sm text-[#718187]">Срок действия:</span>
+                            <span className="text-emerald-400 font-mono text-sm">∞ Бессрочный</span>
                           </div>
                           <div className="flex justify-between items-center">
-                            <span className="text-[11px] text-[#718187]">Создан:</span>
-                            <span className="text-[#A8B4B7] font-mono text-[11px]">{new Date(k.created_at).toLocaleDateString()}</span>
+                            <span className="text-sm text-[#718187]">Создан:</span>
+                            <span className="text-[#A8B4B7] font-mono text-sm">{new Date(k.created_at).toLocaleDateString()}</span>
                           </div>
                         </div>
                       </div>
@@ -407,7 +428,7 @@ export default function App() {
                       <div className="flex items-center space-x-2 pt-3 border-t border-[#1C3945]/80">
                         <button
                           onClick={() => handleViewKey(k.id)}
-                          className="flex-1 flex items-center justify-center space-x-2 bg-[#102833] hover:bg-[#1C3945] text-[#D9B96E] hover:text-[#F0D48D] border border-[#D9B96E]/30 hover:border-[#D9B96E]/60 font-mono text-xs uppercase tracking-wider py-2.5 px-3 rounded-xl transition shadow-sm"
+                          className="flex-1 flex items-center justify-center space-x-2 bg-[#102833] hover:bg-[#1C3945] text-[#D9B96E] hover:text-[#F0D48D] border border-[#D9B96E]/30 hover:border-[#D9B96E]/60 font-mono text-sm uppercase tracking-wider py-2.5 px-3 rounded-xl transition shadow-sm"
                         >
                           <QrIcon className="w-4 h-4" />
                           <span>QR & Конфиг</span>
@@ -474,7 +495,7 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="border-t border-[#1C3945]/60 py-6 text-center text-xs text-[#718187] font-mono tracking-wider">
+      <footer className="border-t border-[#1C3945]/60 py-6 text-center text-sm text-[#718187] font-mono tracking-wider">
         Avari Keys &copy; 2026 — «Добровольный кооператив • Частная виртуальная сеть»
       </footer>
     </div>

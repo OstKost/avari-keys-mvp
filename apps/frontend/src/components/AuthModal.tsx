@@ -69,21 +69,21 @@ export function AuthModal({ onSuccess }: Props) {
           <h1 className="font-serif text-3xl font-bold tracking-wider text-gold-gradient uppercase">
             Avari Keys
           </h1>
-          <p className="text-xs text-[#A8B4B7] tracking-widest uppercase mt-1 font-mono">
+          <p className="text-sm text-[#A8B4B7] tracking-wider uppercase mt-1.5 font-mono">
             {isRegister ? 'Регистрация хранителя' : 'Свобода выбора • Твои ключи'}
           </p>
         </div>
 
         {/* Status Alerts */}
         {error && (
-          <div className="flex items-start space-x-2.5 bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs p-3.5 rounded-xl mb-5 shadow-lg">
+          <div className="flex items-start space-x-2.5 bg-rose-950/60 border border-rose-800/80 text-rose-300 text-sm p-3.5 rounded-xl mb-5 shadow-lg">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-400" />
             <span>{error}</span>
           </div>
         )}
 
         {successMsg && (
-          <div className="flex items-start space-x-2.5 bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 text-xs p-3.5 rounded-xl mb-5 shadow-lg">
+          <div className="flex items-start space-x-2.5 bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 text-sm p-3.5 rounded-xl mb-5 shadow-lg">
             <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-400" />
             <span>{successMsg}</span>
           </div>
@@ -92,7 +92,7 @@ export function AuthModal({ onSuccess }: Props) {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-[11px] font-semibold text-[#A8B4B7] uppercase tracking-wider mb-1.5 font-mono">
+            <label className="block text-sm font-semibold text-[#A8B4B7] uppercase tracking-wider mb-1.5 font-mono">
               Имя пользователя
             </label>
             <input
@@ -100,13 +100,13 @@ export function AuthModal({ onSuccess }: Props) {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="например: Forve или user1"
-              className="w-full bg-[#0D222C] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-4 py-3 text-sm text-[#F2F0E8] placeholder-[#718187] focus:outline-none focus:ring-1 focus:ring-[#D9B96E]/50 transition shadow-inner font-sans"
+              className="w-full bg-[#0D222C] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-4 py-3 text-base text-[#F2F0E8] placeholder-[#718187] focus:outline-none focus:ring-1 focus:ring-[#D9B96E]/50 transition shadow-inner font-sans"
               required
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold text-[#A8B4B7] uppercase tracking-wider mb-1.5 font-mono">
+            <label className="block text-sm font-semibold text-[#A8B4B7] uppercase tracking-wider mb-1.5 font-mono">
               Пароль
             </label>
             <input
@@ -114,7 +114,7 @@ export function AuthModal({ onSuccess }: Props) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full bg-[#0D222C] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-4 py-3 text-sm text-[#F2F0E8] placeholder-[#718187] focus:outline-none focus:ring-1 focus:ring-[#D9B96E]/50 transition shadow-inner font-sans"
+              className="w-full bg-[#0D222C] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-4 py-3 text-base text-[#F2F0E8] placeholder-[#718187] focus:outline-none focus:ring-1 focus:ring-[#D9B96E]/50 transition shadow-inner font-sans"
               required
             />
           </div>
@@ -122,7 +122,7 @@ export function AuthModal({ onSuccess }: Props) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-3 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300 flex items-center justify-center space-x-2 text-sm uppercase tracking-wider font-mono"
+            className="w-full mt-3 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300 flex items-center justify-center space-x-2 text-sm uppercase tracking-wider font-mono cursor-pointer"
           >
             {loading ? (
               <span>Авторизация...</span>
@@ -143,7 +143,7 @@ export function AuthModal({ onSuccess }: Props) {
         {/* Demo Mode / Quick Logins (Visible only in DEV or when explicitly enabled) */}
         {(import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO === 'true') && (
           <div className="mt-6 pt-5 border-t border-[#1C3945]/80 flex flex-col space-y-2.5">
-            <div className="text-[10px] text-center font-mono uppercase tracking-widest text-[#718187] mb-1">
+            <div className="text-sm text-center font-mono uppercase tracking-wider text-[#718187] mb-1">
               Быстрый демо-вход (Mock-режим)
             </div>
 
@@ -151,18 +151,18 @@ export function AuthModal({ onSuccess }: Props) {
               <button
                 onClick={() => handleDemoLogin('alice')}
                 type="button"
-                className="flex items-center justify-center space-x-1.5 bg-[#102833]/80 hover:bg-[#102833] text-[#6EA8C4] hover:text-[#9cd0e6] border border-[#6EA8C4]/30 hover:border-[#6EA8C4]/60 font-medium py-2.5 px-3 rounded-xl text-xs transition shadow-sm font-mono"
+                className="flex items-center justify-center space-x-1.5 bg-[#102833]/80 hover:bg-[#102833] text-[#6EA8C4] hover:text-[#9cd0e6] border border-[#6EA8C4]/30 hover:border-[#6EA8C4]/60 font-medium py-2.5 px-3 rounded-xl text-sm transition shadow-sm font-mono cursor-pointer"
               >
-                <UserIcon className="w-3.5 h-3.5 text-[#6EA8C4]" />
+                <UserIcon className="w-4 h-4 text-[#6EA8C4]" />
                 <span>Клиент (Alice)</span>
               </button>
 
               <button
                 onClick={() => handleDemoLogin('Forve')}
                 type="button"
-                className="flex items-center justify-center space-x-1.5 bg-[#102833]/80 hover:bg-[#102833] text-[#F0D48D] hover:text-white border border-[#D9B96E]/30 hover:border-[#D9B96E]/60 font-medium py-2.5 px-3 rounded-xl text-xs transition shadow-sm font-mono"
+                className="flex items-center justify-center space-x-1.5 bg-[#102833]/80 hover:bg-[#102833] text-[#F0D48D] hover:text-white border border-[#D9B96E]/30 hover:border-[#D9B96E]/60 font-medium py-2.5 px-3 rounded-xl text-sm transition shadow-sm font-mono cursor-pointer"
               >
-                <ShieldCheck className="w-3.5 h-3.5 text-[#D9B96E]" />
+                <ShieldCheck className="w-4 h-4 text-[#D9B96E]" />
                 <span>Админ (Forve)</span>
               </button>
             </div>
@@ -176,7 +176,7 @@ export function AuthModal({ onSuccess }: Props) {
               setError(null);
               setSuccessMsg(null);
             }}
-            className="text-xs text-[#A8B4B7] hover:text-[#F2F0E8] transition text-center font-medium"
+            className="text-sm text-[#A8B4B7] hover:text-[#F2F0E8] transition text-center font-medium cursor-pointer"
           >
             {isRegister ? 'Уже есть учетная запись? Войти' : 'Новый пользователь? Зарегистрироваться'}
           </button>

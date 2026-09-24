@@ -82,7 +82,7 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Node Selection */}
           <div>
-            <label className="block text-xs sm:text-sm font-mono font-semibold text-[#D9B96E] uppercase tracking-wider mb-2.5">
+            <label className="block text-sm font-mono font-semibold text-[#D9B96E] uppercase tracking-wider mb-2.5">
               Тип подключения / Сервер
             </label>
             <div className="space-y-3">
@@ -108,13 +108,13 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
                       <span className="font-serif font-bold text-base text-[#F2F0E8]">{node.name}</span>
                       <div className="flex items-center space-x-1.5 flex-wrap gap-1">
                         {node.is_mobile_optimized && (
-                          <span className="inline-flex items-center space-x-1 text-xs font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#06141B] text-[#D9B96E] border border-[#D9B96E]/40" title="Оптимизирован для мобильных сетей (порт 443/UDP)">
-                            <Smartphone className="w-3 h-3" />
+                          <span className="inline-flex items-center space-x-1 text-sm font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#06141B] text-[#D9B96E] border border-[#D9B96E]/40" title="Оптимизирован для мобильных сетей (порт 443/UDP)">
+                            <Smartphone className="w-3.5 h-3.5" />
                             <span>LTE / 443</span>
                           </span>
                         )}
                         <span
-                          className={`text-xs font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                          className={`text-sm font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
                             node.type === 'cascade'
                               ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40'
                               : 'bg-[#06141B] text-[#6EA8C4] border border-[#6EA8C4]/40'
@@ -129,7 +129,7 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
                         ? 'Вход через РФ, выход за рубежом (максимальная защита от DPI и блокировок)'
                         : 'Прямой туннель к зарубежному серверу'}
                       {node.is_mobile_optimized && (
-                        <span className="block text-xs sm:text-sm text-[#F0D48D] mt-1 font-medium">
+                        <span className="block text-sm text-[#F0D48D] mt-1 font-medium">
                           ⭐ Рекомендуется для смартфонов и мобильных сетей (443/UDP).
                         </span>
                       )}
@@ -142,7 +142,7 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
 
           {/* Device Name Input */}
           <div>
-            <label className="block text-xs sm:text-sm font-mono font-semibold text-[#D9B96E] uppercase tracking-wider mb-2">
+            <label className="block text-sm font-mono font-semibold text-[#D9B96E] uppercase tracking-wider mb-2">
               Имя устройства / Заметка
             </label>
             <input
@@ -155,7 +155,7 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
               className="w-full bg-[#0D222C] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-4 py-3.5 text-base text-[#F2F0E8] placeholder-[#718187] focus:outline-none focus:ring-1 focus:ring-[#D9B96E]/50 transition shadow-inner font-mono"
               required
             />
-            <p className="text-xs text-[#8C9BA0] font-sans mt-2">
+            <p className="text-sm text-[#8C9BA0] font-sans mt-2">
               * Разрешены латинские буквы (a-z, A-Z), цифры (0-9), дефис (-) и подчеркивание (_)
             </p>
           </div>
@@ -182,16 +182,16 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center space-x-2">
                     <ShieldCheck className={`w-5 h-5 ${psk ? 'text-[#D9B96E]' : 'text-[#718187]'}`} />
-                    <span className="font-serif font-bold text-sm sm:text-base text-[#F2F0E8]">
+                    <span className="font-serif font-bold text-base text-[#F2F0E8]">
                       PresharedKey (PSK)
                     </span>
                   </div>
-                  <span className="text-xs font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#06141B] text-[#D9B96E] border border-[#D9B96E]/30">
+                  <span className="text-sm font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#06141B] text-[#D9B96E] border border-[#D9B96E]/30">
                     Shadowrocket iOS/macOS
                   </span>
                 </div>
-                <p className="text-xs sm:text-sm text-[#A8B4B7] mt-1.5 font-sans leading-relaxed">
-                  Добавляет ключ <code className="text-[#D9B96E] font-mono text-xs px-1 py-0.5 bg-[#06141B] rounded">PresharedKey</code> (<code className="text-[#D9B96E] font-mono text-xs px-1 py-0.5 bg-[#06141B] rounded">--psk</code>). Обязательно для подключения клиентов Shadowrocket на iPhone, iPad и Mac.
+                <p className="text-sm text-[#A8B4B7] mt-1.5 font-sans leading-relaxed">
+                  Добавляет ключ <code className="text-[#D9B96E] font-mono text-sm px-1.5 py-0.5 bg-[#06141B] rounded">PresharedKey</code> (<code className="text-[#D9B96E] font-mono text-sm px-1.5 py-0.5 bg-[#06141B] rounded">--psk</code>). Обязательно для подключения клиентов Shadowrocket на iPhone, iPad и Mac.
                 </p>
               </div>
             </div>
@@ -200,7 +200,7 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold font-mono text-sm sm:text-base uppercase tracking-wider py-4 px-4 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300 flex items-center justify-center space-x-2 cursor-pointer"
+            className="w-full mt-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold font-mono text-base uppercase tracking-wider py-4 px-4 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300 flex items-center justify-center space-x-2 cursor-pointer"
           >
             {loading ? (
               <span>Генерация AmneziaWG ключа...</span>

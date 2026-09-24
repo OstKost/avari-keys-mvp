@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { User as UserIcon, Lock, Shield, KeyRound, Check, Calendar, ShieldCheck, UserCheck } from 'lucide-react';
 import { User } from '../types';
 import { api } from '../api/client';
@@ -15,6 +15,10 @@ export function UserProfile({ user, onUserUpdated }: UserProfileProps) {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setUsername(user.username);
+  }, [user.username]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +69,7 @@ export function UserProfile({ user, onUserUpdated }: UserProfileProps) {
           <UserIcon className="w-6 h-6 text-[#D9B96E]" />
           <span>Мой профиль</span>
         </h2>
-        <p className="text-xs text-[#A8B4B7] mt-1 font-sans">
+        <p className="text-sm text-[#A8B4B7] mt-1 font-sans">
           Управление учетной записью, изменение имени пользователя и смена пароля.
         </p>
       </div>
@@ -77,10 +81,10 @@ export function UserProfile({ user, onUserUpdated }: UserProfileProps) {
             {user.role === 'admin' ? <ShieldCheck className="w-5 h-5" /> : <Shield className="w-5 h-5" />}
           </div>
           <div>
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[#718187]">Роль в системе</span>
+            <span className="text-sm font-mono uppercase tracking-widest text-[#718187]">Роль в системе</span>
             <div className="text-sm font-semibold text-[#F2F0E8] mt-0.5 flex items-center space-x-1.5">
               <span>{user.role === 'admin' ? 'Администратор' : 'Хранитель'}</span>
-              <span className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded ${user.role === 'admin' ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40' : 'bg-[#102833] text-[#6EA8C4] border border-[#6EA8C4]/40'}`}>
+              <span className={`text-sm font-mono uppercase px-2 py-0.5 rounded ${user.role === 'admin' ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40' : 'bg-[#102833] text-[#6EA8C4] border border-[#6EA8C4]/40'}`}>
                 {user.role}
               </span>
             </div>
@@ -92,7 +96,7 @@ export function UserProfile({ user, onUserUpdated }: UserProfileProps) {
             <UserCheck className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[#718187]">Статус доступа</span>
+            <span className="text-sm font-mono uppercase tracking-widest text-[#718187]">Статус доступа</span>
             <div className="text-sm font-semibold text-[#F2F0E8] mt-0.5 flex items-center space-x-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span>{user.is_active ? 'Активен (Одобрен)' : 'На модерации'}</span>
@@ -105,7 +109,7 @@ export function UserProfile({ user, onUserUpdated }: UserProfileProps) {
             <Calendar className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[#718187]">Дата регистрации</span>
+            <span className="text-sm font-mono uppercase tracking-widest text-[#718187]">Дата регистрации</span>
             <div className="text-sm font-mono text-[#F2F0E8] mt-0.5">
               {new Date(user.created_at).toLocaleDateString()}
             </div>
@@ -122,7 +126,7 @@ export function UserProfile({ user, onUserUpdated }: UserProfileProps) {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-mono uppercase tracking-wider text-[#A8B4B7] mb-2">
+            <label className="block text-sm font-mono uppercase tracking-wider text-[#A8B4B7] mb-2">
               Имя пользователя (Логин)
             </label>
             <div className="relative">
@@ -135,19 +139,19 @@ export function UserProfile({ user, onUserUpdated }: UserProfileProps) {
                 className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl pl-10 pr-4 py-3 text-sm text-[#F2F0E8] placeholder-[#718187] focus:outline-none transition shadow-inner font-sans"
               />
             </div>
-            <p className="text-[11px] text-[#718187] mt-1 font-sans">
+            <p className="text-sm text-[#718187] mt-1 font-sans">
               Отображается в системе и используется для авторизации.
             </p>
           </div>
 
           <div className="pt-4 border-t border-[#1C3945]/60 space-y-4">
-            <h4 className="text-xs font-mono uppercase tracking-wider text-[#D9B96E]">
+            <h4 className="text-sm font-mono uppercase tracking-wider text-[#D9B96E]">
               Смена пароля (Оставьте пустым, если не хотите менять)
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-mono uppercase tracking-wider text-[#A8B4B7] mb-2">
+                <label className="block text-sm font-mono uppercase tracking-wider text-[#A8B4B7] mb-2">
                   Новый пароль
                 </label>
                 <div className="relative">
@@ -163,7 +167,7 @@ export function UserProfile({ user, onUserUpdated }: UserProfileProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-mono uppercase tracking-wider text-[#A8B4B7] mb-2">
+                <label className="block text-sm font-mono uppercase tracking-wider text-[#A8B4B7] mb-2">
                   Подтверждение пароля
                 </label>
                 <div className="relative">
@@ -185,7 +189,7 @@ export function UserProfile({ user, onUserUpdated }: UserProfileProps) {
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-xs uppercase tracking-wider font-mono px-6 py-3 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300"
+            className="flex items-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-sm uppercase tracking-wider font-mono px-6 py-3 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300"
           >
             {loading ? (
               <span>Сохранение...</span>
