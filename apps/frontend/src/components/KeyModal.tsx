@@ -199,11 +199,11 @@ export function KeyModal({ keyData, onClose }: Props) {
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[999] bg-[#06141B]/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-      <div className="bg-[#0A1D26] border border-[#1C3945] hover:border-[#D9B96E]/50 rounded-3xl max-w-lg md:max-w-3xl lg:max-w-4xl w-full p-5 sm:p-7 md:p-8 shadow-2xl shadow-black/90 relative my-auto transition-all duration-300">
+    <div className="fixed inset-0 z-[999] bg-[#06141B]/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-6 overflow-y-auto">
+      <div className="bg-[#0A1D26] border border-[#1C3945] hover:border-[#D9B96E]/50 rounded-3xl max-w-lg md:max-w-3xl lg:max-w-4xl w-full p-4 sm:p-6 md:p-8 shadow-2xl shadow-black/90 relative my-auto transition-all duration-300">
         <button
           onClick={onClose}
-          className="absolute top-5 right-5 text-[#A8B4B7] hover:text-[#F2F0E8] p-2 rounded-xl hover:bg-[#102833] border border-transparent hover:border-[#1C3945] transition z-10"
+          className="absolute top-4 right-4 sm:top-5 sm:right-5 text-[#A8B4B7] hover:text-[#F2F0E8] p-2 rounded-xl hover:bg-[#102833] border border-transparent hover:border-[#1C3945] transition z-10"
           aria-label="Закрыть"
         >
           <X className="w-5 h-5" />
@@ -211,12 +211,12 @@ export function KeyModal({ keyData, onClose }: Props) {
 
         {/* Modal Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pr-10">
-          <div className="flex items-center space-x-3.5">
-            <div className="bg-[#102833] p-3 rounded-2xl text-[#D9B96E] border border-[#1C3945] shrink-0">
-              <QrIcon className="w-6 h-6" />
+          <div className="flex items-center space-x-3 sm:space-x-3.5">
+            <div className="bg-[#102833] p-2.5 sm:p-3 rounded-2xl text-[#D9B96E] border border-[#1C3945] shrink-0">
+              <QrIcon className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h3 className="font-serif text-xl sm:text-2xl font-bold text-[#F2F0E8] tracking-wide">{keyData.device_name}</h3>
+              <h3 className="font-serif text-lg sm:text-2xl font-bold text-[#F2F0E8] tracking-wide">{keyData.device_name}</h3>
               <p className="text-xs sm:text-sm text-[#A8B4B7] mt-0.5 font-sans flex items-center gap-1.5 flex-wrap">
                 <span>Сервер:</span>
                 <strong className="text-[#D9B96E] font-medium">{keyData.node_name}</strong>
@@ -230,7 +230,7 @@ export function KeyModal({ keyData, onClose }: Props) {
         </div>
 
         {/* Protocol Switcher Tabs */}
-        <div className="flex p-1 bg-[#06141B] border border-[#1C3945] rounded-2xl mb-6 shadow-inner">
+        <div className="flex p-1 bg-[#06141B] border border-[#1C3945] rounded-2xl mb-5 sm:mb-6 shadow-inner">
           <button
             type="button"
             onClick={() => setProtocol('awg')}

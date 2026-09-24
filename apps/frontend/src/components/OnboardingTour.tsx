@@ -79,7 +79,7 @@ export function OnboardingTour({
   };
 
   return createPortal(
-    <div className="fixed bottom-24 sm:bottom-8 left-4 right-4 sm:left-auto sm:right-8 z-[10000] max-w-xl w-full flex items-end gap-3 sm:gap-4 animate-slideUp">
+    <div className="fixed bottom-20 sm:bottom-8 left-3 right-3 sm:left-auto sm:right-8 z-[10000] max-w-xl w-auto sm:w-full flex items-end gap-3 sm:gap-4 animate-slideUp">
       {/* Standing Cutout Mascot to the left of the dialog card */}
       <div className="hidden sm:flex flex-col items-center shrink-0 select-none">
         <img 
@@ -91,7 +91,7 @@ export function OnboardingTour({
 
       {/* Speech Dialog Card with Rotating Golden Border Sheen */}
       <div className="flex-1 gold-rotating-border">
-        <div className="gold-rotating-border-content p-5 sm:p-6 relative overflow-hidden">
+        <div className="gold-rotating-border-content p-4 sm:p-6 relative overflow-hidden">
           {/* Glow decoration */}
           <div className="absolute top-0 right-0 w-36 h-36 bg-[radial-gradient(circle_at_100%_0%,rgba(217,185,110,0.15)_0%,transparent_70%)] pointer-events-none" />
 

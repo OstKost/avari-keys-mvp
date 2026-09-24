@@ -230,9 +230,39 @@ export function MascotFaqModal({
 // Modal Companion Character (Stands to the left of CreateKeyModal with gold rotating bubble)
 export function MascotModalCompanion({
   onClickFaq,
+  compact = false,
 }: {
   onClickFaq: () => void;
+  compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <div 
+        onClick={onClickFaq}
+        className="w-full max-w-md gold-rotating-border cursor-pointer group transition-transform hover:scale-[1.01]"
+        title="Нажмите, чтобы открыть 5 частых вопросов (FAQ)"
+      >
+        <div className="gold-rotating-border-content p-3 sm:p-4 text-xs sm:text-sm text-[#F2F0E8] font-sans flex items-center space-x-3">
+          <MascotAvatar size="sm" withGlow={false} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-1.5 mb-0.5">
+              <span className="font-serif font-bold text-xs sm:text-sm text-[#F0D48D] group-hover:text-gold-gradient transition truncate">
+                Нужна помощь с выбором?
+              </span>
+              <span className="bg-[#06141B] text-[#D9B96E] text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-[#D9B96E]/40 shrink-0">
+                5 ответов
+              </span>
+            </div>
+            <p className="text-[11px] sm:text-xs text-[#A8B4B7] truncate">
+              Объясню разницу между Direct и Cascade, имя устройства и PSK.
+            </p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-[#D9B96E] shrink-0 group-hover:translate-x-0.5 transition-transform" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center select-none">
       {/* Speech Bubble with Rotating Gold Sheen Border */}
@@ -288,10 +318,32 @@ export function MascotModalCompanion({
 
 // Auth Screen Companion (Standing to the left of centered form)
 export function MascotAuthCompanion({
-  isRegister = false
+  isRegister = false,
+  compact = false,
 }: {
   isRegister?: boolean;
+  compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <div className="w-full max-w-md gold-rotating-border">
+        <div className="gold-rotating-border-content p-3 sm:p-4 text-xs sm:text-sm text-[#F2F0E8] font-sans flex items-center space-x-3">
+          <MascotAvatar size="sm" withGlow={false} />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-[#D9E1E3] leading-tight">
+              {isRegister
+                ? 'Приветствую! Создайте аккаунт, и я помогу настроить защищенный ключ.'
+                : 'Рад снова видеть вас! Войдите для управления вашими ключами.'}
+            </p>
+            <div className="text-right mt-1 text-[11px] font-serif font-bold text-[#D9B96E]">
+              — Ари
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center select-none">
       {/* Speech Bubble with Rotating Gold Sheen Border */}
@@ -348,37 +400,37 @@ export function FloatingMascot({
 
   if (isDismissed) {
     return (
-      <div className="fixed bottom-5 right-5 z-40">
+      <div className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40">
         <button
           onClick={handleToggleCollapse}
           title="Открыть помощника Ари"
           className="relative group p-0.5 rounded-full overflow-hidden border-2 border-[#D9B96E] bg-[#0A1D26] shadow-2xl shadow-black/90 hover:scale-110 transition-transform duration-300 cursor-pointer"
         >
-          <div className="w-14 h-14 rounded-full overflow-hidden">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden">
             <img 
               src="/assets/mascot_avatar.png" 
               alt="Ари" 
               className="w-full h-full object-cover filter contrast-[1.05]"
             />
           </div>
-          <span className="absolute top-0 right-0 w-3.5 h-3.5 bg-[#D9B96E] rounded-full border-2 border-[#06141B] animate-ping" />
+          <span className="absolute top-0 right-0 w-3 h-3 bg-[#D9B96E] rounded-full border-2 border-[#06141B] animate-ping" />
         </button>
       </div>
     );
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end select-none">
-      {/* Quick Menu Popover */}
+    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 flex flex-col items-end select-none">
+      {/* Quick Menu Popover (Safe bounds on small mobile screens) */}
       {isOpen && (
-        <div className="mb-3 w-80 gold-rotating-border animate-slideUp">
-          <div className="gold-rotating-border-content p-5">
+        <div className="mb-3 w-80 max-w-[calc(100vw-2rem)] gold-rotating-border animate-slideUp">
+          <div className="gold-rotating-border-content p-4 sm:p-5">
             <div className="flex items-center justify-between pb-3 border-b border-[#1C3945]">
               <div className="flex items-center space-x-2.5">
                 <div className="w-8 h-8 rounded-full overflow-hidden border border-[#D9B96E] bg-[#06141B] shrink-0">
                   <img src="/assets/mascot_avatar.png" alt="Ари" className="w-full h-full object-cover" />
                 </div>
-                <span className="font-serif font-bold text-base text-[#F2F0E8]">Хранитель Ари</span>
+                <span className="font-serif font-bold text-sm sm:text-base text-[#F2F0E8]">Хранитель Ари</span>
               </div>
               <button
                 onClick={() => setIsOpen(false)}
@@ -438,11 +490,11 @@ export function FloatingMascot({
       {/* Floating Trigger Button with Circular Face Avatar and Rotating Sheen Bubble */}
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-3 cursor-pointer group"
+        className="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer group"
       >
         {!isOpen && (
           <div className="gold-rotating-border">
-            <div className="gold-rotating-border-content py-2 px-3.5 text-xs font-sans flex items-center space-x-2">
+            <div className="gold-rotating-border-content py-1.5 px-3 sm:py-2 sm:px-3.5 text-xs font-sans flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="font-serif font-bold text-[#F0D48D]">Нужна помощь?</span>
             </div>
@@ -451,16 +503,17 @@ export function FloatingMascot({
 
         {/* Circular Portrait Avatar of Ari's Face */}
         <div className="relative flex-shrink-0 transition-transform duration-300 group-hover:scale-110">
-          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-[#D9B96E] bg-[#0A1D26] shadow-2xl shadow-black/90 group-hover:border-[#F0D48D] group-hover:shadow-[0_0_25px_rgba(217,185,110,0.4)] transition-all duration-300">
+          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-[#D9B96E] bg-[#0A1D26] shadow-2xl shadow-black/90 group-hover:border-[#F0D48D] group-hover:shadow-[0_0_25px_rgba(217,185,110,0.4)] transition-all duration-300">
             <img 
               src="/assets/mascot_avatar.png" 
               alt="Ари" 
               className="w-full h-full object-cover filter contrast-[1.05] pointer-events-none"
             />
           </div>
-          <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-[#06141B]" />
+          <span className="absolute bottom-0 right-0 w-3 sm:w-3.5 h-3 sm:h-3.5 bg-emerald-400 rounded-full border-2 border-[#06141B]" />
         </div>
       </div>
     </div>
   );
 }
+

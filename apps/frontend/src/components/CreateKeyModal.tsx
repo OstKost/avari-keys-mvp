@@ -67,7 +67,7 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[999] bg-[#06141B]/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+    <div className="fixed inset-0 z-[999] bg-[#06141B]/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
       {/* Centered Area: Modal in Dead Center + Mascot to the Left on Desktop */}
       <div className="relative max-w-2xl lg:max-w-3xl w-full my-auto flex flex-col items-center">
         
@@ -76,44 +76,44 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
           <MascotModalCompanion onClickFaq={() => setShowFaq(true)} />
         </div>
 
-        {/* Mascot on Mobile (Above modal) */}
-        <div className="lg:hidden mb-4 w-full flex justify-center">
-          <MascotModalCompanion onClickFaq={() => setShowFaq(true)} />
+        {/* Mascot on Mobile (Above modal, compact banner) */}
+        <div className="lg:hidden mb-3 w-full flex justify-center">
+          <MascotModalCompanion onClickFaq={() => setShowFaq(true)} compact={true} />
         </div>
 
         {/* Modal Window Card */}
-        <div className="w-full bg-[#0A1D26]/95 backdrop-blur-xl border border-[#1C3945] hover:border-[#D9B96E]/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/90 relative transition-all duration-300">
+        <div className="w-full bg-[#0A1D26]/95 backdrop-blur-xl border border-[#1C3945] hover:border-[#D9B96E]/50 rounded-3xl p-4 sm:p-6 sm:p-8 shadow-2xl shadow-black/90 relative transition-all duration-300">
           <button
             onClick={onClose}
-            className="absolute top-5 right-5 text-[#A8B4B7] hover:text-[#F2F0E8] p-2 rounded-xl hover:bg-[#102833] border border-transparent hover:border-[#1C3945] transition cursor-pointer"
+            className="absolute top-4 right-4 sm:top-5 sm:right-5 text-[#A8B4B7] hover:text-[#F2F0E8] p-2 rounded-xl hover:bg-[#102833] border border-transparent hover:border-[#1C3945] transition cursor-pointer"
             title="Закрыть"
           >
             <X className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center space-x-3.5 mb-6">
-            <div className="bg-[#102833] p-3.5 rounded-2xl text-[#D9B96E] border border-[#1C3945]">
-              <Plus className="w-6 h-6" />
+          <div className="flex items-center space-x-3 sm:space-x-3.5 mb-5 sm:mb-6 pr-8">
+            <div className="bg-[#102833] p-2.5 sm:p-3.5 rounded-2xl text-[#D9B96E] border border-[#1C3945] shrink-0">
+              <Plus className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h3 className="font-serif text-2xl font-bold text-[#F2F0E8] tracking-wide">Создать VPN Ключ</h3>
-              <p className="text-sm text-[#A8B4B7] mt-0.5 font-sans">Выберите тип туннелирования и назовите устройство</p>
+              <h3 className="font-serif text-xl sm:text-2xl font-bold text-[#F2F0E8] tracking-wide">Создать VPN Ключ</h3>
+              <p className="text-xs sm:text-sm text-[#A8B4B7] mt-0.5 font-sans">Выберите тип туннелирования и назовите устройство</p>
             </div>
           </div>
 
           {error && (
-            <div className="bg-rose-950/60 border border-rose-800/80 text-rose-300 text-sm p-4 rounded-xl mb-5 shadow-lg">
+            <div className="bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs sm:text-sm p-3.5 sm:p-4 rounded-xl mb-4 sm:mb-5 shadow-lg">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
             {/* Node Selection */}
             <div>
-              <label className="block text-xs font-mono font-semibold text-[#D9B96E] uppercase tracking-wider mb-2.5">
+              <label className="block text-xs font-mono font-semibold text-[#D9B96E] uppercase tracking-wider mb-2">
                 Тип подключения / Сервер
               </label>
-              <div className="space-y-2.5">
+              <div className="space-y-2 sm:space-y-2.5">
                 {safeNodes.map((node) => {
                   const isExpanded = !!expandedNodeIds[node.id];
                   const isSelected = selectedNodeId === node.id;
@@ -123,14 +123,14 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
                     <div
                       key={node.id}
                       onClick={() => setSelectedNodeId(node.id)}
-                      className={`p-3.5 sm:p-4 rounded-2xl border cursor-pointer transition-all duration-200 ${
+                      className={`p-3 sm:p-4 rounded-2xl border cursor-pointer transition-all duration-200 ${
                         isSelected
                           ? 'border-[#D9B96E] bg-[#102833] shadow-lg shadow-[#D9B96E]/10'
                           : 'border-[#1C3945] bg-[#0D222C] hover:border-[#1C3945]/80 hover:bg-[#0D222C]/80'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center space-x-3 min-w-0 flex-1">
+                      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3">
+                        <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0 flex-1">
                           <input
                             type="radio"
                             name="node"
@@ -146,18 +146,18 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
                         </div>
 
                         {/* Badges & Pulsing Info Button */}
-                        <div className="flex items-center space-x-2 shrink-0">
+                        <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
                           {node.is_mobile_optimized && (
                             <span 
-                              className="hidden sm:inline-flex items-center space-x-1 text-xs font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#06141B] text-[#D9B96E] border border-[#D9B96E]/40" 
+                              className="inline-flex items-center space-x-1 text-[11px] sm:text-xs font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#06141B] text-[#D9B96E] border border-[#D9B96E]/40" 
                               title="Оптимизирован для мобильных сетей (порт 443/UDP)"
                             >
                               <Smartphone className="w-3 h-3" />
-                              <span>LTE / 443</span>
+                              <span>LTE</span>
                             </span>
                           )}
                           <span
-                            className={`text-xs font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                            className={`text-[11px] sm:text-xs font-mono font-bold uppercase tracking-wider px-2 sm:px-2.5 py-0.5 rounded-full ${
                               node.type === 'cascade'
                                 ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40'
                                 : 'bg-[#06141B] text-[#6EA8C4] border border-[#6EA8C4]/40'
@@ -170,10 +170,10 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
                           <button
                             type="button"
                             onClick={(e) => toggleNodeInfo(node.id, e)}
-                            className="p-1.5 rounded-lg text-[#718187] hover:text-[#D9B96E] hover:bg-[#06141B] transition cursor-pointer"
+                            className="p-1 rounded-lg text-[#718187] hover:text-[#D9B96E] hover:bg-[#06141B] transition cursor-pointer"
                             title={isExpanded ? 'Скрыть пояснение' : 'Показать пояснение о сервере'}
                           >
-                            <HelpCircle className={`w-5 h-5 ${isExpanded ? 'text-[#D9B96E]' : 'text-[#D9B96E]/70 animate-pulse'}`} />
+                            <HelpCircle className={`w-4 h-4 sm:w-5 sm:h-5 ${isExpanded ? 'text-[#D9B96E]' : 'text-[#D9B96E]/70 animate-pulse'}`} />
                           </button>
                         </div>
                       </div>
