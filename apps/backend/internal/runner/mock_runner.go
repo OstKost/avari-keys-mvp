@@ -133,17 +133,24 @@ func (m *MockRunner) GetStats(ctx context.Context) (*models.StatsSummaryResponse
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	now := time.Now().Unix()
 	peers := make(map[string]models.PeerStats)
 	idx := 1
+	var totalRx, totalTx int64
 	for name := range m.clients {
 		rx := int64(idx * 450 * 1024 * 1024)
 		tx := int64(idx * 1200 * 1024 * 1024)
+		totalRx += rx
+		totalTx += tx
+		handshakeEpoch := now - int64(idx*30) // online within last 30-90s
 		peers[name] = models.PeerStats{
-			ClientName:    name,
-			LastHandshake: "2 minutes ago",
-			RxBytes:       rx,
-			TxBytes:       tx,
-			MonthBytes:    rx + tx,
+			ClientName:         name,
+			LastHandshake:      fmt.Sprintf("%d сек назад", idx*30),
+			LastHandshakeEpoch: handshakeEpoch,
+			IsOnline:           true,
+			RxBytes:            rx,
+			TxBytes:            tx,
+			MonthBytes:         rx + tx,
 		}
 		idx++
 	}
@@ -151,8 +158,8 @@ func (m *MockRunner) GetStats(ctx context.Context) (*models.StatsSummaryResponse
 	return &models.StatsSummaryResponse{
 		ActivePeers: len(m.clients),
 		Uptime:      "3d 12h 4m",
-		TotalRx:     1048576000,
-		TotalTx:     5242880000,
+		TotalRx:     totalRx,
+		TotalTx:     totalTx,
 		Peers:       peers,
 	}, nil
 }
