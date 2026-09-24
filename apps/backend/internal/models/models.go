@@ -34,6 +34,8 @@ type Node struct {
 	ID                int64     `json:"id"`
 	Name              string    `json:"name"`
 	Type              string    `json:"type"` // "cascade" or "direct"
+	CountryCode       string    `json:"country_code"` // e.g. "NLD", "DEU", "USA"
+	ProviderURL       string    `json:"provider_url"` // e.g. "https://aeza.net"
 	APIURL            string    `json:"api_url"`
 	APIKey            string    `json:"-"` // Hidden in public responses
 	IsMobileOptimized bool      `json:"is_mobile_optimized"`
@@ -46,6 +48,7 @@ type NodePublic struct {
 	ID                int64     `json:"id"`
 	Name              string    `json:"name"`
 	Type              string    `json:"type"`
+	CountryCode       string    `json:"country_code"`
 	IsMobileOptimized bool      `json:"is_mobile_optimized"`
 	IsActive          bool      `json:"is_active"`
 	CreatedAt         time.Time `json:"created_at"`
@@ -67,6 +70,7 @@ type ClientConfig struct {
 	DeviceName            string    `json:"device_name"` // e.g. "iPhone"
 	NodeName              string    `json:"node_name,omitempty"`
 	NodeType              string    `json:"node_type,omitempty"`
+	NodeCountryCode       string    `json:"node_country_code,omitempty"`
 	LastHandshake         string    `json:"last_handshake,omitempty"`
 	TotalTrafficBytes     int64     `json:"total_traffic_bytes,omitempty"`
 	MonthTrafficBytes     int64     `json:"month_traffic_bytes,omitempty"`
@@ -109,8 +113,20 @@ type CreateKeyRequest struct {
 type AddNodeRequest struct {
 	Name              string `json:"name"`
 	Type              string `json:"type"` // "cascade" or "direct"
+	CountryCode       string `json:"country_code"`
+	ProviderURL       string `json:"provider_url"`
 	APIURL            string `json:"api_url"`
 	APIKey            string `json:"api_key"`
+	IsMobileOptimized bool   `json:"is_mobile_optimized"`
+}
+
+type UpdateNodeRequest struct {
+	Name              string `json:"name"`
+	Type              string `json:"type"`
+	CountryCode       string `json:"country_code"`
+	ProviderURL       string `json:"provider_url"`
+	APIURL            string `json:"api_url"`
+	APIKey            string `json:"api_key,omitempty"` // If empty, keep existing key
 	IsMobileOptimized bool   `json:"is_mobile_optimized"`
 }
 
@@ -197,6 +213,7 @@ type NodeDashboardInfo struct {
 	ID                    int64  `json:"id"`
 	Name                  string `json:"name"`
 	Type                  string `json:"type"`
+	CountryCode           string `json:"country_code"`
 	Online                bool   `json:"online"`
 	LatencyMs             int64  `json:"latency_ms"`
 	PeerCount             int    `json:"peer_count"`

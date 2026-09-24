@@ -90,6 +90,7 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("GET /api/v1/admin/nodes", auth.RequireAdmin(s.handleAdminListNodes))
 	s.mux.HandleFunc("POST /api/v1/admin/nodes", auth.RequireAdmin(s.handleAdminAddNode))
+	s.mux.HandleFunc("PUT /api/v1/admin/nodes/{id}", auth.RequireAdmin(s.handleAdminUpdateNode))
 	s.mux.HandleFunc("DELETE /api/v1/admin/nodes/{id}", auth.RequireAdmin(s.handleAdminDeleteNode))
 	s.mux.HandleFunc("POST /api/v1/admin/nodes/{id}/restart", auth.RequireAdmin(s.handleAdminRestartNode))
 	s.mux.HandleFunc("GET /api/v1/admin/nodes/{id}/backup", auth.RequireAdmin(s.handleAdminBackupNode))
@@ -679,6 +680,8 @@ func (s *Server) handleAdminAddNode(w http.ResponseWriter, r *http.Request) {
 	req.APIURL = strings.TrimSpace(req.APIURL)
 	req.APIKey = strings.TrimSpace(req.APIKey)
 	req.Type = strings.TrimSpace(req.Type)
+	req.CountryCode = strings.ToUpper(strings.TrimSpace(req.CountryCode))
+	req.ProviderURL = strings.TrimSpace(req.ProviderURL)
 
 	if req.Name == "" || req.APIURL == "" || req.APIKey == "" {
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Name, API URL, and API Key are required"})
@@ -689,7 +692,7 @@ func (s *Server) handleAdminAddNode(w http.ResponseWriter, r *http.Request) {
 		req.Type = "direct"
 	}
 
-	node, err := s.storage.CreateNode(r.Context(), req.Name, req.Type, req.APIURL, req.APIKey, req.IsMobileOptimized)
+	node, err := s.storage.CreateNode(r.Context(), req.Name, req.Type, req.CountryCode, req.ProviderURL, req.APIURL, req.APIKey, req.IsMobileOptimized)
 	if err != nil {
 		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -699,9 +702,63 @@ func (s *Server) handleAdminAddNode(w http.ResponseWriter, r *http.Request) {
 	if node.IsMobileOptimized {
 		mobileTag = " [Mobile 443/UDP]"
 	}
-	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_create", fmt.Sprintf("Добавлен новый сервер «%s» (%s%s, URL: %s)", node.Name, node.Type, mobileTag, node.APIURL))
+	countryTag := ""
+	if node.CountryCode != "" {
+		countryTag = fmt.Sprintf(" [%s]", node.CountryCode)
+	}
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_create", fmt.Sprintf("Добавлен новый сервер «%s» (%s%s%s, URL: %s)", node.Name, node.Type, countryTag, mobileTag, node.APIURL))
 
 	s.writeJSON(w, http.StatusCreated, node)
+}
+
+func (s *Server) handleAdminUpdateNode(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid node ID"})
+		return
+	}
+
+	var req models.UpdateNodeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	req.APIURL = strings.TrimSpace(req.APIURL)
+	req.APIKey = strings.TrimSpace(req.APIKey)
+	req.Type = strings.TrimSpace(req.Type)
+	req.CountryCode = strings.ToUpper(strings.TrimSpace(req.CountryCode))
+	req.ProviderURL = strings.TrimSpace(req.ProviderURL)
+
+	if req.Name == "" || req.APIURL == "" {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Name and API URL are required"})
+		return
+	}
+
+	if req.Type != "cascade" && req.Type != "direct" {
+		req.Type = "direct"
+	}
+
+	node, err := s.storage.UpdateNode(r.Context(), id, req.Name, req.Type, req.CountryCode, req.ProviderURL, req.APIURL, req.APIKey, req.IsMobileOptimized)
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	mobileTag := ""
+	if node.IsMobileOptimized {
+		mobileTag = " [Mobile 443/UDP]"
+	}
+	countryTag := ""
+	if node.CountryCode != "" {
+		countryTag = fmt.Sprintf(" [%s]", node.CountryCode)
+	}
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_update", fmt.Sprintf("Обновлены параметры сервера «%s» (ID #%d, %s%s%s, URL: %s)", node.Name, node.ID, node.Type, countryTag, mobileTag, node.APIURL))
+
+	s.writeJSON(w, http.StatusOK, node)
 }
 
 func (s *Server) handleAdminDeleteNode(w http.ResponseWriter, r *http.Request) {
@@ -1041,6 +1098,7 @@ func (s *Server) handleGetDashboardStats(w http.ResponseWriter, r *http.Request)
 			ID:                    n.ID,
 			Name:                  n.Name,
 			Type:                  n.Type,
+			CountryCode:           n.CountryCode,
 			Online:                isOnline,
 			LatencyMs:             latency,
 			PeerCount:             nodePeerCount,

@@ -12,6 +12,7 @@ export interface NodePublic {
   id: number;
   name: string;
   type: 'cascade' | 'direct';
+  country_code?: string;
   is_mobile_optimized?: boolean;
   is_active: boolean;
   created_at: string;
@@ -21,6 +22,8 @@ export interface AdminNode {
   id: number;
   name: string;
   type: 'cascade' | 'direct';
+  country_code?: string;
+  provider_url?: string;
   api_url: string;
   is_mobile_optimized?: boolean;
   is_active: boolean;
@@ -37,6 +40,7 @@ export interface ClientConfigSummary {
   device_name: string;
   node_name?: string;
   node_type?: 'cascade' | 'direct';
+  node_country_code?: string;
   last_handshake?: string;
   total_traffic_bytes?: number;
   month_traffic_bytes?: number;
@@ -116,6 +120,7 @@ export interface NodeDashboardInfo {
   id: number;
   name: string;
   type: 'cascade' | 'direct';
+  country_code?: string;
   online: boolean;
   latency_ms: number;
   peer_count: number;

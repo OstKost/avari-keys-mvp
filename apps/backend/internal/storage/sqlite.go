@@ -78,6 +78,8 @@ func (s *Storage) migrate() error {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL,
 		type TEXT NOT NULL, -- 'cascade' or 'direct'
+		country_code TEXT NOT NULL DEFAULT '',
+		provider_url TEXT NOT NULL DEFAULT '',
 		api_url TEXT NOT NULL,
 		api_key TEXT NOT NULL,
 		is_mobile_optimized INTEGER NOT NULL DEFAULT 0,
@@ -115,8 +117,10 @@ func (s *Storage) migrate() error {
 	if _, err := s.db.Exec(schema); err != nil {
 		return err
 	}
-	// Migrate existing nodes table if is_mobile_optimized is missing
+	// Migrate existing nodes table if new columns are missing
 	_, _ = s.db.Exec(`ALTER TABLE nodes ADD COLUMN is_mobile_optimized INTEGER NOT NULL DEFAULT 0;`)
+	_, _ = s.db.Exec(`ALTER TABLE nodes ADD COLUMN country_code TEXT NOT NULL DEFAULT '';`)
+	_, _ = s.db.Exec(`ALTER TABLE nodes ADD COLUMN provider_url TEXT NOT NULL DEFAULT '';`)
 	return nil
 }
 
@@ -340,15 +344,15 @@ func (s *Storage) DeleteUser(ctx context.Context, id int64) error {
 
 
 // Node methods
-func (s *Storage) CreateNode(ctx context.Context, name, nodeType, apiURL, apiKey string, isMobileOptimized bool) (*models.Node, error) {
+func (s *Storage) CreateNode(ctx context.Context, name, nodeType, countryCode, providerURL, apiURL, apiKey string, isMobileOptimized bool) (*models.Node, error) {
 	isMobileVal := 0
 	if isMobileOptimized {
 		isMobileVal = 1
 	}
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO nodes (name, type, api_url, api_key, is_mobile_optimized, is_active)
-		VALUES (?, ?, ?, ?, ?, 1)
-	`, name, nodeType, apiURL, apiKey, isMobileVal)
+		INSERT INTO nodes (name, type, country_code, provider_url, api_url, api_key, is_mobile_optimized, is_active)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+	`, strings.TrimSpace(name), strings.TrimSpace(nodeType), strings.ToUpper(strings.TrimSpace(countryCode)), strings.TrimSpace(providerURL), strings.TrimSpace(apiURL), strings.TrimSpace(apiKey), isMobileVal)
 	if err != nil {
 		return nil, err
 	}
@@ -356,13 +360,47 @@ func (s *Storage) CreateNode(ctx context.Context, name, nodeType, apiURL, apiKey
 	return s.GetNodeByID(ctx, id)
 }
 
+func (s *Storage) UpdateNode(ctx context.Context, id int64, name, nodeType, countryCode, providerURL, apiURL, apiKey string, isMobileOptimized bool) (*models.Node, error) {
+	isMobileVal := 0
+	if isMobileOptimized {
+		isMobileVal = 1
+	}
+
+	name = strings.TrimSpace(name)
+	nodeType = strings.TrimSpace(nodeType)
+	countryCode = strings.ToUpper(strings.TrimSpace(countryCode))
+	providerURL = strings.TrimSpace(providerURL)
+	apiURL = strings.TrimSpace(apiURL)
+	apiKey = strings.TrimSpace(apiKey)
+
+	var err error
+	if apiKey != "" {
+		_, err = s.db.ExecContext(ctx, `
+			UPDATE nodes
+			SET name = ?, type = ?, country_code = ?, provider_url = ?, api_url = ?, api_key = ?, is_mobile_optimized = ?
+			WHERE id = ?
+		`, name, nodeType, countryCode, providerURL, apiURL, apiKey, isMobileVal, id)
+	} else {
+		_, err = s.db.ExecContext(ctx, `
+			UPDATE nodes
+			SET name = ?, type = ?, country_code = ?, provider_url = ?, api_url = ?, is_mobile_optimized = ?
+			WHERE id = ?
+		`, name, nodeType, countryCode, providerURL, apiURL, isMobileVal, id)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return s.GetNodeByID(ctx, id)
+}
+
 func (s *Storage) GetNodeByID(ctx context.Context, id int64) (*models.Node, error) {
 	var n models.Node
 	var isActive, isMobile int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, name, type, api_url, api_key, is_mobile_optimized, is_active, created_at
+		SELECT id, name, type, country_code, provider_url, api_url, api_key, is_mobile_optimized, is_active, created_at
 		FROM nodes WHERE id = ?
-	`, id).Scan(&n.ID, &n.Name, &n.Type, &n.APIURL, &n.APIKey, &isMobile, &isActive, &n.CreatedAt)
+	`, id).Scan(&n.ID, &n.Name, &n.Type, &n.CountryCode, &n.ProviderURL, &n.APIURL, &n.APIKey, &isMobile, &isActive, &n.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +411,7 @@ func (s *Storage) GetNodeByID(ctx context.Context, id int64) (*models.Node, erro
 
 func (s *Storage) ListNodes(ctx context.Context) ([]models.Node, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, type, api_url, api_key, is_mobile_optimized, is_active, created_at
+		SELECT id, name, type, country_code, provider_url, api_url, api_key, is_mobile_optimized, is_active, created_at
 		FROM nodes ORDER BY id ASC
 	`)
 	if err != nil {
@@ -385,7 +423,7 @@ func (s *Storage) ListNodes(ctx context.Context) ([]models.Node, error) {
 	for rows.Next() {
 		var n models.Node
 		var isActive, isMobile int
-		if err := rows.Scan(&n.ID, &n.Name, &n.Type, &n.APIURL, &n.APIKey, &isMobile, &isActive, &n.CreatedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.Name, &n.Type, &n.CountryCode, &n.ProviderURL, &n.APIURL, &n.APIKey, &isMobile, &isActive, &n.CreatedAt); err != nil {
 			return nil, err
 		}
 		n.IsMobileOptimized = isMobile == 1
@@ -397,7 +435,7 @@ func (s *Storage) ListNodes(ctx context.Context) ([]models.Node, error) {
 
 func (s *Storage) ListActiveNodesPublic(ctx context.Context) ([]models.NodePublic, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, type, is_mobile_optimized, is_active, created_at
+		SELECT id, name, type, country_code, is_mobile_optimized, is_active, created_at
 		FROM nodes WHERE is_active = 1 ORDER BY id ASC
 	`)
 	if err != nil {
@@ -409,7 +447,7 @@ func (s *Storage) ListActiveNodesPublic(ctx context.Context) ([]models.NodePubli
 	for rows.Next() {
 		var n models.NodePublic
 		var isActive, isMobile int
-		if err := rows.Scan(&n.ID, &n.Name, &n.Type, &isMobile, &isActive, &n.CreatedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.Name, &n.Type, &n.CountryCode, &isMobile, &isActive, &n.CreatedAt); err != nil {
 			return nil, err
 		}
 		n.IsMobileOptimized = isMobile == 1
@@ -447,11 +485,11 @@ func (s *Storage) CreateClientConfig(ctx context.Context, userID, nodeID int64, 
 func (s *Storage) GetClientConfigByID(ctx context.Context, id int64) (*models.ClientConfig, error) {
 	var c models.ClientConfig
 	err := s.db.QueryRowContext(ctx, `
-		SELECT c.id, c.user_id, c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type
+		SELECT c.id, c.user_id, c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type, n.country_code
 		FROM client_configs c
 		JOIN nodes n ON c.node_id = n.id
 		WHERE c.id = ?
-	`, id).Scan(&c.ID, &c.UserID, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType)
+	`, id).Scan(&c.ID, &c.UserID, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType, &c.NodeCountryCode)
 	if err != nil {
 		return nil, err
 	}
@@ -460,7 +498,7 @@ func (s *Storage) GetClientConfigByID(ctx context.Context, id int64) (*models.Cl
 
 func (s *Storage) ListClientConfigsByUser(ctx context.Context, userID int64) ([]models.ClientConfig, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT c.id, c.user_id, c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type
+		SELECT c.id, c.user_id, c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type, n.country_code
 		FROM client_configs c
 		JOIN nodes n ON c.node_id = n.id
 		WHERE c.user_id = ?
@@ -474,7 +512,7 @@ func (s *Storage) ListClientConfigsByUser(ctx context.Context, userID int64) ([]
 	list := []models.ClientConfig{}
 	for rows.Next() {
 		var c models.ClientConfig
-		if err := rows.Scan(&c.ID, &c.UserID, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType); err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType, &c.NodeCountryCode); err != nil {
 			return nil, err
 		}
 		list = append(list, c)
@@ -484,7 +522,7 @@ func (s *Storage) ListClientConfigsByUser(ctx context.Context, userID int64) ([]
 
 func (s *Storage) ListAllClientConfigs(ctx context.Context) ([]models.ClientConfig, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT c.id, c.user_id, c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type
+		SELECT c.id, c.user_id, c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type, n.country_code
 		FROM client_configs c
 		JOIN nodes n ON c.node_id = n.id
 		ORDER BY c.id DESC
@@ -497,7 +535,7 @@ func (s *Storage) ListAllClientConfigs(ctx context.Context) ([]models.ClientConf
 	list := []models.ClientConfig{}
 	for rows.Next() {
 		var c models.ClientConfig
-		if err := rows.Scan(&c.ID, &c.UserID, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType); err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType, &c.NodeCountryCode); err != nil {
 			return nil, err
 		}
 		list = append(list, c)

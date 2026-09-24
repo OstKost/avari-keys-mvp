@@ -199,11 +199,55 @@ const realApi = {
     return Array.isArray(data) ? data : [];
   },
 
-  async addAdminNode(name: string, type: 'cascade' | 'direct', apiUrl: string, apiKey: string, isMobileOptimized?: boolean): Promise<AdminNode> {
+  async addAdminNode(
+    name: string,
+    type: 'cascade' | 'direct',
+    apiUrl: string,
+    apiKey: string,
+    isMobileOptimized?: boolean,
+    countryCode?: string,
+    providerUrl?: string
+  ): Promise<AdminNode> {
     const res = await fetch(`${API_BASE}/admin/nodes`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ name, type, api_url: apiUrl, api_key: apiKey, is_mobile_optimized: isMobileOptimized || false }),
+      body: JSON.stringify({
+        name,
+        type,
+        api_url: apiUrl,
+        api_key: apiKey,
+        is_mobile_optimized: isMobileOptimized || false,
+        country_code: countryCode || '',
+        provider_url: providerUrl || '',
+      }),
+    });
+    return handleResponse<AdminNode>(res);
+  },
+
+  async updateAdminNode(
+    id: number,
+    data: {
+      name: string;
+      type: 'cascade' | 'direct';
+      apiUrl: string;
+      apiKey?: string;
+      isMobileOptimized?: boolean;
+      countryCode?: string;
+      providerUrl?: string;
+    }
+  ): Promise<AdminNode> {
+    const res = await fetch(`${API_BASE}/admin/nodes/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        name: data.name,
+        type: data.type,
+        api_url: data.apiUrl,
+        api_key: data.apiKey || '',
+        is_mobile_optimized: data.isMobileOptimized || false,
+        country_code: data.countryCode || '',
+        provider_url: data.providerUrl || '',
+      }),
     });
     return handleResponse<AdminNode>(res);
   },

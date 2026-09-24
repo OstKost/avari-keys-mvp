@@ -14,6 +14,7 @@ import { AdminAuditLogs } from './components/AdminAuditLogs';
 import { NetworkDashboard } from './components/NetworkDashboard';
 import { Loader } from './components/Loader';
 import { UserProfile } from './components/UserProfile';
+import { formatNodeRouting } from './utils/country';
 
 export default function App() {
   const { toast } = useToast();
@@ -377,7 +378,7 @@ export default function App() {
                                 : 'bg-[#102833] text-[#6EA8C4] border border-[#6EA8C4]/40 shadow-sm'
                             }`}
                           >
-                            {k.node_type === 'cascade' ? 'Каскад M0->S1' : 'Прямой S2'}
+                            {formatNodeRouting(k.node_type || 'direct', k.node_country_code).fullText}
                           </span>
                         </div>
 
