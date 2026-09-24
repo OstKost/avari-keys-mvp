@@ -48,7 +48,7 @@ func (r *RealRunner) AddClient(ctx context.Context, name string, psk bool) (*mod
 		return nil, err
 	}
 
-	args := []string{r.scriptPath, "add", name}
+	args := []string{r.scriptPath, "add", name, "--yes"}
 	if psk {
 		args = append(args, "--psk")
 	}
@@ -70,7 +70,7 @@ func (r *RealRunner) RemoveClient(ctx context.Context, name string) error {
 		return err
 	}
 
-	cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "remove", name)
+	cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "remove", name, "--yes")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -86,29 +86,62 @@ func (r *RealRunner) GetClient(ctx context.Context, name string) (*models.Client
 		return nil, err
 	}
 
-	// 1. Read config file from configsDir/<name>.conf
-	confPath := filepath.Join(r.configsDir, fmt.Sprintf("%s.conf", name))
-	confBytes, err := os.ReadFile(confPath)
-	if err != nil {
-		// Fallback: try reading via `manage_amneziawg.sh show <name>`
-		cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "show", name)
-		var out bytes.Buffer
-		cmd.Stdout = &out
-		if cmdErr := cmd.Run(); cmdErr == nil && out.Len() > 0 {
-			confBytes = out.Bytes()
-		} else {
-			return nil, fmt.Errorf("could not read client config for '%s': %w", name, err)
+	scriptDir := filepath.Dir(r.scriptPath)
+	// 1. Candidate paths where manage_amneziawg.sh stores .conf files
+	candidatePaths := []string{
+		filepath.Join("/root/awg", fmt.Sprintf("%s.conf", name)),
+		filepath.Join("/root/awg/clients", fmt.Sprintf("%s.conf", name)),
+		filepath.Join(r.configsDir, fmt.Sprintf("%s.conf", name)),
+		filepath.Join(scriptDir, fmt.Sprintf("%s.conf", name)),
+		filepath.Join(scriptDir, "clients", fmt.Sprintf("%s.conf", name)),
+		filepath.Join("/root", fmt.Sprintf("%s.conf", name)),
+		filepath.Join("/etc/amnezia/amneziawg", fmt.Sprintf("%s.conf", name)),
+		filepath.Join("/etc/amnezia/amneziawg/clients", fmt.Sprintf("%s.conf", name)),
+	}
+
+	var rawConfig string
+	var foundPath string
+	for _, p := range candidatePaths {
+		if confBytes, err := os.ReadFile(p); err == nil && len(confBytes) > 0 {
+			rawConfig = string(confBytes)
+			foundPath = p
+			break
 		}
+	}
+
+	if foundPath == "" {
+		return nil, fmt.Errorf("client configuration file '%s.conf' not found in standard directories (/root/awg, /root/awg/clients, /root, /etc/amnezia/amneziawg)", name)
+	}
+
+	cleanConfig := SanitizeAWGConfig(rawConfig)
+	if cleanConfig == "" {
+		cleanConfig = strings.TrimSpace(rawConfig)
+	}
+
+	if !strings.Contains(cleanConfig, "[Interface]") || !strings.Contains(cleanConfig, "[Peer]") {
+		return nil, fmt.Errorf("file '%s' does not contain a valid WireGuard/AmneziaWG configuration block", foundPath)
 	}
 
 	// 2. Read or generate QR code
 	qrBase64 := ""
-	qrPath := filepath.Join(r.configsDir, fmt.Sprintf("%s.png", name))
-	if qrBytes, qrErr := os.ReadFile(qrPath); qrErr == nil {
-		qrBase64 = "data:image/png;base64," + base64.StdEncoding.EncodeToString(qrBytes)
-	} else {
-		// Try qrencode if available
-		qrCmd := exec.CommandContext(ctx, "qrencode", "-t", "PNG", "-o", "-", string(confBytes))
+	candidateQRPatterns := []string{
+		filepath.Join("/root/awg", fmt.Sprintf("%s.png", name)),
+		filepath.Join("/root/awg/clients", fmt.Sprintf("%s.png", name)),
+		filepath.Join(r.configsDir, fmt.Sprintf("%s.png", name)),
+		filepath.Join(scriptDir, fmt.Sprintf("%s.png", name)),
+		filepath.Join(scriptDir, "clients", fmt.Sprintf("%s.png", name)),
+		filepath.Join("/root", fmt.Sprintf("%s.png", name)),
+	}
+	for _, qp := range candidateQRPatterns {
+		if qrBytes, qrErr := os.ReadFile(qp); qrErr == nil && len(qrBytes) > 0 {
+			qrBase64 = "data:image/png;base64," + base64.StdEncoding.EncodeToString(qrBytes)
+			break
+		}
+	}
+
+	if qrBase64 == "" {
+		// Try qrencode if available using the sanitized config
+		qrCmd := exec.CommandContext(ctx, "qrencode", "-t", "PNG", "-o", "-", cleanConfig)
 		var qrOut bytes.Buffer
 		qrCmd.Stdout = &qrOut
 		if qrCmd.Run() == nil && qrOut.Len() > 0 {
@@ -118,7 +151,7 @@ func (r *RealRunner) GetClient(ctx context.Context, name string) (*models.Client
 
 	return &models.ClientResponse{
 		Name:      name,
-		Config:    string(confBytes),
+		Config:    cleanConfig,
 		QRCode:    qrBase64,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}, nil

@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { User } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { useToast } from '../context/ToastContext';
+import { Loader } from './Loader';
 
 export function AdminUsers() {
   const { toast } = useToast();
@@ -18,7 +19,7 @@ export function AdminUsers() {
     try {
       setLoading(true);
       const data = await api.getAdminUsers();
-      setUsers(data);
+      setUsers(Array.isArray(data) ? data : []);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка загрузки пользователей');
     } finally {
@@ -80,11 +81,7 @@ export function AdminUsers() {
   };
 
   if (loading) {
-    return (
-      <div className="text-center py-12 text-[#A8B4B7] text-xs font-mono uppercase tracking-widest">
-        Загрузка списка пользователей...
-      </div>
-    );
+    return <Loader size="section" text="Загрузка списка пользователей..." />;
   }
 
   return (
@@ -114,7 +111,7 @@ export function AdminUsers() {
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1C3945]/70 bg-[#0A1D26]/40 font-sans">
-            {users.map((u) => (
+            {(users || []).map((u) => (
               <tr key={u.id} className="hover:bg-[#102833]/50 transition duration-150">
                 <td className="px-5 py-3.5 text-[#718187] font-mono text-xs">#{u.id}</td>
                 <td className="px-5 py-3.5 font-medium text-[#F2F0E8]">{u.username}</td>

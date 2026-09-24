@@ -12,6 +12,7 @@ import { AdminNodes } from './components/AdminNodes';
 import { AdminAllKeys } from './components/AdminAllKeys';
 import { AdminAuditLogs } from './components/AdminAuditLogs';
 import { NetworkDashboard } from './components/NetworkDashboard';
+import { Loader } from './components/Loader';
 import { UserProfile } from './components/UserProfile';
 
 export default function App() {
@@ -57,8 +58,8 @@ export default function App() {
       setKeysLoading(true);
       setError(null);
       const [keysData, nodesData] = await Promise.all([api.getKeys(), api.getNodes()]);
-      setKeys(keysData);
-      setNodes(nodesData);
+      setKeys(Array.isArray(keysData) ? keysData : []);
+      setNodes(Array.isArray(nodesData) ? nodesData : []);
     } catch (err: any) {
       setError(err.message || 'Ошибка загрузки данных');
     } finally {
@@ -115,14 +116,7 @@ export default function App() {
   };
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen bg-[#06141B] flex flex-col items-center justify-center text-[#A8B4B7] text-sm">
-        <div className="relative mb-4">
-          <img src="/assets/logo_star.png" alt="Star" className="w-12 h-12 animate-pulse filter drop-shadow-[0_0_10px_rgba(217,185,110,0.4)]" />
-        </div>
-        <span className="font-serif tracking-widest uppercase text-xs text-[#D9B96E]">Загрузка Avari Keys...</span>
-      </div>
-    );
+    return <Loader size="fullscreen" text="Загрузка Avari Keys..." />;
   }
 
   if (!currentUser) {
@@ -309,7 +303,7 @@ export default function App() {
 
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  disabled={nodes.length === 0}
+                  disabled={(nodes || []).length === 0}
                   className="flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-xs uppercase tracking-wider font-mono px-5 py-3 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 disabled:opacity-50 transition-all duration-300"
                 >
                   <Plus className="w-4 h-4" />
@@ -324,13 +318,15 @@ export default function App() {
                 </div>
               )}
 
-              {nodes.length === 0 && !keysLoading && (
+              {(nodes || []).length === 0 && !keysLoading && (
                 <div className="bg-[#102833] border border-[#D9B96E]/30 text-[#D9B96E] text-xs p-5 rounded-2xl mb-6 flex items-start space-x-3">
                   <Sparkles className="w-5 h-5 flex-shrink-0 mt-0.5 text-[#F0D48D]" />
                   <div>
                     <div className="font-semibold text-sm text-[#F0D48D]">Нет доступных серверов</div>
                     <p className="text-[#A8B4B7] mt-0.5">
-                      В системе пока нет активных Slave-нод. Добавьте первую ноду во вкладке «Серверы (Ноды)» или войдите в Demo Mock режим.
+                      {isMockMode() || import.meta.env.DEV
+                        ? 'В системе пока нет активных Slave-нод. Добавьте первую ноду во вкладке «Серверы (Ноды)» или войдите в Demo Mock режим.'
+                        : 'В системе пока нет активных серверов. Обратитесь к администратору или добавьте узел во вкладке «Серверы (Ноды)». '}
                     </p>
                   </div>
                 </div>
@@ -338,10 +334,8 @@ export default function App() {
 
               {/* Keys Grid */}
               {keysLoading ? (
-                <div className="text-center py-16 text-[#A8B4B7] text-xs font-mono tracking-widest uppercase">
-                  Получение ключей из хранилища...
-                </div>
-              ) : keys.length === 0 ? (
+                <Loader size="section" text="Получение ключей из хранилища..." />
+              ) : (keys || []).length === 0 ? (
                 <div className="text-center py-16 border border-dashed border-[#1C3945] rounded-2xl bg-[#06141B]/40">
                   <div className="relative inline-block mb-3">
                     <Key className="w-12 h-12 text-[#718187] mx-auto" />
@@ -353,7 +347,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {keys.map((k) => (
+                  {(keys || []).map((k) => (
                     <div
                       key={k.id}
                       className="bg-[#0D222C]/90 border border-[#1C3945] hover:border-[#D9B96E]/50 rounded-2xl p-5 shadow-xl hover:shadow-2xl hover:shadow-[#D9B96E]/5 flex flex-col justify-between transition-all duration-300 group"

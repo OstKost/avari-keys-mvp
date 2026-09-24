@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { ClientConfigSummary, AdminNode } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { useToast } from '../context/ToastContext';
+import { Loader } from './Loader';
 
 export function AdminAllKeys() {
   const { toast } = useToast();
@@ -26,7 +27,7 @@ export function AdminAllKeys() {
   const fetchNodes = async () => {
     try {
       const data = await api.getAdminNodes();
-      setNodes(data);
+      setNodes(Array.isArray(data) ? data : []);
     } catch {
       // ignore
     }
@@ -41,9 +42,9 @@ export function AdminAllKeys() {
         page,
         limit,
       });
-      setKeys(res.keys);
-      setTotalPages(res.total_pages);
-      setTotalCount(res.total_count);
+      setKeys(Array.isArray(res?.keys) ? res.keys : []);
+      setTotalPages(res?.total_pages || 1);
+      setTotalCount(res?.total_count || 0);
     } catch (err: any) {
       toast.error(err.message || 'Ошибка загрузки реестра ключей');
     } finally {
@@ -128,7 +129,7 @@ export function AdminAllKeys() {
             className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl pl-10 pr-9 py-2.5 text-xs text-[#F2F0E8] focus:outline-none font-mono transition appearance-none cursor-pointer"
           >
             <option value="">Все серверы / узлы</option>
-            {nodes.map((n) => (
+            {(nodes || []).map((n) => (
               <option key={n.id} value={n.id}>
                 {n.name} ({n.type === 'cascade' ? 'Каскад' : 'Прямой'})
               </option>
@@ -154,7 +155,7 @@ export function AdminAllKeys() {
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1C3945]/70 bg-[#0A1D26]/40 font-sans">
-            {keys.map((k) => (
+            {(keys || []).map((k) => (
               <tr key={k.id} className="hover:bg-[#102833]/50 transition duration-150">
                 <td className="px-5 py-3.5 text-[#718187] font-mono text-xs">#{k.id}</td>
                 <td className="px-5 py-3.5">
@@ -206,7 +207,10 @@ export function AdminAllKeys() {
                 </td>
               </tr>
             ))}
-            {keys.length === 0 && !loading && (
+            {loading && (
+              <Loader size="table" colSpan={8} text="Загрузка реестра VPN-ключей..." />
+            )}
+            {(keys || []).length === 0 && !loading && (
               <tr>
                 <td colSpan={8} className="text-center py-12 text-[#718187] text-xs font-mono uppercase tracking-wider">
                   {search || selectedNodeId ? 'По заданным фильтрам ключи не найдены.' : 'Пока не выпущено ни одной конфигурации.'}

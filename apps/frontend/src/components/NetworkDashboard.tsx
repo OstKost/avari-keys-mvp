@@ -18,6 +18,7 @@ import { api } from '../api/client';
 import { DashboardStats, User } from '../types';
 import { AnalogGauge } from './AnalogGauge';
 import { useToast } from '../context/ToastContext';
+import { Loader } from './Loader';
 
 interface NetworkDashboardProps {
   currentUser: User;
@@ -56,12 +57,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
   }, [fetchStats]);
 
   if (loading && !stats) {
-    return (
-      <div className="text-center py-20 text-[#A8B4B7] text-xs font-mono tracking-widest uppercase">
-        <div className="w-8 h-8 border-2 border-[#D9B96E] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-        Опрос узлов и сбор телеметрии AmneziaWG...
-      </div>
-    );
+    return <Loader size="section" text="Опрос узлов и сбор телеметрии AmneziaWG..." />;
   }
 
   if (!stats) {
@@ -354,7 +350,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {stats.nodes.map((n) => (
+            {(stats.nodes || []).map((n) => (
               <div
                 key={n.id}
                 className="bg-[#06141B]/80 border border-[#1C3945] hover:border-[#D9B96E]/40 rounded-2xl p-4 flex flex-col justify-between transition group"
@@ -414,7 +410,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
               </div>
             ))}
 
-            {stats.nodes.length === 0 && (
+            {(stats.nodes || []).length === 0 && (
               <div className="col-span-2 text-center py-8 text-[#718187] text-xs font-mono uppercase tracking-wider">
                 Узлы сети еще не настроены.
               </div>
