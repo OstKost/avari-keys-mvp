@@ -519,10 +519,10 @@ export default function App() {
             toast.success('Оплата взноса успешно зафиксирована!');
           }}
           onSnooze={async (days) => {
-            const updated = await api.snoozeReminder(days || 3);
+            const updated = await api.snoozeReminder(days || 1);
             setBillingStatus(updated);
             setDismissedReminder(true);
-            toast.info(`Напоминание отложено на ${days || 3} дн.`);
+            toast.info(`Напоминание отложено на ${days || 1} дн. (до завтра)`);
           }}
           onOpenBillingTab={() => {
             setDismissedReminder(true);

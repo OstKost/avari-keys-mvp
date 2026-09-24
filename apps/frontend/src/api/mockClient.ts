@@ -915,10 +915,10 @@ PersistentKeepalive = 25`;
     return this.getBillingStatus();
   },
 
-  async snoozeReminder(days: number = 3): Promise<BillingStatus> {
+  async snoozeReminder(days: number = 1): Promise<BillingStatus> {
     await new Promise((r) => setTimeout(r, 100));
     const user = mockCurrentUser;
-    const snoozeDate = new Date(Date.now() + (days || 3) * 24 * 3600 * 1000).toISOString();
+    const snoozeDate = new Date(Date.now() + (days || 1) * 24 * 3600 * 1000).toISOString();
     mockSnoozeMap[user.id] = snoozeDate;
 
     mockLogs.unshift({
@@ -928,7 +928,7 @@ PersistentKeepalive = 25`;
       action: 'reminder_snoozed',
       category: 'billing',
       ip_address: '192.168.1.10',
-      details: `Напоминание о взносе отложено на ${days || 3} дн.`,
+      details: `Напоминание о взносе отложено на ${days || 1} дн. (до завтра)`,
       created_at: new Date().toISOString(),
     });
 

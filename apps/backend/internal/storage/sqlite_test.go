@@ -280,8 +280,8 @@ func TestBillingStorage(t *testing.T) {
 		t.Fatalf("expected lastPaidAt to be set")
 	}
 
-	// 5. Snooze reminder
-	if err := store.SnoozeBillingReminder(ctx, user.ID, 3); err != nil {
+	// 5. Snooze reminder (1 day / next day)
+	if err := store.SnoozeBillingReminder(ctx, user.ID, 1); err != nil {
 		t.Fatalf("failed to snooze: %v", err)
 	}
 	statusSnooze, err := store.GetBillingStatus(ctx, user.ID)

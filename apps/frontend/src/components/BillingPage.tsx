@@ -89,9 +89,9 @@ export function BillingPage({ currentUser }: BillingPageProps) {
   const handleSnooze = async () => {
     try {
       setActionLoading(true);
-      const updated = await api.snoozeReminder(3);
+      const updated = await api.snoozeReminder(1);
       setBillingStatus(updated);
-      toast.info('Напоминание о взносе отложено на 3 дня');
+      toast.info('Напоминание о взносе отложено на завтра');
     } catch (err: any) {
       toast.error(err.message || 'Ошибка откладывания');
     } finally {
@@ -284,7 +284,7 @@ export function BillingPage({ currentUser }: BillingPageProps) {
                     className="w-full flex items-center justify-center space-x-2 bg-[#06141B] hover:bg-[#0A1D26] text-[#A8B4B7] hover:text-[#F2F0E8] border border-[#1C3945] font-mono text-xs uppercase tracking-wider py-2 px-3 rounded-xl transition duration-200 cursor-pointer"
                   >
                     <Clock className="w-3.5 h-3.5" />
-                    <span>Напомнить через 3 дня</span>
+                    <span>Напомнить завтра</span>
                   </button>
                 )}
               </div>

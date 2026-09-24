@@ -534,8 +534,8 @@ func TestBillingEndpoints(t *testing.T) {
 		t.Fatalf("expected 1 history record, got %d", len(afterPayStatus.History))
 	}
 
-	// 5. POST /api/v1/billing/snooze
-	snoozeBody, _ := json.Marshal(models.SnoozeDuesRequest{Days: 5})
+	// 5. POST /api/v1/billing/snooze (1 day)
+	snoozeBody, _ := json.Marshal(models.SnoozeDuesRequest{Days: 1})
 	req = httptest.NewRequest("POST", "/api/v1/billing/snooze", bytes.NewReader(snoozeBody))
 	req.Header.Set("Authorization", "Bearer "+userToken)
 	rec = httptest.NewRecorder()
