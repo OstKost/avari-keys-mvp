@@ -61,13 +61,13 @@ export function AuthModal({ onSuccess }: Props) {
           <MascotAuthCompanion isRegister={isRegister} />
         </div>
 
-        {/* Mascot on Mobile (Above card) */}
+        {/* Mascot on Mobile (Above card, compact banner) */}
         <div className="lg:hidden mb-4 w-full flex justify-center">
-          <MascotAuthCompanion isRegister={isRegister} />
+          <MascotAuthCompanion isRegister={isRegister} compact={true} />
         </div>
 
         {/* Login Card (Exact Center) */}
-        <div className="w-full bg-[#0A1D26]/90 backdrop-blur-xl border border-[#1C3945] hover:border-[#D9B96E]/40 rounded-3xl p-8 sm:p-10 shadow-2xl shadow-black/80 transition-all duration-500">
+        <div className="w-full bg-[#0A1D26]/90 backdrop-blur-xl border border-[#1C3945] hover:border-[#D9B96E]/40 rounded-3xl p-6 sm:p-10 shadow-2xl shadow-black/80 transition-all duration-500">
           
           {/* Brand Logo & Header */}
           <div className="flex flex-col items-center text-center mb-8">

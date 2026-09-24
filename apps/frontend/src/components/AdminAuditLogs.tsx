@@ -316,7 +316,7 @@ export function AdminAuditLogs() {
 
       {/* Logs Table */}
       <div className="overflow-x-auto border border-[#1C3945] rounded-2xl bg-[#06141B]/60 shadow-xl mb-4">
-        <table className="w-full text-left text-sm text-[#F2F0E8]">
+        <table className="w-full text-left text-sm text-[#F2F0E8] min-w-[760px]">
           <thead className="bg-[#102833]/90 text-sm font-mono uppercase tracking-wider text-[#A8B4B7] border-b border-[#1C3945]">
             <tr>
               <th className="px-4 py-3.5">Время</th>

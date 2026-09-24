@@ -14,6 +14,7 @@
 | | | | | [TASK-008](./tasks/TASK-008-cicd-github-actions.md) |
 | | | | | [TASK-009](./tasks/TASK-009-billing-system.md) |
 | | | | | [TASK-010](./tasks/TASK-010-mascot-assistant.md) |
+| | | | | [TASK-018](./tasks/TASK-018-mobile-tablet-responsive.md) |
 
 ---
 
@@ -29,3 +30,5 @@
 - **[TASK-008](./tasks/TASK-008-cicd-github-actions.md)**: ✅ Безопасный CI/CD пайплайн в GitHub Actions с атомарным деплоем на VPS 157.22.252.225.
 - **[TASK-009](./tasks/TASK-009-billing-system.md)**: ✅ Кооперативные взносы (каждые 30 дней) и страница «Биллинг».
 - **[TASK-010](./tasks/TASK-010-mascot-assistant.md)**: ✅ Интерактивный UI-помощник (Маскот), онбординг первого ключа и база знаний FAQ.
+- **[TASK-018](./tasks/TASK-018-mobile-tablet-responsive.md)**: ✅ Адаптация интерфейса под мобильные устройства (320px–640px) и планшеты (640px–1024px).
+
