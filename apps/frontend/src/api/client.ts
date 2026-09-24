@@ -11,7 +11,6 @@ import {
   DashboardStats,
   EgressStatusResponse,
   BillingStatus,
-  BillingRecord,
   AdminBillingSummary,
 } from '../types';
 

@@ -4,12 +4,12 @@
 Реализовать систему периодических кооперативных взносов с интервалом в 30 дней, уведомлениями («Оплачено» / «Напомнить позже»), хранением истории оплат в SQLite и отдельной страницей «Биллинг» в React Web UI.
 
 ## 📋 Чек-лист реализации
-- [ ] **Модели данных (Go)**: `BillingRecord`, `BillingStatusResponse`, `PayDuesRequest`, `SnoozeDuesRequest`.
-- [ ] **SQLite Хранилище**: Таблица `billing_records`, поле `billing_snoozed_until` в `users`, методы выборки и фиксации оплат.
-- [ ] **Master Backend API**: Эндпоинты `/api/v1/billing/status`, `/api/v1/billing/pay`, `/api/v1/billing/snooze`, `/api/v1/admin/billing`.
-- [ ] **Тестирование бэкенда**: Юнит-тесты логики 30 дней, сброса snooze, фиксации оплат в storage и master server.
-- [ ] **Frontend Types & API Client**: Типы, методы в `client.ts` и `mockClient.ts`.
-- [ ] **UI Модальное окно напоминания**: `BillingReminderModal.tsx` с кнопками «Оплачено» и «Напомнить позже».
-- [ ] **Страница Биллинга**: `BillingPage.tsx` с карточками статуса, реквизитами, таблицей истории оплат и админ-режимом.
-- [ ] **Интеграция в App.tsx**: Вкладка в меню навигации, автоматический опрос статуса при входе.
-- [ ] **Верификация**: Прохождение всех тестов бэкенда (`go test -v ./...`) и сборки фронтенда (`npm run build`).
+- [x] **Модели данных (Go)**: `BillingRecord`, `BillingStatusResponse`, `PayDuesRequest`, `SnoozeDuesRequest`.
+- [x] **SQLite Хранилище**: Таблица `billing_records`, поле `billing_snoozed_until` в `users`, методы выборки и фиксации оплат.
+- [x] **Master Backend API**: Эндпоинты `/api/v1/billing/status`, `/api/v1/billing/pay`, `/api/v1/billing/snooze`, `/api/v1/admin/billing`.
+- [x] **Тестирование бэкенда**: Юнит-тесты логики 30 дней, сброса snooze, фиксации оплат в storage и master server.
+- [x] **Frontend Types & API Client**: Типы, методы в `client.ts` и `mockClient.ts`.
+- [x] **UI Модальное окно напоминания**: `BillingReminderModal.tsx` с кнопками «Оплачено» и «Напомнить позже».
+- [x] **Страница Биллинга**: `BillingPage.tsx` с карточками статуса, реквизитами, таблицей истории оплат и админ-режимом.
+- [x] **Интеграция в App.tsx**: Вкладка в меню навигации, автоматический опрос статуса при входе.
+- [x] **Верификация**: Прохождение всех тестов бэкенда (`go test -v ./...`) и сборки фронтенда (`npm run build`).
