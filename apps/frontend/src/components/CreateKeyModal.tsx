@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Plus, Zap, ShieldCheck, Smartphone } from 'lucide-react';
 import { NodePublic } from '../types';
+import { formatNodeRouting } from '../utils/country';
 
 interface Props {
   nodes: NodePublic[];
@@ -105,7 +106,7 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
                   <div className="ml-3.5 flex-1">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <span className="font-serif font-bold text-base text-[#F2F0E8]">{node.name}</span>
-                      <div className="flex items-center space-x-1.5">
+                      <div className="flex items-center space-x-1.5 flex-wrap gap-1">
                         {node.is_mobile_optimized && (
                           <span className="inline-flex items-center space-x-1 text-xs font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#06141B] text-[#D9B96E] border border-[#D9B96E]/40" title="Оптимизирован для мобильных сетей (порт 443/UDP)">
                             <Smartphone className="w-3 h-3" />
@@ -119,7 +120,7 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
                               : 'bg-[#06141B] text-[#6EA8C4] border border-[#6EA8C4]/40'
                           }`}
                         >
-                          {node.type === 'cascade' ? 'Каскад M0->S1' : 'Прямой S2'}
+                          {formatNodeRouting(node.type, node.country_code).fullText}
                         </span>
                       </div>
                     </div>

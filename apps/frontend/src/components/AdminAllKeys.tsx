@@ -5,6 +5,7 @@ import { ClientConfigSummary, AdminNode } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { useToast } from '../context/ToastContext';
 import { Loader } from './Loader';
+import { formatNodeRouting } from '../utils/country';
 
 export function AdminAllKeys() {
   const { toast } = useToast();
@@ -131,7 +132,7 @@ export function AdminAllKeys() {
             <option value="">Все серверы / узлы</option>
             {(nodes || []).map((n) => (
               <option key={n.id} value={n.id}>
-                {n.name} ({n.type === 'cascade' ? 'Каскад' : 'Прямой'})
+                {n.name} ({formatNodeRouting(n.type, n.country_code).fullText})
               </option>
             ))}
           </select>
@@ -172,7 +173,7 @@ export function AdminAllKeys() {
                           : 'bg-[#102833] text-[#6EA8C4] border border-[#6EA8C4]/40'
                       }`}
                     >
-                      {k.node_type === 'cascade' ? 'Каскад' : 'Прямой'}
+                      {formatNodeRouting(k.node_type || 'direct', k.node_country_code).fullText}
                     </span>
                     <span className="text-[11px] font-mono text-[#A8B4B7] max-w-[190px] truncate" title={k.node_name}>
                       {k.node_name || 'Node'}

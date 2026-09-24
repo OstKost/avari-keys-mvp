@@ -147,6 +147,8 @@ let mockNodes: AdminNode[] = [
     id: 1,
     name: 'Каскад M0 (Москва) -> S1 (Амстердам)',
     type: 'cascade',
+    country_code: 'NLD',
+    provider_url: 'https://aeza.net',
     api_url: 'http://127.0.0.1:8081',
     is_mobile_optimized: true,
     is_active: true,
@@ -158,6 +160,8 @@ let mockNodes: AdminNode[] = [
     id: 2,
     name: 'Прямой туннель S2 (Франкфурт)',
     type: 'direct',
+    country_code: 'DEU',
+    provider_url: 'https://hetzner.com',
     api_url: 'http://127.0.0.1:8082',
     is_mobile_optimized: false,
     is_active: true,
@@ -337,6 +341,8 @@ export const mockApi = {
       id: n.id,
       name: n.name,
       type: n.type,
+      country_code: n.country_code,
+      is_mobile_optimized: n.is_mobile_optimized,
       is_active: n.is_active,
       created_at: n.created_at,
     }));
@@ -345,21 +351,25 @@ export const mockApi = {
   async getKeys(): Promise<ClientConfigSummary[]> {
     return mockKeys
       .filter((k) => k.user_id === mockCurrentUser.id)
-      .map((k) => ({
-        id: k.id,
-        user_id: k.user_id,
-        node_id: k.node_id,
-        client_name: k.client_name,
-        device_name: k.device_name,
-        node_name: k.node_name,
-        node_type: k.node_type,
-        last_handshake: k.last_handshake || '10 минут назад',
-        total_traffic_bytes: k.total_traffic_bytes || 524288000,
-        month_traffic_bytes: k.month_traffic_bytes || 524288000,
-        total_traffic_formatted: k.total_traffic_formatted || '500.00 MB',
-        month_traffic_formatted: k.month_traffic_formatted || '500.00 MB',
-        created_at: k.created_at,
-      }));
+      .map((k) => {
+        const matchedNode = mockNodes.find((n) => n.id === k.node_id);
+        return {
+          id: k.id,
+          user_id: k.user_id,
+          node_id: k.node_id,
+          client_name: k.client_name,
+          device_name: k.device_name,
+          node_name: k.node_name,
+          node_type: k.node_type,
+          node_country_code: matchedNode?.country_code,
+          last_handshake: k.last_handshake || '10 минут назад',
+          total_traffic_bytes: k.total_traffic_bytes || 524288000,
+          month_traffic_bytes: k.month_traffic_bytes || 524288000,
+          total_traffic_formatted: k.total_traffic_formatted || '500.00 MB',
+          month_traffic_formatted: k.month_traffic_formatted || '500.00 MB',
+          created_at: k.created_at,
+        };
+      });
   },
 
   async createKey(nodeId: number, deviceName: string, psk?: boolean): Promise<ClientConfigDetail> {
@@ -457,11 +467,21 @@ PersistentKeepalive = 25`;
     }));
   },
 
-  async addAdminNode(name: string, type: 'cascade' | 'direct', apiUrl: string, _apiKey: string, isMobileOptimized?: boolean): Promise<AdminNode> {
+  async addAdminNode(
+    name: string,
+    type: 'cascade' | 'direct',
+    apiUrl: string,
+    _apiKey: string,
+    isMobileOptimized?: boolean,
+    countryCode?: string,
+    providerUrl?: string
+  ): Promise<AdminNode> {
     const newNode: AdminNode = {
       id: mockNodes.length + 1,
       name,
       type,
+      country_code: countryCode?.toUpperCase() || '',
+      provider_url: providerUrl || '',
       api_url: apiUrl,
       is_mobile_optimized: Boolean(isMobileOptimized),
       is_active: true,
@@ -471,6 +491,31 @@ PersistentKeepalive = 25`;
     };
     mockNodes.push(newNode);
     return newNode;
+  },
+
+  async updateAdminNode(
+    id: number,
+    data: {
+      name: string;
+      type: 'cascade' | 'direct';
+      apiUrl: string;
+      apiKey?: string;
+      isMobileOptimized?: boolean;
+      countryCode?: string;
+      providerUrl?: string;
+    }
+  ): Promise<AdminNode> {
+    const node = mockNodes.find((n) => n.id === id);
+    if (!node) {
+      throw new Error('Узел не найден');
+    }
+    node.name = data.name;
+    node.type = data.type;
+    node.api_url = data.apiUrl;
+    node.country_code = data.countryCode?.toUpperCase() || '';
+    node.provider_url = data.providerUrl || '';
+    node.is_mobile_optimized = Boolean(data.isMobileOptimized);
+    return { ...node };
   },
 
   async deleteAdminNode(id: number): Promise<{ success: boolean }> {
@@ -674,6 +719,7 @@ PersistentKeepalive = 25`;
         id: n.id,
         name: n.name,
         type: n.type,
+        country_code: n.country_code,
         online: n.online,
         latency_ms: n.latency_ms || 25,
         peer_count: nodeKeys.length,

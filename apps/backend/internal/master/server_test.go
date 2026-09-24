@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -44,7 +45,7 @@ func setupTestEnvironment(t *testing.T) (*master.Server, *httptest.Server, *stor
 	slaveHttpSrv := httptest.NewServer(slaveSrv.Handler())
 
 	// Add mock slave node to DB
-	_, err = store.CreateNode(context.Background(), "Mock Cascade Node", "cascade", slaveHttpSrv.URL, slaveToken, true)
+	_, err = store.CreateNode(context.Background(), "Mock Cascade Node", "cascade", "NLD", "https://aeza.net", slaveHttpSrv.URL, slaveToken, true)
 	if err != nil {
 		t.Fatalf("failed to create mock node: %v", err)
 	}
@@ -336,5 +337,76 @@ func TestDashboardStatsEndpoint(t *testing.T) {
 		t.Fatalf("expected system status to be non-empty")
 	}
 }
+
+func TestAdminNodeEditFlow(t *testing.T) {
+	masterSrv, slaveHttpSrv, _, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	handler := masterSrv.Handler()
+
+	// 1. Admin login
+	adminLoginBody, _ := json.Marshal(models.LoginRequest{
+		Username: "Forve",
+		Password: "AdminPass123!",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(adminLoginBody))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	var adminLoginResp models.LoginResponse
+	_ = json.NewDecoder(rec.Body).Decode(&adminLoginResp)
+	adminToken := adminLoginResp.Token
+
+	// 2. Add a new node with CountryCode and ProviderURL
+	addNodeBody, _ := json.Marshal(models.AddNodeRequest{
+		Name:              "Direct Frankfurt S2",
+		Type:              "direct",
+		CountryCode:       "DEU",
+		ProviderURL:       "https://hetzner.com",
+		APIURL:            slaveHttpSrv.URL,
+		APIKey:            "slave-secret-123",
+		IsMobileOptimized: false,
+	})
+	req = httptest.NewRequest("POST", "/api/v1/admin/nodes", bytes.NewReader(addNodeBody))
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created for add node, got %d", rec.Code)
+	}
+
+	var createdNode models.Node
+	_ = json.NewDecoder(rec.Body).Decode(&createdNode)
+	if createdNode.CountryCode != "DEU" || createdNode.ProviderURL != "https://hetzner.com" {
+		t.Fatalf("invalid created node data: %+v", createdNode)
+	}
+
+	// 3. Edit node via PUT /api/v1/admin/nodes/{id}
+	updateNodeBody, _ := json.Marshal(models.UpdateNodeRequest{
+		Name:              "Direct Frankfurt S2 (Renamed)",
+		Type:              "direct",
+		CountryCode:       "DEU",
+		ProviderURL:       "https://console.hetzner.cloud",
+		APIURL:            slaveHttpSrv.URL,
+		APIKey:            "", // Keep existing key
+		IsMobileOptimized: true,
+	})
+	req = httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/admin/nodes/%d", createdNode.ID), bytes.NewReader(updateNodeBody))
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for update node, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	var updatedNode models.Node
+	_ = json.NewDecoder(rec.Body).Decode(&updatedNode)
+	if updatedNode.Name != "Direct Frankfurt S2 (Renamed)" || !updatedNode.IsMobileOptimized || updatedNode.ProviderURL != "https://console.hetzner.cloud" {
+		t.Fatalf("invalid updated node data: %+v", updatedNode)
+	}
+}
+
 
 

@@ -19,6 +19,7 @@ import { DashboardStats, User } from '../types';
 import { AnalogGauge } from './AnalogGauge';
 import { useToast } from '../context/ToastContext';
 import { Loader } from './Loader';
+import { formatNodeRouting } from '../utils/country';
 
 interface NetworkDashboardProps {
   currentUser: User;
@@ -376,7 +377,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
                           : 'bg-[#102833] text-[#6EA8C4] border border-[#6EA8C4]/40'
                       }`}
                     >
-                      {n.type === 'cascade' ? 'Каскад M0->S1' : 'Прямой S2'}
+                      {formatNodeRouting(n.type, n.country_code).fullText}
                     </span>
                   </div>
 
