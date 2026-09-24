@@ -69,7 +69,10 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/v1/restart", s.authMiddleware(http.HandlerFunc(s.handleRestart)))
 	s.mux.Handle("GET /api/v1/backup", s.authMiddleware(http.HandlerFunc(s.handleBackup)))
 	s.mux.Handle("POST /api/v1/restore", s.authMiddleware(http.HandlerFunc(s.handleRestore)))
+	s.mux.Handle("GET /api/v1/cascade/egress", s.authMiddleware(http.HandlerFunc(s.handleGetCascadeEgress)))
+	s.mux.Handle("POST /api/v1/cascade/egress", s.authMiddleware(http.HandlerFunc(s.handleSwitchCascadeEgress)))
 }
+
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

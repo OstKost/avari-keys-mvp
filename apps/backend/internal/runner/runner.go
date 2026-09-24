@@ -29,4 +29,7 @@ type AWGRunner interface {
 	BackupAWG(ctx context.Context) (*models.BackupResponse, error)
 	RestoreAWG(ctx context.Context, backupData string) error
 	CheckHealth(ctx context.Context) bool
+	SwitchEgress(ctx context.Context, devName string) error
+	GetEgressStatus(ctx context.Context) (*models.EgressStatusResponse, error)
 }
+

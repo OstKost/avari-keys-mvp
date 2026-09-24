@@ -12,16 +12,18 @@ import (
 
 // MockRunner is an in-memory implementation of AWGRunner for development and testing.
 type MockRunner struct {
-	mu      sync.RWMutex
-	clients map[string]*models.ClientResponse
-	healthy bool
+	mu           sync.RWMutex
+	clients      map[string]*models.ClientResponse
+	healthy      bool
+	activeEgress string
 }
 
 // NewMockRunner creates a new instance of MockRunner.
 func NewMockRunner(healthy bool) *MockRunner {
 	return &MockRunner{
-		clients: make(map[string]*models.ClientResponse),
-		healthy: healthy,
+		clients:      make(map[string]*models.ClientResponse),
+		healthy:      healthy,
+		activeEgress: "awg1",
 	}
 }
 
@@ -177,3 +179,24 @@ func (m *MockRunner) RestoreAWG(ctx context.Context, backupData string) error {
 	}
 	return nil
 }
+
+func (m *MockRunner) SwitchEgress(ctx context.Context, devName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if devName != "awg1" && devName != "awg3" {
+		return fmt.Errorf("invalid egress interface '%s' (must be awg1 or awg3)", devName)
+	}
+	m.activeEgress = devName
+	return nil
+}
+
+func (m *MockRunner) GetEgressStatus(ctx context.Context) (*models.EgressStatusResponse, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return &models.EgressStatusResponse{
+		ActiveInterface:     m.activeEgress,
+		AvailableInterfaces: []string{"awg1", "awg3"},
+		Details:             fmt.Sprintf("Mock egress route dev in table 100 is %s", m.activeEgress),
+	}, nil
+}
+
