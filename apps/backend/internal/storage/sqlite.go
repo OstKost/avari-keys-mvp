@@ -785,7 +785,7 @@ func (s *Storage) RecordPayment(ctx context.Context, userID int64, username stri
 // SnoozeBillingReminder postpones the 30-day dues reminder for a given number of days.
 func (s *Storage) SnoozeBillingReminder(ctx context.Context, userID int64, days int) error {
 	if days <= 0 {
-		days = 3
+		days = 1
 	}
 
 	query := fmt.Sprintf("UPDATE users SET billing_snoozed_until = datetime('now', '+%d days') WHERE id = ?", days)

@@ -1301,7 +1301,7 @@ func (s *Server) handleSnoozeDues(w http.ResponseWriter, r *http.Request) {
 	var req models.SnoozeDuesRequest
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	if req.Days <= 0 {
-		req.Days = 3
+		req.Days = 1
 	}
 
 	if err := s.storage.SnoozeBillingReminder(r.Context(), claims.UserID, req.Days); err != nil {

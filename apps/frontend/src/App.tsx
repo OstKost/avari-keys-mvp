@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Key, Server, Users, LogOut, Plus, QrCode as QrIcon, Trash2, Smartphone, Laptop, AlertCircle, Sparkles, ShieldCheck, User as UserIcon, ScrollText, Radio } from 'lucide-react';
+import { Key, Server, Users, LogOut, Plus, QrCode as QrIcon, Trash2, Smartphone, Laptop, AlertCircle, Sparkles, ShieldCheck, User as UserIcon, ScrollText, Radio, CreditCard } from 'lucide-react';
 import { api, isMockMode, setMockMode } from './api/client';
-import { User, NodePublic, ClientConfigSummary, ClientConfigDetail } from './types';
+import { User, NodePublic, ClientConfigSummary, ClientConfigDetail, BillingStatus } from './types';
 import { AuthModal } from './components/AuthModal';
 import { KeyModal } from './components/KeyModal';
 import { CreateKeyModal } from './components/CreateKeyModal';
@@ -14,19 +14,25 @@ import { AdminAuditLogs } from './components/AdminAuditLogs';
 import { NetworkDashboard } from './components/NetworkDashboard';
 import { Loader } from './components/Loader';
 import { UserProfile } from './components/UserProfile';
+import { BillingPage } from './components/BillingPage';
+import { BillingReminderModal } from './components/BillingReminderModal';
 import { formatNodeRouting } from './utils/country';
 
 export default function App() {
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'keys' | 'dashboard' | 'nodes' | 'users' | 'all-keys' | 'logs' | 'profile'>('keys');
+  const [activeTab, setActiveTab] = useState<'keys' | 'dashboard' | 'nodes' | 'users' | 'all-keys' | 'logs' | 'profile' | 'billing'>('keys');
 
   // Keys State
   const [keys, setKeys] = useState<ClientConfigSummary[]>([]);
   const [nodes, setNodes] = useState<NodePublic[]>([]);
   const [keysLoading, setKeysLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Billing State
+  const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
+  const [dismissedReminder, setDismissedReminder] = useState(false);
 
   // Modals
   const [viewingKey, setViewingKey] = useState<ClientConfigDetail | null>(null);
@@ -44,13 +50,27 @@ export default function App() {
     }
 
     api.getMe()
-      .then((user) => setCurrentUser(user))
+      .then((user) => {
+        setCurrentUser(user);
+        api.getBillingStatus()
+          .then((b) => setBillingStatus(b))
+          .catch(() => {});
+      })
       .catch(() => {
         api.logout();
         setMockMode(false);
       })
       .finally(() => setAuthLoading(false));
   }, []);
+
+  // Check billing status whenever user is set
+  useEffect(() => {
+    if (currentUser) {
+      api.getBillingStatus()
+        .then((b) => setBillingStatus(b))
+        .catch(() => {});
+    }
+  }, [currentUser]);
 
   // Load keys & nodes when user logs in
   const loadDashboardData = async (silent = false) => {
@@ -293,6 +313,21 @@ export default function App() {
           )}
 
           <button
+            onClick={() => setActiveTab('billing')}
+            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
+              activeTab === 'billing'
+                ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
+                : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
+            }`}
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>Биллинг</span>
+            {billingStatus?.is_due && (
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-0.5" />
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab('profile')}
             className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-medium text-sm uppercase tracking-wider font-mono transition duration-200 ${
               activeTab === 'profile'
@@ -458,6 +493,7 @@ export default function App() {
           {activeTab === 'users' && <AdminUsers />}
           {activeTab === 'all-keys' && <AdminAllKeys />}
           {activeTab === 'logs' && <AdminAuditLogs />}
+          {activeTab === 'billing' && <BillingPage currentUser={currentUser} />}
           {activeTab === 'profile' && <UserProfile user={currentUser} onUserUpdated={(u) => setCurrentUser(u)} />}
         </div>
       </main>
@@ -469,6 +505,29 @@ export default function App() {
           nodes={nodes}
           onClose={() => setShowCreateModal(false)}
           onCreate={handleCreateKey}
+        />
+      )}
+
+      {/* 30-Day Billing Reminder Modal */}
+      {billingStatus?.is_due && !dismissedReminder && (
+        <BillingReminderModal
+          daysRemaining={billingStatus.days_remaining}
+          onPay={async (note) => {
+            const updated = await api.payDues(0, note);
+            setBillingStatus(updated);
+            setDismissedReminder(true);
+            toast.success('Оплата взноса успешно зафиксирована!');
+          }}
+          onSnooze={async (days) => {
+            const updated = await api.snoozeReminder(days || 1);
+            setBillingStatus(updated);
+            setDismissedReminder(true);
+            toast.info(`Напоминание отложено на ${days || 1} дн. (до завтра)`);
+          }}
+          onOpenBillingTab={() => {
+            setDismissedReminder(true);
+            setActiveTab('billing');
+          }}
         />
       )}
 

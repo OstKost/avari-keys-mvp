@@ -11,7 +11,6 @@ import {
   DashboardStats,
   EgressStatusResponse,
   BillingStatus,
-  BillingRecord,
   AdminBillingSummary,
 } from '../types';
 
@@ -403,7 +402,7 @@ const realApi = {
     };
   },
 
-  async snoozeReminder(days: number = 3): Promise<BillingStatus> {
+  async snoozeReminder(days: number = 1): Promise<BillingStatus> {
     const res = await fetch(`${API_BASE}/billing/snooze`, {
       method: 'POST',
       headers: getAuthHeaders(),

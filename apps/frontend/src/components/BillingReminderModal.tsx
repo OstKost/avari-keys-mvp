@@ -29,7 +29,7 @@ export function BillingReminderModal({
   const handleSnooze = async () => {
     try {
       setLoadingSnooze(true);
-      await onSnooze(3);
+      await onSnooze(1);
     } finally {
       setLoadingSnooze(false);
     }
@@ -95,7 +95,7 @@ export function BillingReminderModal({
               className="flex items-center justify-center space-x-2 bg-[#102833] hover:bg-[#163544] text-[#D0D9DC] hover:text-[#F2F0E8] border border-[#1C3945] font-mono text-xs uppercase tracking-wider py-3 px-4 rounded-xl transition duration-200 disabled:opacity-50 cursor-pointer"
             >
               <Clock className="w-4 h-4 text-[#A8B4B7]" />
-              <span>{loadingSnooze ? 'Откладываем...' : 'Напомнить позже'}</span>
+              <span>{loadingSnooze ? 'Откладываем...' : 'Напомнить завтра'}</span>
             </button>
 
             <button
