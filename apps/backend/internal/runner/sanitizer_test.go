@@ -82,3 +82,21 @@ AllowedIPs = 0.0.0.0/0`
 		t.Errorf("Expected unchanged clean config, got:\n%s", result)
 	}
 }
+
+func TestSanitizeAWGConfig_TerminalLogs(t *testing.T) {
+	terminalLogs := "\x1b[0;32m[2026-09-24 15:04:32] INFO: Проверка зависимостей...\x1b[0m\n" +
+		"\x1b[0;32m[2026-09-24 15:04:32] INFO: Зависимости OK.\x1b[0m\n" +
+		"\x1b[0;32m[2026-09-24 15:04:32] INFO: Запуск команды 'show'...\x1b[0m\n" +
+		"\x1b[0;32m[2026-09-24 15:04:32] INFO: Статус AmneziaWG...\x1b[0m\n" +
+		"interface: awg0\n" +
+		"  public key: i3JYT0VBkiJiMJfiaIZ+2Ipp9KQQtYQqshqB95N9rSs=\n" +
+		"  private key: (hidden)\n" +
+		"  listening port: 443\n" +
+		"  jc: 3\n"
+
+	result := SanitizeAWGConfig(terminalLogs)
+	if result != "" {
+		t.Errorf("Expected empty string for terminal logs without [Interface], got:\n%s", result)
+	}
+}
+
