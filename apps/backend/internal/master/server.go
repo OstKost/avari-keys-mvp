@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/auth"
@@ -18,6 +19,15 @@ import (
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/storage"
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/telegram"
 )
+
+const dashboardCacheTTL = 3 * time.Minute
+
+type dashboardCache struct {
+	mu           sync.RWMutex
+	data         *models.DashboardStatsResponse
+	pendingUsers int
+	cachedAt     time.Time
+}
 
 // Config holds Master server configuration.
 type Config struct {
@@ -38,6 +48,7 @@ type Server struct {
 	mux           *http.ServeMux
 	telegramBot   *telegram.Bot
 	healthChecker *monitor.HealthChecker
+	dashCache     dashboardCache
 }
 
 // NewServer creates a new Master server instance.
@@ -459,6 +470,8 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		slaveResp.Config = cleanConfig
 	}
 
+	s.invalidateDashboardCache()
+
 	s.writeJSON(w, http.StatusCreated, map[string]any{
 		"id":          keyRecord.ID,
 		"client_name": clientName,
@@ -563,6 +576,8 @@ func (s *Server) handleDeleteKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryKeys, "key_delete", fmt.Sprintf("Отозван и удален VPN-ключ «%s» (%s)", keyRecord.DeviceName, keyRecord.ClientName))
+
+	s.invalidateDashboardCache()
 
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
 		Success: true,
@@ -926,6 +941,8 @@ func (s *Server) handleAdminAddNode(w http.ResponseWriter, r *http.Request) {
 	}
 	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_create", fmt.Sprintf("Добавлен новый сервер «%s» (%s%s%s, URL: %s)", node.Name, node.Type, countryTag, mobileTag, node.APIURL))
 
+	s.invalidateDashboardCache()
+
 	s.writeJSON(w, http.StatusCreated, node)
 }
 
@@ -976,6 +993,8 @@ func (s *Server) handleAdminUpdateNode(w http.ResponseWriter, r *http.Request) {
 	}
 	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_update", fmt.Sprintf("Обновлены параметры сервера «%s» (ID #%d, %s%s%s, URL: %s)", node.Name, node.ID, node.Type, countryTag, mobileTag, node.APIURL))
 
+	s.invalidateDashboardCache()
+
 	s.writeJSON(w, http.StatusOK, node)
 }
 
@@ -1000,6 +1019,8 @@ func (s *Server) handleAdminDeleteNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAdmin, "admin_node_delete", fmt.Sprintf("Удален сервер «%s» (ID #%d)", nodeName, id))
+
+	s.invalidateDashboardCache()
 
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{Success: true, Message: "Node deleted"})
 }
@@ -1233,8 +1254,32 @@ func formatBytes(b int64) string {
 	return fmt.Sprintf("%.2f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
+func (s *Server) invalidateDashboardCache() {
+	s.dashCache.mu.Lock()
+	s.dashCache.data = nil
+	s.dashCache.cachedAt = time.Time{}
+	s.dashCache.mu.Unlock()
+}
+
 func (s *Server) handleGetDashboardStats(w http.ResponseWriter, r *http.Request) {
 	claims, _ := auth.GetUserFromContext(r.Context())
+	isFresh := r.URL.Query().Get("fresh") == "true" || r.URL.Query().Get("force") == "true"
+
+	if !isFresh {
+		s.dashCache.mu.RLock()
+		if s.dashCache.data != nil && time.Since(s.dashCache.cachedAt) < dashboardCacheTTL {
+			respCopy := *s.dashCache.data
+			if claims != nil && claims.Role == models.RoleAdmin {
+				respCopy.PendingUsers = s.dashCache.pendingUsers
+			} else {
+				respCopy.PendingUsers = 0
+			}
+			s.dashCache.mu.RUnlock()
+			s.writeJSON(w, http.StatusOK, respCopy)
+			return
+		}
+		s.dashCache.mu.RUnlock()
+	}
 
 	// 1. Users metrics
 	users, err := s.storage.ListUsers(r.Context())
@@ -1411,9 +1456,18 @@ func (s *Server) handleGetDashboardStats(w http.ResponseWriter, r *http.Request)
 		GeneratedAt: time.Now(),
 	}
 
+	// Save to in-memory cache
+	s.dashCache.mu.Lock()
+	s.dashCache.data = &resp
+	s.dashCache.pendingUsers = pendingUsers
+	s.dashCache.cachedAt = resp.GeneratedAt
+	s.dashCache.mu.Unlock()
+
 	// Admin-only insights
 	if claims != nil && claims.Role == models.RoleAdmin {
 		resp.PendingUsers = pendingUsers
+	} else {
+		resp.PendingUsers = 0
 	}
 
 	s.writeJSON(w, http.StatusOK, resp)

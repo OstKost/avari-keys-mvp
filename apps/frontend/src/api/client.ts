@@ -369,8 +369,9 @@ const realApi = {
     return handleResponse<CleanupLogsResponse>(res);
   },
 
-  async getDashboardStats(): Promise<DashboardStats> {
-    const res = await fetch(`${API_BASE}/stats/dashboard`, {
+  async getDashboardStats(fresh?: boolean): Promise<DashboardStats> {
+    const qs = fresh ? '?fresh=true' : '';
+    const res = await fetch(`${API_BASE}/stats/dashboard${qs}`, {
       headers: getAuthHeaders(),
     });
     const data = await handleResponse<DashboardStats>(res);

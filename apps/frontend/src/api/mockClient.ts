@@ -759,7 +759,7 @@ PersistentKeepalive = 25`;
     };
   },
 
-  async getDashboardStats(): Promise<DashboardStats> {
+  async getDashboardStats(_fresh?: boolean): Promise<DashboardStats> {
     const totalUsers = mockUsers.length;
     const activeUsers = mockUsers.filter((u) => u.is_active).length;
     const pendingUsers = mockUsers.filter((u) => !u.is_active).length;

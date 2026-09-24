@@ -35,7 +35,7 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
   const fetchStats = useCallback(async (isManual = false) => {
     try {
       if (isManual) setRefreshing(true);
-      const data = await api.getDashboardStats();
+      const data = await api.getDashboardStats(isManual);
       setStats(data);
       if (isManual) {
         toast.success('Метрики сети обновлены');
@@ -50,10 +50,10 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
 
   useEffect(() => {
     fetchStats();
-    // Auto refresh every 30 seconds
+    // Auto refresh every 3 minutes (180,000 ms) matching cache TTL
     const interval = setInterval(() => {
       fetchStats();
-    }, 30000);
+    }, 180000);
     return () => clearInterval(interval);
   }, [fetchStats]);
 
@@ -84,13 +84,16 @@ export function NetworkDashboard({ currentUser, onNavigateTab }: NetworkDashboar
       {/* Header & Status Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-serif text-2xl font-bold text-[#F2F0E8] flex items-center space-x-2.5">
               <Radio className="w-6 h-6 text-[#D9B96E] animate-pulse" />
               <span>Состояние и статус сети Avari Keys</span>
             </h3>
             <span className="text-sm font-mono uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-600/40">
               ● Live Telemetry
+            </span>
+            <span className="text-xs font-mono tracking-wider px-2.5 py-1 rounded-full bg-[#102833] text-[#A8B4B7] border border-[#1C3945]">
+              Кеш: 3 мин
             </span>
           </div>
           <p className="text-sm text-[#A8B4B7] mt-1 font-sans">
