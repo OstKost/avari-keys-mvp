@@ -133,6 +133,15 @@ func (s *Storage) migrate() error {
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 
+	CREATE TABLE IF NOT EXISTS telegram_chats (
+		chat_id INTEGER PRIMARY KEY,
+		username TEXT NOT NULL DEFAULT '',
+		first_name TEXT NOT NULL DEFAULT '',
+		is_admin INTEGER NOT NULL DEFAULT 1,
+		alerts_enabled INTEGER NOT NULL DEFAULT 1,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_category ON audit_logs(category);
@@ -1002,4 +1011,54 @@ func (s *Storage) UpdateBillingRequisites(ctx context.Context, req models.Billin
 	}
 	return &req, nil
 }
+
+// Telegram Chat Subscribers
+func (s *Storage) SaveTelegramChat(ctx context.Context, chat models.TelegramChat) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO telegram_chats (chat_id, username, first_name, is_admin, alerts_enabled, created_at)
+		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(chat_id) DO UPDATE SET
+			username = excluded.username,
+			first_name = excluded.first_name,
+			is_admin = excluded.is_admin,
+			alerts_enabled = excluded.alerts_enabled
+	`, chat.ChatID, chat.Username, chat.FirstName, chat.IsAdmin, chat.AlertsEnabled)
+	return err
+}
+
+func (s *Storage) ListTelegramChats(ctx context.Context) ([]models.TelegramChat, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT chat_id, username, first_name, is_admin, alerts_enabled, created_at
+		FROM telegram_chats
+		ORDER BY created_at ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var chats []models.TelegramChat
+	for rows.Next() {
+		var c models.TelegramChat
+		if err := rows.Scan(&c.ChatID, &c.Username, &c.FirstName, &c.IsAdmin, &c.AlertsEnabled, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		chats = append(chats, c)
+	}
+	if chats == nil {
+		chats = []models.TelegramChat{}
+	}
+	return chats, nil
+}
+
+func (s *Storage) DeleteTelegramChat(ctx context.Context, chatID int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM telegram_chats WHERE chat_id = ?`, chatID)
+	return err
+}
+
+func (s *Storage) SetTelegramAlertsEnabled(ctx context.Context, chatID int64, enabled bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE telegram_chats SET alerts_enabled = ? WHERE chat_id = ?`, enabled, chatID)
+	return err
+}
+
 

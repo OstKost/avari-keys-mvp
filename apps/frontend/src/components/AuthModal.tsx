@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { LogIn, UserPlus, AlertCircle, CheckCircle2, User as UserIcon, ShieldCheck } from 'lucide-react';
 import { api, loginAsDemoUser } from '../api/client';
 import { User } from '../types';
-import { MascotAuthGreeting } from './MascotAssistant';
+import { MascotAuthCompanion } from './MascotAssistant';
 
 interface Props {
   onSuccess: (user: User) => void;
@@ -44,7 +44,7 @@ export function AuthModal({ onSuccess }: Props) {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-4 bg-[#06141B] overflow-hidden">
+    <div className="relative min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-[#06141B] overflow-hidden">
       {/* Fantasy Elven Background Art */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-40 mix-blend-luminosity scale-105 transition duration-1000"
@@ -53,32 +53,37 @@ export function AuthModal({ onSuccess }: Props) {
       <div className="absolute inset-0 bg-gradient-to-t from-[#06141B] via-[#06141B]/80 to-[#06141B]/60" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(217,185,110,0.08)_0%,transparent_60%)]" />
 
-      {/* Login Card */}
-      <div className="relative z-10 max-w-md w-full bg-[#0A1D26]/90 backdrop-blur-xl border border-[#1C3945] hover:border-[#D9B96E]/40 rounded-3xl p-8 sm:p-10 shadow-2xl shadow-black/80 transition-all duration-500">
+      {/* Main Container: Mascot on Side + Login Card */}
+      <div className="relative z-10 max-w-5xl w-full flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-14 my-auto">
         
-        {/* Brand Logo & Header */}
-        <div className="flex flex-col items-center text-center mb-8">
-          <div className="relative mb-3 group">
-            <div className="absolute -inset-2 bg-[#D9B96E]/20 rounded-full blur-lg opacity-70 group-hover:opacity-100 transition" />
-            <img 
-              src="/assets/logo_star.png" 
-              alt="Avari Keys Star" 
-              className="relative w-14 h-14 object-contain filter drop-shadow-[0_0_12px_rgba(217,185,110,0.5)]" 
-            />
-          </div>
-          
-          <h1 className="font-serif text-3xl font-bold tracking-wider text-gold-gradient uppercase">
-            Avari Keys
-          </h1>
-          <p className="text-sm text-[#A8B4B7] tracking-wider uppercase mt-1.5 font-mono">
-            {isRegister ? 'Регистрация хранителя' : 'Свобода выбора • Твои ключи'}
-          </p>
+        {/* Mascot Character Standing Beside Form */}
+        <div className="flex-shrink-0">
+          <MascotAuthCompanion isRegister={isRegister} />
         </div>
 
-        {/* Mascot Greeting */}
-        <MascotAuthGreeting isRegister={isRegister} />
+        {/* Login Card */}
+        <div className="max-w-md w-full bg-[#0A1D26]/90 backdrop-blur-xl border border-[#1C3945] hover:border-[#D9B96E]/40 rounded-3xl p-8 sm:p-10 shadow-2xl shadow-black/80 transition-all duration-500">
+          
+          {/* Brand Logo & Header */}
+          <div className="flex flex-col items-center text-center mb-8">
+            <div className="relative mb-3 group">
+              <div className="absolute -inset-2 bg-[#D9B96E]/20 rounded-full blur-lg opacity-70 group-hover:opacity-100 transition" />
+              <img 
+                src="/assets/logo_star.png" 
+                alt="Avari Keys Star" 
+                className="relative w-14 h-14 object-contain filter drop-shadow-[0_0_12px_rgba(217,185,110,0.5)]" 
+              />
+            </div>
+            
+            <h1 className="font-serif text-3xl font-bold tracking-wider text-gold-gradient uppercase">
+              Avari Keys
+            </h1>
+            <p className="text-sm text-[#A8B4B7] tracking-wider uppercase mt-1.5 font-mono">
+              {isRegister ? 'Регистрация хранителя' : 'Свобода выбора • Твои ключи'}
+            </p>
+          </div>
 
-        {/* Status Alerts */}
+          {/* Status Alerts */}
         {error && (
           <div className="flex items-start space-x-2.5 bg-rose-950/60 border border-rose-800/80 text-rose-300 text-sm p-3.5 rounded-xl mb-5 shadow-lg">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-400" />
@@ -186,6 +191,7 @@ export function AuthModal({ onSuccess }: Props) {
           </button>
         </div>
 
+        </div>
       </div>
     </div>
   );

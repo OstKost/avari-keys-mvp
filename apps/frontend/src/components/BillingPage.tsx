@@ -424,40 +424,22 @@ export function BillingPage({ currentUser }: BillingPageProps) {
                 </div>
               </form>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="max-w-xl">
                 {/* SBP Card */}
-                <div className="bg-[#06141B] border border-[#1C3945] rounded-2xl p-4 flex flex-col justify-between">
+                <div className="bg-[#06141B] border border-[#1C3945] rounded-2xl p-5 flex flex-col justify-between shadow-lg">
                   <div>
                     <span className="text-xs font-mono uppercase text-[#A8B4B7]">СБП / Карта РФ</span>
-                    <div className="font-mono text-sm font-bold text-[#F2F0E8] mt-1 select-all">
+                    <div className="font-mono text-base font-bold text-[#F2F0E8] mt-1.5 select-all">
                       {requisites.sbp_phone}
                     </div>
-                    <div className="text-xs font-mono text-[#D9B96E] mt-0.5">{requisites.sbp_bank}</div>
+                    <div className="text-xs font-mono text-[#D9B96E] mt-1">{requisites.sbp_bank}</div>
                   </div>
                   <button
                     onClick={() => handleCopy(requisites.sbp_phone, 'sbp')}
-                    className="mt-3 self-start flex items-center space-x-1 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition"
+                    className="mt-4 self-start flex items-center space-x-1.5 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition cursor-pointer"
                   >
                     {copiedField === 'sbp' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{copiedField === 'sbp' ? 'Скопировано' : 'Скопировать номер'}</span>
-                  </button>
-                </div>
-
-                {/* Note Card */}
-                <div className="bg-[#06141B] border border-[#1C3945] rounded-2xl p-4 flex flex-col justify-between">
-                  <div>
-                    <span className="text-xs font-mono uppercase text-[#A8B4B7]">Назначение перевода</span>
-                    <div className="font-mono text-sm font-bold text-[#F2F0E8] mt-1">
-                      Взнос @{currentUser.username}
-                    </div>
-                    <div className="text-xs font-mono text-[#A8B4B7] mt-0.5">Указывайте ник в комментарии</div>
-                  </div>
-                  <button
-                    onClick={() => handleCopy(`Взнос @${currentUser.username}`, 'note')}
-                    className="mt-3 self-start flex items-center space-x-1 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition"
-                  >
-                    {copiedField === 'note' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedField === 'note' ? 'Скопировано' : 'Скопировать текст'}</span>
                   </button>
                 </div>
               </div>

@@ -153,6 +153,7 @@ const (
 	CategoryProfile AuditLogCategory = "profile"
 	CategoryAdmin   AuditLogCategory = "admin"
 	CategoryBilling AuditLogCategory = "billing"
+	CategorySystem  AuditLogCategory = "system"
 )
 
 // BillingRecord represents a recorded payment/dues entry in the system.
@@ -289,5 +290,28 @@ type DashboardStatsResponse struct {
 type BillingRequisites struct {
 	SBPPhone string `json:"sbp_phone"`
 	SBPBank  string `json:"sbp_bank"`
+}
+
+// TelegramChat represents a subscribed Telegram chat for admin alerts.
+type TelegramChat struct {
+	ChatID        int64     `json:"chat_id"`
+	Username      string    `json:"username"`
+	FirstName     string    `json:"first_name"`
+	IsAdmin       bool      `json:"is_admin"`
+	AlertsEnabled bool      `json:"alerts_enabled"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// TelegramStatusResponse represents the current status of the Telegram bot.
+type TelegramStatusResponse struct {
+	Enabled       bool           `json:"enabled"`
+	BotUsername   string         `json:"bot_username"`
+	Subscribers   []TelegramChat `json:"subscribers"`
+	TotalSubscribers int         `json:"total_subscribers"`
+}
+
+// TelegramTestAlertRequest for sending a test notification.
+type TelegramTestAlertRequest struct {
+	Message string `json:"message,omitempty"`
 }
 

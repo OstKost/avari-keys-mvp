@@ -622,6 +622,53 @@ func TestBillingEndpoints(t *testing.T) {
 	}
 }
 
+func TestTelegramAdminEndpoints(t *testing.T) {
+	masterSrv, _, store, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	handler := masterSrv.Handler()
+
+	// 1. Login as Admin
+	adminLoginBody, _ := json.Marshal(models.LoginRequest{
+		Username: "Forve",
+		Password: "AdminPass123!",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(adminLoginBody))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	var adminLoginResp models.LoginResponse
+	_ = json.NewDecoder(rec.Body).Decode(&adminLoginResp)
+
+	// 2. Add test Telegram subscriber
+	_ = store.SaveTelegramChat(context.Background(), models.TelegramChat{
+		ChatID:        777888999,
+		Username:      "avari_tester",
+		FirstName:     "Tester",
+		IsAdmin:       true,
+		AlertsEnabled: true,
+	})
+
+	// 3. GET /api/v1/admin/telegram/status
+	req = httptest.NewRequest("GET", "/api/v1/admin/telegram/status", nil)
+	req.Header.Set("Authorization", "Bearer "+adminLoginResp.Token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for telegram status, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var statusResp models.TelegramStatusResponse
+	if err := json.NewDecoder(rec.Body).Decode(&statusResp); err != nil {
+		t.Fatalf("failed to decode telegram status response: %v", err)
+	}
+	if statusResp.TotalSubscribers != 1 {
+		t.Fatalf("expected 1 subscriber, got %d", statusResp.TotalSubscribers)
+	}
+}
+
+
 
 
 

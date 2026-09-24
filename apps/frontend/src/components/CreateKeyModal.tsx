@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Plus, Zap, ShieldCheck, Smartphone } from 'lucide-react';
 import { NodePublic } from '../types';
 import { formatNodeRouting } from '../utils/country';
-import { MascotHelpBubble, MascotFaqModal } from './MascotAssistant';
+import { MascotModalCompanion, MascotFaqModal } from './MascotAssistant';
 
 interface Props {
   nodes: NodePublic[];
@@ -75,14 +75,8 @@ export function CreateKeyModal({ nodes, onClose, onCreate }: Props) {
           </div>
         </div>
 
-        {/* Mascot Assistant Help Bubble */}
-        <div className="mb-5">
-          <MascotHelpBubble 
-            title="Нужна помощь?" 
-            subtitle="5 ответов на частые вопросы новичков" 
-            onClickFaq={() => setShowFaq(true)} 
-          />
-        </div>
+        {/* Mascot Assistant Companion (Attached above form) */}
+        <MascotModalCompanion onClickFaq={() => setShowFaq(true)} />
 
         {error && (
           <div className="bg-rose-950/60 border border-rose-800/80 text-rose-300 text-sm p-4 rounded-xl mb-5 shadow-lg">
