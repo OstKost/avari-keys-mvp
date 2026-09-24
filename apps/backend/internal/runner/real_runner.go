@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -264,23 +266,331 @@ func (r *RealRunner) ListClients(ctx context.Context) ([]models.ClientListItem, 
 }
 
 func (r *RealRunner) GetStats(ctx context.Context) (*models.StatsSummaryResponse, error) {
-	cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "stats", "--json")
-	cmd.Dir = filepath.Dir(r.scriptPath)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
 	res := &models.StatsSummaryResponse{
 		Peers: make(map[string]models.PeerStats),
 	}
 
-	if err := cmd.Run(); err != nil {
-		// Fallback simple stats
-		return res, nil
+	// 1. Build Client Mappings from server configs & client config files
+	pubkeyToName, ipToName, knownClients := r.buildClientMappings()
+
+	// 2. Query AWG/WG dump data from system CLI
+	dumpLines := r.fetchAWGDump(ctx)
+
+	now := time.Now().Unix()
+	var totalRx, totalTx int64
+	activePeersCount := 0
+
+	for _, line := range dumpLines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		tokens := strings.Split(trimmed, "\t")
+		if len(tokens) < 8 {
+			// Fallback: try whitespace split
+			tokens = strings.Fields(trimmed)
+		}
+
+		var pubkey, allowedIPs string
+		var handshakeEpoch, rxBytes, txBytes int64
+
+		if len(tokens) >= 9 {
+			// Format: <iface> <pubkey> <psk> <endpoint> <allowed-ips> <handshake> <rx> <tx> <keepalive>
+			pubkey = tokens[1]
+			allowedIPs = tokens[4]
+			handshakeEpoch, _ = strconv.ParseInt(tokens[5], 10, 64)
+			rxBytes, _ = strconv.ParseInt(tokens[6], 10, 64)
+			txBytes, _ = strconv.ParseInt(tokens[7], 10, 64)
+		} else if len(tokens) >= 8 {
+			// Format: <pubkey> <psk> <endpoint> <allowed-ips> <handshake> <rx> <tx> <keepalive>
+			pubkey = tokens[0]
+			allowedIPs = tokens[3]
+			handshakeEpoch, _ = strconv.ParseInt(tokens[4], 10, 64)
+			rxBytes, _ = strconv.ParseInt(tokens[5], 10, 64)
+			txBytes, _ = strconv.ParseInt(tokens[6], 10, 64)
+		} else {
+			continue
+		}
+
+		// Find client name
+		clientName := ""
+		if name, ok := pubkeyToName[pubkey]; ok && name != "" {
+			clientName = name
+		} else {
+			// Try by allowed IPs (e.g. 10.7.0.2/32 -> 10.7.0.2)
+			ipList := strings.Split(allowedIPs, ",")
+			for _, ip := range ipList {
+				cleanIP := strings.TrimSpace(strings.Split(ip, "/")[0])
+				if name, ok := ipToName[cleanIP]; ok && name != "" {
+					clientName = name
+					break
+				}
+			}
+		}
+
+		if clientName == "" {
+			// Generate clean fallback name
+			cleanIP := strings.TrimSpace(strings.Split(allowedIPs, "/")[0])
+			cleanIP = strings.ReplaceAll(cleanIP, ".", "_")
+			if cleanIP != "" && cleanIP != "(none)" {
+				clientName = fmt.Sprintf("peer_%s", cleanIP)
+			} else if len(pubkey) >= 8 {
+				clientName = fmt.Sprintf("peer_%s", pubkey[:8])
+			} else {
+				clientName = "unknown_peer"
+			}
+		}
+
+		// Calculate handshake diff and online status (within 3 minutes / 180s)
+		isOnline := false
+		var lastHandshake string
+		if handshakeEpoch <= 0 {
+			lastHandshake = "Никогда"
+		} else {
+			diff := now - handshakeEpoch
+			if diff < 0 {
+				diff = 0
+			}
+			isOnline = (diff <= 180)
+
+			if diff <= 10 {
+				lastHandshake = "только что"
+			} else if diff < 60 {
+				lastHandshake = fmt.Sprintf("%d сек назад", diff)
+			} else if diff < 3600 {
+				lastHandshake = fmt.Sprintf("%d мин назад", diff/60)
+			} else if diff < 86400 {
+				lastHandshake = fmt.Sprintf("%d ч назад", diff/3600)
+			} else {
+				lastHandshake = fmt.Sprintf("%d дн назад", diff/86400)
+			}
+		}
+
+		if isOnline {
+			activePeersCount++
+		}
+
+		totalRx += rxBytes
+		totalTx += txBytes
+
+		res.Peers[clientName] = models.PeerStats{
+			ClientName:         clientName,
+			LastHandshake:      lastHandshake,
+			LastHandshakeEpoch: handshakeEpoch,
+			IsOnline:           isOnline,
+			RxBytes:            rxBytes,
+			TxBytes:            txBytes,
+			MonthBytes:         rxBytes + txBytes,
+		}
 	}
 
-	_ = json.Unmarshal(stdout.Bytes(), res)
+	// 3. Include any configured clients that haven't performed a handshake yet
+	for name := range knownClients {
+		if _, exists := res.Peers[name]; !exists {
+			res.Peers[name] = models.PeerStats{
+				ClientName:         name,
+				LastHandshake:      "Никогда",
+				LastHandshakeEpoch: 0,
+				IsOnline:           false,
+				RxBytes:            0,
+				TxBytes:            0,
+				MonthBytes:         0,
+			}
+		}
+	}
+
+	// 4. Fallback if CLI dump was completely unavailable: try manage_amneziawg.sh stats --json
+	if len(res.Peers) == 0 {
+		cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "stats", "--json")
+		cmd.Dir = filepath.Dir(r.scriptPath)
+		var stdout bytes.Buffer
+		cmd.Stdout = &stdout
+		if cmd.Run() == nil && stdout.Len() > 0 {
+			_ = json.Unmarshal(stdout.Bytes(), res)
+			return res, nil
+		}
+	}
+
+	res.ActivePeers = activePeersCount
+	res.TotalRx = totalRx
+	res.TotalTx = totalTx
+	res.Uptime = "online"
+
 	return res, nil
+}
+
+// fetchAWGDump queries awg/wg dump command for all active interfaces.
+func (r *RealRunner) fetchAWGDump(ctx context.Context) []string {
+	commands := [][]string{
+		{"awg", "show", "all", "dump"},
+		{"wg", "show", "all", "dump"},
+		{"awg", "show", "awg0", "dump"},
+		{"wg", "show", "wg0", "dump"},
+		{"awg", "show", "awg1", "dump"},
+		{"awg", "show", "awg2", "dump"},
+		{"awg", "show", "awg3", "dump"},
+	}
+
+	var allLines []string
+	seenPubkeys := make(map[string]bool)
+
+	for _, cmdArgs := range commands {
+		cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		if cmd.Run() == nil && out.Len() > 0 {
+			scanner := bufio.NewScanner(&out)
+			for scanner.Scan() {
+				line := scanner.Text()
+				trimmed := strings.TrimSpace(line)
+				if trimmed == "" {
+					continue
+				}
+				tokens := strings.Split(trimmed, "\t")
+				if len(tokens) < 8 {
+					tokens = strings.Fields(trimmed)
+				}
+				// Skip interface header lines (interface rows have 4 or 5 tokens without endpoint/allowed-ips)
+				if len(tokens) >= 8 {
+					pubkey := tokens[0]
+					if len(tokens) >= 9 {
+						pubkey = tokens[1]
+					}
+					if !seenPubkeys[pubkey] {
+						seenPubkeys[pubkey] = true
+						allLines = append(allLines, line)
+					}
+				}
+			}
+		}
+	}
+
+	return allLines
+}
+
+// buildClientMappings builds pubkey -> clientName and IP -> clientName mappings from server and client configs.
+func (r *RealRunner) buildClientMappings() (map[string]string, map[string]string, map[string]bool) {
+	pubkeyToName := make(map[string]string)
+	ipToName := make(map[string]string)
+	knownClients := make(map[string]bool)
+
+	scriptDir := filepath.Dir(r.scriptPath)
+
+	// 1. Scan server config files (awg0.conf, awg1.conf, etc.)
+	serverConfDirs := []string{
+		"/etc/amnezia/amneziawg",
+		"/etc/wireguard",
+		"/root/awg",
+		"/root/awg2",
+		"/opt/avari-keys",
+		scriptDir,
+	}
+
+	for _, dir := range serverConfDirs {
+		matches, err := filepath.Glob(filepath.Join(dir, "*.conf"))
+		if err != nil {
+			continue
+		}
+		for _, confPath := range matches {
+			// Skip client configs in clients/ subfolder
+			if strings.Contains(confPath, "/clients/") {
+				continue
+			}
+			f, err := os.Open(confPath)
+			if err != nil {
+				continue
+			}
+			scanner := bufio.NewScanner(f)
+			var currentClient string
+			for scanner.Scan() {
+				line := strings.TrimSpace(scanner.Text())
+				if strings.HasPrefix(line, "### Client ") || strings.HasPrefix(line, "# Client ") {
+					parts := strings.Fields(line)
+					if len(parts) >= 3 {
+						currentClient = parts[2]
+						knownClients[currentClient] = true
+					}
+				} else if strings.HasPrefix(line, "### BEGIN_PEER ") || strings.HasPrefix(line, "# BEGIN_PEER ") {
+					parts := strings.Fields(line)
+					if len(parts) >= 3 {
+						currentClient = parts[2]
+						knownClients[currentClient] = true
+					}
+				} else if strings.HasPrefix(line, "PublicKey") && currentClient != "" {
+					parts := strings.SplitN(line, "=", 2)
+					if len(parts) == 2 {
+						pubkey := strings.TrimSpace(parts[1])
+						pubkeyToName[pubkey] = currentClient
+					}
+				} else if strings.HasPrefix(line, "AllowedIPs") && currentClient != "" {
+					parts := strings.SplitN(line, "=", 2)
+					if len(parts) == 2 {
+						ips := strings.Split(parts[1], ",")
+						for _, ip := range ips {
+							clean := strings.TrimSpace(strings.Split(strings.TrimSpace(ip), "/")[0])
+							if clean != "" {
+								ipToName[clean] = currentClient
+							}
+						}
+					}
+				} else if line == "[Interface]" {
+					currentClient = ""
+				}
+			}
+			_ = f.Close()
+		}
+	}
+
+	// 2. Scan client config files
+	clientDirs := []string{
+		"/root/awg/clients",
+		"/root/awg",
+		"/etc/amnezia/amneziawg/clients",
+		"/opt/avari-keys/clients",
+		r.configsDir,
+		filepath.Join(scriptDir, "clients"),
+	}
+
+	for _, dir := range clientDirs {
+		matches, err := filepath.Glob(filepath.Join(dir, "*.conf"))
+		if err != nil {
+			continue
+		}
+		for _, confPath := range matches {
+			base := filepath.Base(confPath)
+			if base == "awg0.conf" || base == "awg1.conf" || base == "awg2.conf" || base == "awg3.conf" || base == "wg0.conf" {
+				continue
+			}
+			clientName := strings.TrimSuffix(base, ".conf")
+			knownClients[clientName] = true
+
+			// Read Address IP from client conf
+			f, err := os.Open(confPath)
+			if err != nil {
+				continue
+			}
+			scanner := bufio.NewScanner(f)
+			for scanner.Scan() {
+				line := strings.TrimSpace(scanner.Text())
+				if strings.HasPrefix(line, "Address") {
+					parts := strings.SplitN(line, "=", 2)
+					if len(parts) == 2 {
+						ips := strings.Split(parts[1], ",")
+						for _, ip := range ips {
+							clean := strings.TrimSpace(strings.Split(strings.TrimSpace(ip), "/")[0])
+							if clean != "" {
+								ipToName[clean] = clientName
+							}
+						}
+					}
+				}
+			}
+			_ = f.Close()
+		}
+	}
+
+	return pubkeyToName, ipToName, knownClients
 }
 
 func (r *RealRunner) RestartAWG(ctx context.Context) error {

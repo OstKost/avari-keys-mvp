@@ -279,6 +279,15 @@ func (s *Server) handleListUserKeys(w http.ResponseWriter, r *http.Request) {
 				keys[i].MonthTrafficFormatted = formatBytes(keys[i].MonthTrafficBytes)
 			}
 		}
+		if keys[i].LastHandshake == "" {
+			keys[i].LastHandshake = "Никогда"
+		}
+		if keys[i].TotalTrafficFormatted == "" {
+			keys[i].TotalTrafficFormatted = formatBytes(keys[i].TotalTrafficBytes)
+		}
+		if keys[i].MonthTrafficFormatted == "" {
+			keys[i].MonthTrafficFormatted = formatBytes(keys[i].MonthTrafficBytes)
+		}
 	}
 
 	s.writeJSON(w, http.StatusOK, keys)
@@ -934,6 +943,15 @@ func (s *Server) handleAdminListAllKeys(w http.ResponseWriter, r *http.Request) 
 				k.MonthTrafficFormatted = formatBytes(k.MonthTrafficBytes)
 			}
 		}
+		if k.LastHandshake == "" {
+			k.LastHandshake = "Никогда"
+		}
+		if k.TotalTrafficFormatted == "" {
+			k.TotalTrafficFormatted = formatBytes(k.TotalTrafficBytes)
+		}
+		if k.MonthTrafficFormatted == "" {
+			k.MonthTrafficFormatted = formatBytes(k.MonthTrafficBytes)
+		}
 
 		filtered = append(filtered, k)
 	}
@@ -1132,6 +1150,18 @@ func (s *Server) handleGetDashboardStats(w http.ResponseWriter, r *http.Request)
 	}
 	totalKeys := len(allConfigs)
 
+	nodeKeyCountMap := make(map[int64]int)
+	cascadeKeyCount := 0
+	directKeyCount := 0
+	for _, cfg := range allConfigs {
+		nodeKeyCountMap[cfg.NodeID]++
+		if cfg.NodeType == "cascade" {
+			cascadeKeyCount++
+		} else {
+			directKeyCount++
+		}
+	}
+
 	// 3. Nodes stats & latency
 	nodes, err := s.storage.ListNodes(r.Context())
 	if err != nil {
@@ -1171,25 +1201,41 @@ func (s *Server) handleGetDashboardStats(w http.ResponseWriter, r *http.Request)
 		var nodeTrafficBytes int64
 
 		stats, sErr := slaveCli.GetStats(r.Context())
-		if sErr == nil && stats != nil && stats.Peers != nil {
-			nodePeerCount = len(stats.Peers)
-			for _, peer := range stats.Peers {
-				peerTotal := peer.RxBytes + peer.TxBytes
-				nodeTrafficBytes += peerTotal
-				totalTrafficBytes += peerTotal
-				monthTrafficBytes += peer.MonthBytes
+		if sErr == nil && stats != nil {
+			if stats.Peers != nil && len(stats.Peers) > 0 {
+				nodePeerCount = len(stats.Peers)
+				for _, peer := range stats.Peers {
+					peerTotal := peer.RxBytes + peer.TxBytes
+					nodeTrafficBytes += peerTotal
+					totalTrafficBytes += peerTotal
+					monthTrafficBytes += peer.MonthBytes
 
-				if n.Type == "cascade" {
-					cascadeTrafficBytes += peerTotal
-				} else {
-					directTrafficBytes += peerTotal
+					if n.Type == "cascade" {
+						cascadeTrafficBytes += peerTotal
+					} else {
+						directTrafficBytes += peerTotal
+					}
+
+					// Check active handshake (within 3 minutes / 180s)
+					if peer.IsOnline || (peer.LastHandshakeEpoch > 0 && (time.Now().Unix()-peer.LastHandshakeEpoch) <= 180) {
+						activeDevicesOnline++
+					}
 				}
-
-				// Check active handshake
-				if peer.LastHandshake != "" && !strings.Contains(strings.ToLower(peer.LastHandshake), "never") && !strings.Contains(strings.ToLower(peer.LastHandshake), "не") {
-					activeDevicesOnline++
+			} else if stats.TotalRx+stats.TotalTx > 0 {
+				nodeTrafficBytes = stats.TotalRx + stats.TotalTx
+				totalTrafficBytes += nodeTrafficBytes
+				monthTrafficBytes += nodeTrafficBytes
+				if n.Type == "cascade" {
+					cascadeTrafficBytes += nodeTrafficBytes
+				} else {
+					directTrafficBytes += nodeTrafficBytes
 				}
 			}
+		}
+
+		// Ensure peer count displays at least configured keys count for this node
+		if dbCount, ok := nodeKeyCountMap[n.ID]; ok && dbCount > nodePeerCount {
+			nodePeerCount = dbCount
 		}
 
 		nodeDashboardList = append(nodeDashboardList, models.NodeDashboardInfo{
@@ -1215,6 +1261,9 @@ func (s *Server) handleGetDashboardStats(w http.ResponseWriter, r *http.Request)
 	combinedTraffic := cascadeTrafficBytes + directTrafficBytes
 	if combinedTraffic > 0 {
 		cascadePct = int((cascadeTrafficBytes * 100) / combinedTraffic)
+		directPct = 100 - cascadePct
+	} else if (cascadeKeyCount + directKeyCount) > 0 {
+		cascadePct = int((cascadeKeyCount * 100) / (cascadeKeyCount + directKeyCount))
 		directPct = 100 - cascadePct
 	}
 

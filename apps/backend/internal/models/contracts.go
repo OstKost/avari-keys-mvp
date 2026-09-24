@@ -36,11 +36,13 @@ type ClientListItem struct {
 
 // PeerStats details per-peer traffic and handshakes.
 type PeerStats struct {
-	ClientName    string `json:"client_name"`
-	LastHandshake string `json:"last_handshake"`
-	RxBytes       int64  `json:"rx_bytes"`
-	TxBytes       int64  `json:"tx_bytes"`
-	MonthBytes    int64  `json:"month_bytes"`
+	ClientName         string `json:"client_name"`
+	LastHandshake      string `json:"last_handshake"`
+	LastHandshakeEpoch int64  `json:"last_handshake_epoch,omitempty"`
+	IsOnline           bool   `json:"is_online"`
+	RxBytes            int64  `json:"rx_bytes"`
+	TxBytes            int64  `json:"tx_bytes"`
+	MonthBytes         int64  `json:"month_bytes"`
 }
 
 // StatsSummaryResponse represents aggregate AWG statistics.
