@@ -11,6 +11,7 @@
 | | | | | [TASK-005](./tasks/TASK-005-master-frontend-ui.md) |
 | | | | | [TASK-006](./tasks/TASK-006-contract-integration-tests.md) |
 | | | | | [TASK-007](./tasks/TASK-007-deployment-and-docs.md) |
+| | | | | [TASK-008](./tasks/TASK-008-cicd-github-actions.md) |
 
 ---
 
@@ -23,3 +24,4 @@
 - **[TASK-005](./tasks/TASK-005-master-frontend-ui.md)**: ✅ React Web UI — Дашборд пользователя (QR, .conf, выбор ноды) и Админ-панель (пользователи, ноды, аудит).
 - **[TASK-006](./tasks/TASK-006-contract-integration-tests.md)**: ✅ Контрактные тесты Master $\leftrightarrow$ Slave API, тесты модерации и прав доступа.
 - **[TASK-007](./tasks/TASK-007-deployment-and-docs.md)**: ✅ Документация развертывания, Caddy auto-HTTPS конфиги, systemd unit-файлы.
+- **[TASK-008](./tasks/TASK-008-cicd-github-actions.md)**: ✅ Безопасный CI/CD пайплайн в GitHub Actions с атомарным деплоем на VPS 157.22.252.225.
