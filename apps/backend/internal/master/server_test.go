@@ -845,6 +845,98 @@ func TestUserTelegramEndpoints(t *testing.T) {
 	}
 }
 
+func TestAdminAllKeysPagination(t *testing.T) {
+	masterSrv, _, store, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	handler := masterSrv.Handler()
+	ctx := context.Background()
+
+	// Login as admin
+	loginBody, _ := json.Marshal(models.LoginRequest{
+		Username: "Forve",
+		Password: "AdminPass123!",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(loginBody))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	var loginResp models.LoginResponse
+	_ = json.NewDecoder(rec.Body).Decode(&loginResp)
+	adminToken := loginResp.Token
+
+	// Create user
+	user, err := store.CreateUser(ctx, "pag_user", "hash123")
+	if err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	nodes, err := store.ListNodes(ctx)
+	if err != nil || len(nodes) == 0 {
+		t.Fatalf("expected at least 1 node")
+	}
+	nodeID := nodes[0].ID
+
+	// Create 15 client configs
+	for i := 1; i <= 15; i++ {
+		_, err := store.CreateClientConfig(ctx, user.ID, nodeID, fmt.Sprintf("client_%02d", i), fmt.Sprintf("device_%02d", i))
+		if err != nil {
+			t.Fatalf("failed to create client config %d: %v", i, err)
+		}
+	}
+
+	// 1. Get Page 1 (limit 10)
+	req = httptest.NewRequest("GET", "/api/v1/admin/keys?page=1&limit=10", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+
+	var p1Resp models.PaginatedKeysResponse
+	if err := json.NewDecoder(rec.Body).Decode(&p1Resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if p1Resp.TotalCount != 15 {
+		t.Fatalf("expected TotalCount 15, got %d", p1Resp.TotalCount)
+	}
+	if p1Resp.TotalPages != 2 {
+		t.Fatalf("expected TotalPages 2, got %d", p1Resp.TotalPages)
+	}
+	if p1Resp.Page != 1 {
+		t.Fatalf("expected Page 1, got %d", p1Resp.Page)
+	}
+	if len(p1Resp.Keys) != 10 {
+		t.Fatalf("expected 10 keys on page 1, got %d", len(p1Resp.Keys))
+	}
+
+	// 2. Get Page 2 (limit 10)
+	req = httptest.NewRequest("GET", "/api/v1/admin/keys?page=2&limit=10", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+
+	var p2Resp models.PaginatedKeysResponse
+	if err := json.NewDecoder(rec.Body).Decode(&p2Resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if p2Resp.Page != 2 {
+		t.Fatalf("expected Page 2, got %d", p2Resp.Page)
+	}
+	if len(p2Resp.Keys) != 5 {
+		t.Fatalf("expected 5 keys on page 2, got %d", len(p2Resp.Keys))
+	}
+}
+
+
 
 
 

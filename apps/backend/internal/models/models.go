@@ -69,10 +69,14 @@ type ClientConfig struct {
 	NodeID                int64     `json:"node_id"`
 	ClientName            string    `json:"client_name"` // e.g. "u1_iphone"
 	DeviceName            string    `json:"device_name"` // e.g. "iPhone"
+	PublicKey             string    `json:"public_key,omitempty"`
+	AllocatedIP           string    `json:"allocated_ip,omitempty"`
 	NodeName              string    `json:"node_name,omitempty"`
 	NodeType              string    `json:"node_type,omitempty"`
 	NodeCountryCode       string    `json:"node_country_code,omitempty"`
 	LastHandshake         string    `json:"last_handshake,omitempty"`
+	LastHandshakeEpoch    int64     `json:"last_handshake_epoch,omitempty"`
+	IsOnline              bool      `json:"is_online,omitempty"`
 	TotalTrafficBytes     int64     `json:"total_traffic_bytes,omitempty"`
 	MonthTrafficBytes     int64     `json:"month_traffic_bytes,omitempty"`
 	TotalTrafficFormatted string    `json:"total_traffic_formatted,omitempty"`

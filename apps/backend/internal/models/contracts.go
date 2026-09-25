@@ -37,6 +37,10 @@ type ClientListItem struct {
 // PeerStats details per-peer traffic and handshakes.
 type PeerStats struct {
 	ClientName         string `json:"client_name"`
+	PublicKey          string `json:"public_key,omitempty"`
+	Interface          string `json:"interface,omitempty"`
+	Endpoint           string `json:"endpoint,omitempty"`
+	AllowedIPs         string `json:"allowed_ips,omitempty"`
 	LastHandshake      string `json:"last_handshake"`
 	LastHandshakeEpoch int64  `json:"last_handshake_epoch,omitempty"`
 	IsOnline           bool   `json:"is_online"`

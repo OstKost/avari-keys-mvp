@@ -2,6 +2,7 @@ package monitor_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -91,3 +92,115 @@ func TestHealthCheckerTransitions(t *testing.T) {
 
 	_ = node
 }
+
+func TestTelemetryCollectorAndDeltaEngine(t *testing.T) {
+	var rawRx atomic.Int64
+	var rawTx atomic.Int64
+	rawRx.Store(100 * 1024 * 1024)
+	rawTx.Store(50 * 1024 * 1024)
+
+	// Mock Slave Node returning health & stats
+	mockSlave := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" || r.URL.Path == "/api/v1/health" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"ok","service":"avari-slave","version":"v0.1.0"}`))
+			return
+		}
+		if r.URL.Path == "/api/v1/stats" {
+			rx := rawRx.Load()
+			tx := rawTx.Load()
+			now := time.Now().Unix()
+			resp := fmt.Sprintf(`{
+				"active_peers": 1,
+				"uptime": "1d 2h",
+				"total_rx": %d,
+				"total_tx": %d,
+				"peers": {
+					"u1_iphone": {
+						"client_name": "u1_iphone",
+						"public_key": "mockKey123==",
+						"interface": "awg0",
+						"allowed_ips": "10.7.0.2/32",
+						"last_handshake": "только что",
+						"last_handshake_epoch": %d,
+						"is_online": true,
+						"rx_bytes": %d,
+						"tx_bytes": %d,
+						"month_bytes": %d
+					}
+				}
+			}`, rx, tx, now-10, rx, tx, rx+tx)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(resp))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer mockSlave.Close()
+
+	store, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	user, err := store.CreateUser(ctx, "tele_worker_user", "password123")
+	if err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	node, err := store.CreateNode(ctx, "Telemetry Node", "cascade", "NLD", "https://aeza.net", mockSlave.URL, "dummy_key", true)
+	if err != nil {
+		t.Fatalf("failed to create node: %v", err)
+	}
+
+	cfg, err := store.CreateClientConfig(ctx, user.ID, node.ID, "u1_iphone", "iPhone", "mockKey123==", "10.7.0.2")
+	if err != nil {
+		t.Fatalf("failed to create config: %v", err)
+	}
+
+	checker := monitor.NewHealthChecker(monitor.Config{
+		Storage:  store,
+		Interval: 50 * time.Millisecond,
+		Timeout:  100 * time.Millisecond,
+	})
+
+	// Round 1: Baseline collection
+	checker.CollectTelemetry(ctx)
+
+	// Round 2: Increment traffic (+50MB RX, +30MB TX = +80MB total)
+	rawRx.Store(150 * 1024 * 1024)
+	rawTx.Store(80 * 1024 * 1024)
+	checker.CollectTelemetry(ctx)
+
+	updatedCfg, err := store.GetClientConfigByID(ctx, cfg.ID)
+	if err != nil {
+		t.Fatalf("failed to get config: %v", err)
+	}
+	expectedDelta := int64(80 * 1024 * 1024)
+	if updatedCfg.TotalTrafficBytes != expectedDelta {
+		t.Fatalf("expected total traffic %d, got %d", expectedDelta, updatedCfg.TotalTrafficBytes)
+	}
+
+	// Round 3: Counter Reset (Server reboots, counters reset to 10MB RX, 5MB TX = +15MB delta)
+	rawRx.Store(10 * 1024 * 1024)
+	rawTx.Store(5 * 1024 * 1024)
+	checker.CollectTelemetry(ctx)
+
+	updatedCfg2, err := store.GetClientConfigByID(ctx, cfg.ID)
+	if err != nil {
+		t.Fatalf("failed to get config: %v", err)
+	}
+	expectedAfterReset := expectedDelta + int64(15*1024*1024)
+	if updatedCfg2.TotalTrafficBytes != expectedAfterReset {
+		t.Fatalf("expected total traffic %d after counter reset, got %d", expectedAfterReset, updatedCfg2.TotalTrafficBytes)
+	}
+
+	// Verify Dashboard stats
+	dash := checker.GetLatestDashboardStats(ctx)
+	if dash == nil {
+		t.Fatalf("expected non-nil dashboard stats")
+	}
+	if dash.TotalKeys != 1 || dash.OnlineNodes != 1 || dash.ActiveDevicesOnline != 1 {
+		t.Fatalf("unexpected dashboard metrics: %+v", dash)
+	}
+}
+
