@@ -45,6 +45,13 @@ func main() {
 		}
 	}
 
+	timeoutSec := 10
+	if secStr := os.Getenv("HEALTHCHECK_TIMEOUT_SEC"); secStr != "" {
+		if s, err := strconv.Atoi(secStr); err == nil && s > 0 {
+			timeoutSec = s
+		}
+	}
+
 	store, err := storage.NewSQLiteStorage(dbPath)
 	if err != nil {
 		log.Fatalf("[MASTER] Failed to initialize SQLite database: %v", err)
@@ -59,6 +66,7 @@ func main() {
 		TelegramAdminChatID: tgAdminChatID,
 		TelegramAdminSecret: tgAdminSecret,
 		HealthCheckInterval: time.Duration(intervalSec) * time.Second,
+		HealthCheckTimeout:  time.Duration(timeoutSec) * time.Second,
 	}
 
 	srv := master.NewServer(cfg, store)

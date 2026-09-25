@@ -20,14 +20,16 @@ type rawCounters struct {
 
 // HealthChecker periodically verifies node availability, collects telemetry deltas, and updates in-memory metrics.
 type HealthChecker struct {
-	storage     *storage.Storage
-	bot         *telegram.Bot
-	interval    time.Duration
-	nodeTimeout time.Duration
-	logActivity func(category models.AuditLogCategory, action string, details string)
+	storage          *storage.Storage
+	bot              *telegram.Bot
+	interval         time.Duration
+	nodeTimeout      time.Duration
+	failureThreshold int
+	logActivity      func(category models.AuditLogCategory, action string, details string)
 
-	nodeStates      map[int64]bool        // nodeID -> isOnline
-	nodeLatencies   map[int64]int64       // nodeID -> latencyMs
+	nodeStates      map[int64]bool         // nodeID -> isOnline
+	nodeLatencies   map[int64]int64        // nodeID -> latencyMs
+	nodeFailures    map[int64]int          // nodeID -> consecutive failure count
 	prevPeerRaw     map[string]rawCounters // "nodeID:pubkey/name" -> raw counters
 	prevNodeRaw     map[int64]rawCounters  // nodeID -> raw counters
 	cachedDashboard *models.DashboardStatsResponse
@@ -39,11 +41,12 @@ type HealthChecker struct {
 
 // Config for HealthChecker.
 type Config struct {
-	Storage     *storage.Storage
-	Bot         *telegram.Bot
-	Interval    time.Duration
-	Timeout     time.Duration
-	LogActivity func(category models.AuditLogCategory, action string, details string)
+	Storage          *storage.Storage
+	Bot              *telegram.Bot
+	Interval         time.Duration
+	Timeout          time.Duration
+	FailureThreshold int
+	LogActivity      func(category models.AuditLogCategory, action string, details string)
 }
 
 // NewHealthChecker creates a new background node monitor and telemetry collector.
@@ -54,20 +57,26 @@ func NewHealthChecker(cfg Config) *HealthChecker {
 	}
 	timeout := cfg.Timeout
 	if timeout <= 0 {
-		timeout = 5 * time.Second
+		timeout = 10 * time.Second
+	}
+	failThreshold := cfg.FailureThreshold
+	if failThreshold <= 0 {
+		failThreshold = 2
 	}
 
 	return &HealthChecker{
-		storage:       cfg.Storage,
-		bot:           cfg.Bot,
-		interval:      interval,
-		nodeTimeout:   timeout,
-		logActivity:   cfg.LogActivity,
-		nodeStates:    make(map[int64]bool),
-		nodeLatencies: make(map[int64]int64),
-		prevPeerRaw:   make(map[string]rawCounters),
-		prevNodeRaw:   make(map[int64]rawCounters),
-		stopChan:      make(chan struct{}),
+		storage:          cfg.Storage,
+		bot:              cfg.Bot,
+		interval:         interval,
+		nodeTimeout:      timeout,
+		failureThreshold: failThreshold,
+		logActivity:      cfg.LogActivity,
+		nodeStates:       make(map[int64]bool),
+		nodeLatencies:    make(map[int64]int64),
+		nodeFailures:     make(map[int64]int),
+		prevPeerRaw:      make(map[string]rawCounters),
+		prevNodeRaw:      make(map[int64]rawCounters),
+		stopChan:         make(chan struct{}),
 	}
 }
 
@@ -174,18 +183,41 @@ func (h *HealthChecker) collectTelemetryAndHealth(ctx context.Context, isInitial
 		go func(n models.Node) {
 			defer wg.Done()
 
-			pingCtx, cancel := context.WithTimeout(ctx, h.nodeTimeout)
-			defer cancel()
-
 			slaveCli := client.NewSlaveClient(n.APIURL, n.APIKey)
+
+			// Attempt #1
+			pingCtx1, cancel1 := context.WithTimeout(ctx, h.nodeTimeout)
 			start := time.Now()
-			health, hErr := slaveCli.CheckHealth(pingCtx)
+			health, hErr := slaveCli.CheckHealth(pingCtx1)
 			latency := time.Since(start).Milliseconds()
+			cancel1()
 
 			isOnline := hErr == nil && health != nil && health.Status == "ok"
+
+			// Immediate retry (Attempt #2) if Attempt #1 failed due to network jitter / transient timeout
+			if !isOnline && ctx.Err() == nil {
+				time.Sleep(500 * time.Millisecond)
+				pingCtx2, cancel2 := context.WithTimeout(ctx, h.nodeTimeout)
+				start2 := time.Now()
+				health2, hErr2 := slaveCli.CheckHealth(pingCtx2)
+				latency2 := time.Since(start2).Milliseconds()
+				cancel2()
+
+				if hErr2 == nil && health2 != nil && health2.Status == "ok" {
+					isOnline = true
+					health = health2
+					hErr = nil
+					latency = latency2
+				} else if hErr2 != nil {
+					hErr = hErr2
+				}
+			}
+
 			var statsResp *models.StatsSummaryResponse
 			if isOnline {
-				statsResp, _ = slaveCli.GetStats(pingCtx)
+				statsCtx, statsCancel := context.WithTimeout(ctx, h.nodeTimeout)
+				statsResp, _ = slaveCli.GetStats(statsCtx)
+				statsCancel()
 			}
 
 			resultsChan <- nodeResult{
@@ -223,46 +255,72 @@ func (h *HealthChecker) collectTelemetryAndHealth(ctx context.Context, isInitial
 
 		h.mu.Lock()
 		wasOnline, existed := h.nodeStates[n.ID]
-		h.nodeStates[n.ID] = isOnline
-		h.nodeLatencies[n.ID] = latency
-		h.mu.Unlock()
+		prevFails := h.nodeFailures[n.ID]
+
+		var shouldNotifyDown bool
+		var shouldNotifyRecover bool
+		var currentOnline bool
 
 		if isOnline {
+			h.nodeFailures[n.ID] = 0
+			h.nodeStates[n.ID] = true
+			h.nodeLatencies[n.ID] = latency
+			currentOnline = true
+			if existed && !wasOnline {
+				shouldNotifyRecover = true
+			}
+		} else {
+			h.nodeFailures[n.ID] = prevFails + 1
+			h.nodeLatencies[n.ID] = 0
+			if h.nodeFailures[n.ID] >= h.failureThreshold {
+				h.nodeStates[n.ID] = false
+				currentOnline = false
+				if existed && wasOnline {
+					shouldNotifyDown = true
+				} else if !existed && !isInitial {
+					shouldNotifyDown = true
+				}
+			} else {
+				// While below failure threshold, preserve previous online state for status / dashboard
+				if existed {
+					currentOnline = wasOnline
+				} else {
+					currentOnline = false
+					h.nodeStates[n.ID] = false
+				}
+				log.Printf("[MONITOR] ⚠️ Node probe failed for #%d %s (%s): %v (consecutive fails: %d/%d)", n.ID, n.Name, n.APIURL, res.err, h.nodeFailures[n.ID], h.failureThreshold)
+			}
+		}
+		h.mu.Unlock()
+
+		if currentOnline {
 			onlineNodesCount++
 			totalLatencySum += latency
 			latencyCount++
 		}
 
-		// State transition handling for alerts
-		if existed {
-			if wasOnline && !isOnline {
-				errReason := "Не отвечает (таймаут или ошибка подключения)"
-				if res.err != nil {
-					errReason = res.err.Error()
-				}
-				log.Printf("[MONITOR] 🚨 Node DOWN: #%d %s (%s) - %s", n.ID, n.Name, n.APIURL, errReason)
-				if h.logActivity != nil {
-					h.logActivity(models.CategorySystem, "node_down", fmt.Sprintf("Сервер «%s» (#%d) стал недоступен: %s", n.Name, n.ID, errReason))
-				}
-				if h.bot != nil && h.bot.IsEnabled() {
-					h.bot.NotifyNodeDown(n, errReason)
-				}
-			} else if !wasOnline && isOnline {
-				log.Printf("[MONITOR] ✅ Node RECOVERED: #%d %s (%s) - %dms", n.ID, n.Name, n.APIURL, latency)
-				if h.logActivity != nil {
-					h.logActivity(models.CategorySystem, "node_recovered", fmt.Sprintf("Сервер «%s» (#%d) восстановил работу (пинг: %d ms)", n.Name, n.ID, latency))
-				}
-				if h.bot != nil && h.bot.IsEnabled() {
-					h.bot.NotifyNodeRecovered(n, latency)
-				}
+		if shouldNotifyDown {
+			errReason := "Не отвечает (таймаут или ошибка подключения)"
+			if res.err != nil {
+				errReason = res.err.Error()
 			}
-		} else if !isOnline && !isInitial {
+			h.mu.RLock()
+			fails := h.nodeFailures[n.ID]
+			h.mu.RUnlock()
+			log.Printf("[MONITOR] 🚨 Node DOWN: #%d %s (%s) - %s (consecutive fails: %d)", n.ID, n.Name, n.APIURL, errReason, fails)
+			if h.logActivity != nil {
+				h.logActivity(models.CategorySystem, "node_down", fmt.Sprintf("Сервер «%s» (#%d) стал недоступен: %s", n.Name, n.ID, errReason))
+			}
 			if h.bot != nil && h.bot.IsEnabled() {
-				errReason := "Не отвечает при первичном запуске"
-				if res.err != nil {
-					errReason = res.err.Error()
-				}
 				h.bot.NotifyNodeDown(n, errReason)
+			}
+		} else if shouldNotifyRecover {
+			log.Printf("[MONITOR] ✅ Node RECOVERED: #%d %s (%s) - %dms", n.ID, n.Name, n.APIURL, latency)
+			if h.logActivity != nil {
+				h.logActivity(models.CategorySystem, "node_recovered", fmt.Sprintf("Сервер «%s» (#%d) восстановил работу (пинг: %d ms)", n.Name, n.ID, latency))
+			}
+			if h.bot != nil && h.bot.IsEnabled() {
+				h.bot.NotifyNodeRecovered(n, latency)
 			}
 		}
 
