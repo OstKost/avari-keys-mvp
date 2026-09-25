@@ -17,6 +17,7 @@ import { Loader } from './components/Loader';
 import { UserProfile } from './components/UserProfile';
 import { BillingPage } from './components/BillingPage';
 import { BillingReminderModal } from './components/BillingReminderModal';
+import { TelegramBanner } from './components/TelegramBanner';
 import { Tooltip } from './components/Tooltip';
 import { formatNodeRouting } from './utils/country';
 import { FloatingMascot, MascotFaqModal } from './components/MascotAssistant';
@@ -422,6 +423,8 @@ export default function App() {
                 </button>
               </div>
 
+              {/* Telegram Bot Alerts Invitation Banner */}
+              <TelegramBanner currentUser={currentUser} />
 
               {error && (
                 <div className="flex items-center space-x-2 bg-rose-950/60 border border-rose-800/80 text-rose-300 text-sm p-4 rounded-xl mb-6 shadow-lg">

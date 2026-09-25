@@ -222,6 +222,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PUT /api/v1/admin/billing/requisites", auth.RequireAdmin(s.handleAdminUpdateBillingRequisites))
 
 	// Telegram Bot Routes
+	s.mux.HandleFunc("GET /api/v1/user/telegram", auth.RequireAuth(s.handleGetUserTelegramStatus))
+	s.mux.HandleFunc("POST /api/v1/user/telegram/unlink", auth.RequireAuth(s.handleUserUnlinkTelegram))
 	s.mux.HandleFunc("GET /api/v1/admin/telegram/status", auth.RequireAdmin(s.handleAdminGetTelegramStatus))
 	s.mux.HandleFunc("GET /api/v1/admin/telegram/settings", auth.RequireAdmin(s.handleAdminGetTelegramSettings))
 	s.mux.HandleFunc("PUT /api/v1/admin/telegram/settings", auth.RequireAdmin(s.handleAdminUpdateTelegramSettings))
@@ -1738,6 +1740,61 @@ func (s *Server) handleAdminSendTelegramTest(w http.ResponseWriter, r *http.Requ
 	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
 		Success: true,
 		Message: "Тестовое оповещение успешно отправлено во все привязанные Telegram-чаты",
+	})
+}
+
+func (s *Server) handleGetUserTelegramStatus(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+
+	botUsername := s.cfg.TelegramBotUsername
+	if botUsername == "" {
+		botUsername = "AvariElfBot"
+	}
+	botEnabled := false
+	if s.telegramBot != nil {
+		snap := s.telegramBot.GetSettings()
+		botEnabled = s.telegramBot.IsEnabled()
+		if snap.BotUsername != "" {
+			botUsername = snap.BotUsername
+		}
+	}
+
+	chat, _ := s.storage.GetTelegramChatByUserID(r.Context(), claims.UserID)
+	isLinked := chat != nil
+	var chatID *int64
+	tgUsername := ""
+	alertsEnabled := false
+	if chat != nil {
+		chatID = &chat.ChatID
+		tgUsername = chat.Username
+		alertsEnabled = chat.AlertsEnabled
+	}
+
+	deepLink := fmt.Sprintf("https://t.me/%s?start=link_%s", botUsername, claims.Username)
+
+	s.writeJSON(w, http.StatusOK, models.UserTelegramStatusResponse{
+		BotUsername:      botUsername,
+		BotEnabled:       botEnabled,
+		IsLinked:         isLinked,
+		TelegramChatID:   chatID,
+		TelegramUsername: tgUsername,
+		AlertsEnabled:    alertsEnabled,
+		DeepLink:         deepLink,
+	})
+}
+
+func (s *Server) handleUserUnlinkTelegram(w http.ResponseWriter, r *http.Request) {
+	claims, _ := auth.GetUserFromContext(r.Context())
+	chat, err := s.storage.GetTelegramChatByUserID(r.Context(), claims.UserID)
+	if err == nil && chat != nil {
+		_ = s.storage.DeleteTelegramChat(r.Context(), chat.ChatID)
+	}
+
+	s.logActivity(r, &claims.UserID, claims.Username, models.CategoryAuth, "user_telegram_unlink", "Отвязан Telegram-чат пользователя")
+
+	s.writeJSON(w, http.StatusOK, models.GenericSuccessResponse{
+		Success: true,
+		Message: "Telegram успешно отвязан от вашего аккаунта",
 	})
 }
 

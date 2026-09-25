@@ -336,4 +336,15 @@ type TelegramSubscriberToggleRequest struct {
 	AlertsEnabled bool `json:"alerts_enabled"`
 }
 
+// UserTelegramStatusResponse represents user-specific Telegram integration status and deep link.
+type UserTelegramStatusResponse struct {
+	BotUsername      string `json:"bot_username"`
+	BotEnabled       bool   `json:"bot_enabled"`
+	IsLinked         bool   `json:"is_linked"`
+	TelegramChatID   *int64 `json:"telegram_chat_id,omitempty"`
+	TelegramUsername string `json:"telegram_username,omitempty"`
+	AlertsEnabled    bool   `json:"alerts_enabled"`
+	DeepLink         string `json:"deep_link"`
+}
+
 

@@ -222,6 +222,16 @@ export interface TelegramStatusResponse {
   total_subscribers: number;
 }
 
+export interface UserTelegramStatus {
+  bot_username: string;
+  bot_enabled: boolean;
+  is_linked: boolean;
+  telegram_chat_id?: number;
+  telegram_username?: string;
+  alerts_enabled: boolean;
+  deep_link: string;
+}
+
 
 
 
