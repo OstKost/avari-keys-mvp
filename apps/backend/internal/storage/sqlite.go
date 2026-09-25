@@ -98,8 +98,32 @@ func (s *Storage) migrate() error {
 		node_id INTEGER NOT NULL,
 		client_name TEXT NOT NULL,
 		device_name TEXT NOT NULL,
+		public_key TEXT NOT NULL DEFAULT '',
+		allocated_ip TEXT NOT NULL DEFAULT '',
+		total_rx_bytes INTEGER NOT NULL DEFAULT 0,
+		total_tx_bytes INTEGER NOT NULL DEFAULT 0,
+		last_handshake_epoch INTEGER NOT NULL DEFAULT 0,
+		last_seen_at DATETIME DEFAULT NULL,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+		FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
+	);
+
+	CREATE TABLE IF NOT EXISTS peer_traffic_daily (
+		date TEXT NOT NULL, -- 'YYYY-MM-DD'
+		client_config_id INTEGER NOT NULL,
+		rx_bytes INTEGER NOT NULL DEFAULT 0,
+		tx_bytes INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (date, client_config_id),
+		FOREIGN KEY (client_config_id) REFERENCES client_configs(id) ON DELETE CASCADE
+	);
+
+	CREATE TABLE IF NOT EXISTS node_traffic_daily (
+		date TEXT NOT NULL, -- 'YYYY-MM-DD'
+		node_id INTEGER NOT NULL,
+		rx_bytes INTEGER NOT NULL DEFAULT 0,
+		tx_bytes INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (date, node_id),
 		FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
 	);
 
@@ -150,6 +174,10 @@ func (s *Storage) migrate() error {
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 
+	CREATE INDEX IF NOT EXISTS idx_client_configs_pubkey ON client_configs(public_key);
+	CREATE INDEX IF NOT EXISTS idx_client_configs_node_id ON client_configs(node_id);
+	CREATE INDEX IF NOT EXISTS idx_peer_traffic_daily_date ON peer_traffic_daily(date);
+	CREATE INDEX IF NOT EXISTS idx_node_traffic_daily_date ON node_traffic_daily(date);
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_category ON audit_logs(category);
@@ -166,6 +194,12 @@ func (s *Storage) migrate() error {
 	_, _ = s.db.Exec(`ALTER TABLE nodes ADD COLUMN provider_url TEXT NOT NULL DEFAULT '';`)
 	_, _ = s.db.Exec(`ALTER TABLE users ADD COLUMN billing_snoozed_until DATETIME DEFAULT NULL;`)
 	_, _ = s.db.Exec(`ALTER TABLE telegram_chats ADD COLUMN user_id INTEGER DEFAULT NULL;`)
+	_, _ = s.db.Exec(`ALTER TABLE client_configs ADD COLUMN public_key TEXT NOT NULL DEFAULT '';`)
+	_, _ = s.db.Exec(`ALTER TABLE client_configs ADD COLUMN allocated_ip TEXT NOT NULL DEFAULT '';`)
+	_, _ = s.db.Exec(`ALTER TABLE client_configs ADD COLUMN total_rx_bytes INTEGER NOT NULL DEFAULT 0;`)
+	_, _ = s.db.Exec(`ALTER TABLE client_configs ADD COLUMN total_tx_bytes INTEGER NOT NULL DEFAULT 0;`)
+	_, _ = s.db.Exec(`ALTER TABLE client_configs ADD COLUMN last_handshake_epoch INTEGER NOT NULL DEFAULT 0;`)
+	_, _ = s.db.Exec(`ALTER TABLE client_configs ADD COLUMN last_seen_at DATETIME DEFAULT NULL;`)
 	return nil
 }
 
@@ -515,11 +549,20 @@ func (s *Storage) DeleteNode(ctx context.Context, id int64) error {
 }
 
 // ClientConfig methods
-func (s *Storage) CreateClientConfig(ctx context.Context, userID, nodeID int64, clientName, deviceName string) (*models.ClientConfig, error) {
+func (s *Storage) CreateClientConfig(ctx context.Context, userID, nodeID int64, clientName, deviceName string, extra ...string) (*models.ClientConfig, error) {
+	pubKey := ""
+	allocIP := ""
+	if len(extra) > 0 {
+		pubKey = strings.TrimSpace(extra[0])
+	}
+	if len(extra) > 1 {
+		allocIP = strings.TrimSpace(extra[1])
+	}
+
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO client_configs (user_id, node_id, client_name, device_name)
-		VALUES (?, ?, ?, ?)
-	`, userID, nodeID, clientName, deviceName)
+		INSERT INTO client_configs (user_id, node_id, client_name, device_name, public_key, allocated_ip)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, userID, nodeID, clientName, deviceName, pubKey, allocIP)
 	if err != nil {
 		return nil, err
 	}
@@ -527,26 +570,160 @@ func (s *Storage) CreateClientConfig(ctx context.Context, userID, nodeID int64, 
 	return s.GetClientConfigByID(ctx, id)
 }
 
-func (s *Storage) GetClientConfigByID(ctx context.Context, id int64) (*models.ClientConfig, error) {
-	var c models.ClientConfig
-	err := s.db.QueryRowContext(ctx, `
-		SELECT c.id, c.user_id, COALESCE(u.username, ''), c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type, n.country_code
-		FROM client_configs c
-		JOIN nodes n ON c.node_id = n.id
-		LEFT JOIN users u ON c.user_id = u.id
-		WHERE c.id = ?
-	`, id).Scan(&c.ID, &c.UserID, &c.Username, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType, &c.NodeCountryCode)
+func (s *Storage) UpdateClientConfigPublicKey(ctx context.Context, id int64, publicKey, allocatedIP string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE client_configs
+		SET public_key = ?, allocated_ip = ?
+		WHERE id = ?
+	`, strings.TrimSpace(publicKey), strings.TrimSpace(allocatedIP), id)
+	return err
+}
+
+func (s *Storage) RecordPeerTelemetry(ctx context.Context, clientConfigID int64, rxDelta, txDelta, handshakeEpoch int64, isOnline bool) error {
+	if clientConfigID <= 0 {
+		return nil
+	}
+
+	// 1. Update cumulative totals on client_configs
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE client_configs
+		SET total_rx_bytes = total_rx_bytes + ?,
+		    total_tx_bytes = total_tx_bytes + ?,
+		    last_handshake_epoch = CASE WHEN ? > last_handshake_epoch THEN ? ELSE last_handshake_epoch END,
+		    last_seen_at = CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE last_seen_at END
+		WHERE id = ?
+	`, rxDelta, txDelta, handshakeEpoch, handshakeEpoch, isOnline, clientConfigID)
+	if err != nil {
+		return err
+	}
+
+	// 2. Upsert into peer_traffic_daily
+	if rxDelta > 0 || txDelta > 0 {
+		today := time.Now().UTC().Format("2006-01-02")
+		_, err = s.db.ExecContext(ctx, `
+			INSERT INTO peer_traffic_daily (date, client_config_id, rx_bytes, tx_bytes)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT(date, client_config_id) DO UPDATE SET
+				rx_bytes = rx_bytes + excluded.rx_bytes,
+				tx_bytes = tx_bytes + excluded.tx_bytes
+		`, today, clientConfigID, rxDelta, txDelta)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *Storage) RecordNodeTelemetry(ctx context.Context, nodeID int64, rxDelta, txDelta int64) error {
+	if nodeID <= 0 || (rxDelta <= 0 && txDelta <= 0) {
+		return nil
+	}
+
+	today := time.Now().UTC().Format("2006-01-02")
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO node_traffic_daily (date, node_id, rx_bytes, tx_bytes)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(date, node_id) DO UPDATE SET
+			rx_bytes = rx_bytes + excluded.rx_bytes,
+			tx_bytes = tx_bytes + excluded.tx_bytes
+	`, today, nodeID, rxDelta, txDelta)
+	return err
+}
+
+func (s *Storage) GetMonthTrafficMap(ctx context.Context, yearMonth string) (map[int64]int64, error) {
+	if yearMonth == "" {
+		yearMonth = time.Now().UTC().Format("2006-01")
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT client_config_id, COALESCE(SUM(rx_bytes + tx_bytes), 0)
+		FROM peer_traffic_daily
+		WHERE date LIKE ?
+		GROUP BY client_config_id
+	`, yearMonth+"%")
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
+
+	res := make(map[int64]int64)
+	for rows.Next() {
+		var id, total int64
+		if err := rows.Scan(&id, &total); err == nil {
+			res[id] = total
+		}
+	}
+	return res, nil
+}
+
+func (s *Storage) GetNodeMonthTrafficMap(ctx context.Context, yearMonth string) (map[int64]int64, error) {
+	if yearMonth == "" {
+		yearMonth = time.Now().UTC().Format("2006-01")
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT node_id, COALESCE(SUM(rx_bytes + tx_bytes), 0)
+		FROM node_traffic_daily
+		WHERE date LIKE ?
+		GROUP BY node_id
+	`, yearMonth+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res := make(map[int64]int64)
+	for rows.Next() {
+		var id, total int64
+		if err := rows.Scan(&id, &total); err == nil {
+			res[id] = total
+		}
+	}
+	return res, nil
+}
+
+func (s *Storage) GetClientConfigByID(ctx context.Context, id int64) (*models.ClientConfig, error) {
+	var c models.ClientConfig
+	var totalRx, totalTx, handshakeEpoch int64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT c.id, c.user_id, COALESCE(u.username, ''), c.node_id, c.client_name, c.device_name,
+		       COALESCE(c.public_key, ''), COALESCE(c.allocated_ip, ''),
+		       c.total_rx_bytes, c.total_tx_bytes, c.last_handshake_epoch, c.created_at,
+		       COALESCE(n.name, ''), COALESCE(n.type, 'direct'), COALESCE(n.country_code, '')
+		FROM client_configs c
+		LEFT JOIN nodes n ON c.node_id = n.id
+		LEFT JOIN users u ON c.user_id = u.id
+		WHERE c.id = ?
+	`, id).Scan(&c.ID, &c.UserID, &c.Username, &c.NodeID, &c.ClientName, &c.DeviceName,
+		&c.PublicKey, &c.AllocatedIP, &totalRx, &totalTx, &handshakeEpoch, &c.CreatedAt,
+		&c.NodeName, &c.NodeType, &c.NodeCountryCode)
+	if err != nil {
+		return nil, err
+	}
+
+	c.LastHandshakeEpoch = handshakeEpoch
+	c.LastHandshake, c.IsOnline = formatHandshakeTime(handshakeEpoch)
+	c.TotalTrafficBytes = totalRx + totalTx
+	c.TotalTrafficFormatted = formatBytes(c.TotalTrafficBytes)
+
+	monthMap, _ := s.GetMonthTrafficMap(ctx, time.Now().UTC().Format("2006-01"))
+	if mBytes, ok := monthMap[c.ID]; ok {
+		c.MonthTrafficBytes = mBytes
+	} else {
+		c.MonthTrafficBytes = c.TotalTrafficBytes
+	}
+	c.MonthTrafficFormatted = formatBytes(c.MonthTrafficBytes)
+
 	return &c, nil
 }
 
 func (s *Storage) ListClientConfigsByUser(ctx context.Context, userID int64) ([]models.ClientConfig, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT c.id, c.user_id, COALESCE(u.username, ''), c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type, n.country_code
+		SELECT c.id, c.user_id, COALESCE(u.username, ''), c.node_id, c.client_name, c.device_name,
+		       COALESCE(c.public_key, ''), COALESCE(c.allocated_ip, ''),
+		       c.total_rx_bytes, c.total_tx_bytes, c.last_handshake_epoch, c.created_at,
+		       COALESCE(n.name, ''), COALESCE(n.type, 'direct'), COALESCE(n.country_code, '')
 		FROM client_configs c
-		JOIN nodes n ON c.node_id = n.id
+		LEFT JOIN nodes n ON c.node_id = n.id
 		LEFT JOIN users u ON c.user_id = u.id
 		WHERE c.user_id = ?
 		ORDER BY c.id DESC
@@ -556,12 +733,29 @@ func (s *Storage) ListClientConfigsByUser(ctx context.Context, userID int64) ([]
 	}
 	defer rows.Close()
 
+	monthMap, _ := s.GetMonthTrafficMap(ctx, time.Now().UTC().Format("2006-01"))
+
 	list := []models.ClientConfig{}
 	for rows.Next() {
 		var c models.ClientConfig
-		if err := rows.Scan(&c.ID, &c.UserID, &c.Username, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType, &c.NodeCountryCode); err != nil {
+		var totalRx, totalTx, handshakeEpoch int64
+		if err := rows.Scan(&c.ID, &c.UserID, &c.Username, &c.NodeID, &c.ClientName, &c.DeviceName,
+			&c.PublicKey, &c.AllocatedIP, &totalRx, &totalTx, &handshakeEpoch, &c.CreatedAt,
+			&c.NodeName, &c.NodeType, &c.NodeCountryCode); err != nil {
 			return nil, err
 		}
+		c.LastHandshakeEpoch = handshakeEpoch
+		c.LastHandshake, c.IsOnline = formatHandshakeTime(handshakeEpoch)
+		c.TotalTrafficBytes = totalRx + totalTx
+		c.TotalTrafficFormatted = formatBytes(c.TotalTrafficBytes)
+
+		if mBytes, ok := monthMap[c.ID]; ok {
+			c.MonthTrafficBytes = mBytes
+		} else {
+			c.MonthTrafficBytes = c.TotalTrafficBytes
+		}
+		c.MonthTrafficFormatted = formatBytes(c.MonthTrafficBytes)
+
 		list = append(list, c)
 	}
 	return list, nil
@@ -569,9 +763,12 @@ func (s *Storage) ListClientConfigsByUser(ctx context.Context, userID int64) ([]
 
 func (s *Storage) ListAllClientConfigs(ctx context.Context) ([]models.ClientConfig, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT c.id, c.user_id, COALESCE(u.username, ''), c.node_id, c.client_name, c.device_name, c.created_at, n.name, n.type, n.country_code
+		SELECT c.id, c.user_id, COALESCE(u.username, ''), c.node_id, c.client_name, c.device_name,
+		       COALESCE(c.public_key, ''), COALESCE(c.allocated_ip, ''),
+		       c.total_rx_bytes, c.total_tx_bytes, c.last_handshake_epoch, c.created_at,
+		       COALESCE(n.name, ''), COALESCE(n.type, 'direct'), COALESCE(n.country_code, '')
 		FROM client_configs c
-		JOIN nodes n ON c.node_id = n.id
+		LEFT JOIN nodes n ON c.node_id = n.id
 		LEFT JOIN users u ON c.user_id = u.id
 		ORDER BY c.id DESC
 	`)
@@ -580,12 +777,29 @@ func (s *Storage) ListAllClientConfigs(ctx context.Context) ([]models.ClientConf
 	}
 	defer rows.Close()
 
+	monthMap, _ := s.GetMonthTrafficMap(ctx, time.Now().UTC().Format("2006-01"))
+
 	list := []models.ClientConfig{}
 	for rows.Next() {
 		var c models.ClientConfig
-		if err := rows.Scan(&c.ID, &c.UserID, &c.Username, &c.NodeID, &c.ClientName, &c.DeviceName, &c.CreatedAt, &c.NodeName, &c.NodeType, &c.NodeCountryCode); err != nil {
+		var totalRx, totalTx, handshakeEpoch int64
+		if err := rows.Scan(&c.ID, &c.UserID, &c.Username, &c.NodeID, &c.ClientName, &c.DeviceName,
+			&c.PublicKey, &c.AllocatedIP, &totalRx, &totalTx, &handshakeEpoch, &c.CreatedAt,
+			&c.NodeName, &c.NodeType, &c.NodeCountryCode); err != nil {
 			return nil, err
 		}
+		c.LastHandshakeEpoch = handshakeEpoch
+		c.LastHandshake, c.IsOnline = formatHandshakeTime(handshakeEpoch)
+		c.TotalTrafficBytes = totalRx + totalTx
+		c.TotalTrafficFormatted = formatBytes(c.TotalTrafficBytes)
+
+		if mBytes, ok := monthMap[c.ID]; ok {
+			c.MonthTrafficBytes = mBytes
+		} else {
+			c.MonthTrafficBytes = c.TotalTrafficBytes
+		}
+		c.MonthTrafficFormatted = formatBytes(c.MonthTrafficBytes)
+
 		list = append(list, c)
 	}
 	return list, nil
@@ -1237,5 +1451,43 @@ func (s *Storage) GetTelegramChatByChatID(ctx context.Context, chatID int64) (*m
 	return &c, nil
 }
 
+func formatBytes(bytes int64) string {
+	if bytes < 1024 {
+		return fmt.Sprintf("%d B", bytes)
+	} else if bytes < 1024*1024 {
+		return fmt.Sprintf("%.2f KB", float64(bytes)/1024)
+	} else if bytes < 1024*1024*1024 {
+		return fmt.Sprintf("%.2f MB", float64(bytes)/(1024*1024))
+	} else if bytes < 1024*1024*1024*1024 {
+		return fmt.Sprintf("%.2f GB", float64(bytes)/(1024*1024*1024))
+	}
+	return fmt.Sprintf("%.2f TB", float64(bytes)/(1024*1024*1024*1024))
+}
 
-
+func formatHandshakeTime(epoch int64) (string, bool) {
+	if epoch <= 0 {
+		return "Никогда", false
+	}
+	now := time.Now().Unix()
+	diff := now - epoch
+	if diff < 0 {
+		diff = 0
+	}
+	isOnline := diff <= 180
+	if isOnline {
+		if diff <= 10 {
+			return "только что", true
+		}
+		if diff < 60 {
+			return fmt.Sprintf("%d сек назад", diff), true
+		}
+		return fmt.Sprintf("%d мин назад", diff/60), true
+	}
+	if diff < 3600 {
+		return fmt.Sprintf("%d мин назад", diff/60), false
+	}
+	if diff < 86400 {
+		return fmt.Sprintf("%d ч назад", diff/3600), false
+	}
+	return fmt.Sprintf("%d дн назад", diff/86400), false
+}

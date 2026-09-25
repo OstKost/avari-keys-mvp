@@ -227,12 +227,26 @@ func (r *RealRunner) GetClient(ctx context.Context, name string) (*models.Client
 		}
 	}
 
+	var clientPubKey string
+	for _, line := range strings.Split(cleanConfig, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "PrivateKey") {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				if pk, err := derivePubKeyFromPrivateKey(strings.TrimSpace(parts[1])); err == nil {
+					clientPubKey = pk
+				}
+			}
+		}
+	}
+
 	return &models.ClientResponse{
 		Name:      name,
 		Config:    cleanConfig,
 		QRCode:    qrBase64,
 		VPNURI:    vpnURI,
 		VPNQRCode: vpnQRBase64,
+		PublicKey: clientPubKey,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}, nil
 }
@@ -293,11 +307,13 @@ func (r *RealRunner) GetStats(ctx context.Context) (*models.StatsSummaryResponse
 			tokens = strings.Fields(trimmed)
 		}
 
+		var ifaceName string
 		var pubkey, allowedIPs string
 		var handshakeEpoch, rxBytes, txBytes int64
 
 		if len(tokens) >= 9 {
 			// Format: <iface> <pubkey> <psk> <endpoint> <allowed-ips> <handshake> <rx> <tx> <keepalive>
+			ifaceName = tokens[0]
 			pubkey = tokens[1]
 			allowedIPs = tokens[4]
 			handshakeEpoch, _ = strconv.ParseInt(tokens[5], 10, 64)
@@ -305,6 +321,7 @@ func (r *RealRunner) GetStats(ctx context.Context) (*models.StatsSummaryResponse
 			txBytes, _ = strconv.ParseInt(tokens[7], 10, 64)
 		} else if len(tokens) >= 8 {
 			// Format: <pubkey> <psk> <endpoint> <allowed-ips> <handshake> <rx> <tx> <keepalive>
+			ifaceName = "awg0"
 			pubkey = tokens[0]
 			allowedIPs = tokens[3]
 			handshakeEpoch, _ = strconv.ParseInt(tokens[4], 10, 64)
@@ -377,6 +394,9 @@ func (r *RealRunner) GetStats(ctx context.Context) (*models.StatsSummaryResponse
 
 		res.Peers[clientName] = models.PeerStats{
 			ClientName:         clientName,
+			PublicKey:          pubkey,
+			Interface:          ifaceName,
+			AllowedIPs:         allowedIPs,
 			LastHandshake:      lastHandshake,
 			LastHandshakeEpoch: handshakeEpoch,
 			IsOnline:           isOnline,

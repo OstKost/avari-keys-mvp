@@ -145,6 +145,9 @@ func (m *MockRunner) GetStats(ctx context.Context) (*models.StatsSummaryResponse
 		handshakeEpoch := now - int64(idx*30) // online within last 30-90s
 		peers[name] = models.PeerStats{
 			ClientName:         name,
+			PublicKey:          fmt.Sprintf("mockPubKey-%s", name),
+			Interface:          "awg0",
+			AllowedIPs:         fmt.Sprintf("10.7.0.%d/32", idx+1),
 			LastHandshake:      fmt.Sprintf("%d сек назад", idx*30),
 			LastHandshakeEpoch: handshakeEpoch,
 			IsOnline:           true,

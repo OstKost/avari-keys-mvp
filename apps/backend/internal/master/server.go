@@ -377,42 +377,11 @@ func (s *Server) handleListActiveNodes(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListUserKeys(w http.ResponseWriter, r *http.Request) {
 	claims, _ := auth.GetUserFromContext(r.Context())
+
 	keys, err := s.storage.ListClientConfigsByUser(r.Context(), claims.UserID)
 	if err != nil {
 		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
-	}
-
-	// Fetch node stats to enrich traffic and handshake for user devices
-	nodes, _ := s.storage.ListNodes(r.Context())
-	statsMap := make(map[int64]*models.StatsSummaryResponse)
-	for _, n := range nodes {
-		slaveCli := client.NewSlaveClient(n.APIURL, n.APIKey)
-		stats, sErr := slaveCli.GetStats(r.Context())
-		if sErr == nil && stats != nil {
-			statsMap[n.ID] = stats
-		}
-	}
-
-	for i := range keys {
-		if stats, ok := statsMap[keys[i].NodeID]; ok && stats.Peers != nil {
-			if p, found := stats.Peers[keys[i].ClientName]; found {
-				keys[i].LastHandshake = p.LastHandshake
-				keys[i].TotalTrafficBytes = p.RxBytes + p.TxBytes
-				keys[i].MonthTrafficBytes = p.MonthBytes
-				keys[i].TotalTrafficFormatted = formatBytes(keys[i].TotalTrafficBytes)
-				keys[i].MonthTrafficFormatted = formatBytes(keys[i].MonthTrafficBytes)
-			}
-		}
-		if keys[i].LastHandshake == "" {
-			keys[i].LastHandshake = "Никогда"
-		}
-		if keys[i].TotalTrafficFormatted == "" {
-			keys[i].TotalTrafficFormatted = formatBytes(keys[i].TotalTrafficBytes)
-		}
-		if keys[i].MonthTrafficFormatted == "" {
-			keys[i].MonthTrafficFormatted = formatBytes(keys[i].MonthTrafficBytes)
-		}
 	}
 
 	s.writeJSON(w, http.StatusOK, keys)
@@ -455,8 +424,24 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Save record in DB
-	keyRecord, err := s.storage.CreateClientConfig(r.Context(), claims.UserID, node.ID, clientName, req.DeviceName)
+	// Extract allocated IP from config
+	allocIP := ""
+	for _, l := range strings.Split(slaveResp.Config, "\n") {
+		l = strings.TrimSpace(l)
+		if strings.HasPrefix(l, "Address") {
+			parts := strings.SplitN(l, "=", 2)
+			if len(parts) == 2 {
+				ips := strings.Split(parts[1], ",")
+				if len(ips) > 0 {
+					allocIP = strings.TrimSpace(strings.Split(strings.TrimSpace(ips[0]), "/")[0])
+				}
+			}
+			break
+		}
+	}
+
+	// Save record in DB with PublicKey and AllocatedIP
+	keyRecord, err := s.storage.CreateClientConfig(r.Context(), claims.UserID, node.ID, clientName, req.DeviceName, slaveResp.PublicKey, allocIP)
 	if err != nil {
 		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -1043,17 +1028,6 @@ func (s *Server) handleAdminListAllKeys(w http.ResponseWriter, r *http.Request) 
 		filterNodeID, _ = strconv.ParseInt(nodeIDStr, 10, 64)
 	}
 
-	// Fetch node stats cache to enrich traffic and handshake
-	nodes, _ := s.storage.ListNodes(r.Context())
-	statsMap := make(map[int64]*models.StatsSummaryResponse)
-	for _, n := range nodes {
-		slaveCli := client.NewSlaveClient(n.APIURL, n.APIKey)
-		stats, sErr := slaveCli.GetStats(r.Context())
-		if sErr == nil && stats != nil {
-			statsMap[n.ID] = stats
-		}
-	}
-
 	var filtered []models.ClientConfig
 	for _, k := range keys {
 		if filterNodeID > 0 && k.NodeID != filterNodeID {
@@ -1068,27 +1042,6 @@ func (s *Server) handleAdminListAllKeys(w http.ResponseWriter, r *http.Request) 
 				continue
 			}
 		}
-
-		// Enrich stats if available
-		if stats, ok := statsMap[k.NodeID]; ok && stats.Peers != nil {
-			if p, found := stats.Peers[k.ClientName]; found {
-				k.LastHandshake = p.LastHandshake
-				k.TotalTrafficBytes = p.RxBytes + p.TxBytes
-				k.MonthTrafficBytes = p.MonthBytes
-				k.TotalTrafficFormatted = formatBytes(k.TotalTrafficBytes)
-				k.MonthTrafficFormatted = formatBytes(k.MonthTrafficBytes)
-			}
-		}
-		if k.LastHandshake == "" {
-			k.LastHandshake = "Никогда"
-		}
-		if k.TotalTrafficFormatted == "" {
-			k.TotalTrafficFormatted = formatBytes(k.TotalTrafficBytes)
-		}
-		if k.MonthTrafficFormatted == "" {
-			k.MonthTrafficFormatted = formatBytes(k.MonthTrafficBytes)
-		}
-
 		filtered = append(filtered, k)
 	}
 
@@ -1273,212 +1226,49 @@ func (s *Server) handleGetDashboardStats(w http.ResponseWriter, r *http.Request)
 	claims, _ := auth.GetUserFromContext(r.Context())
 	isFresh := r.URL.Query().Get("fresh") == "true" || r.URL.Query().Get("force") == "true"
 
-	if !isFresh {
-		s.dashCache.mu.RLock()
-		if s.dashCache.data != nil && time.Since(s.dashCache.cachedAt) < dashboardCacheTTL {
-			respCopy := *s.dashCache.data
-			if claims != nil && claims.Role == models.RoleAdmin {
-				respCopy.PendingUsers = s.dashCache.pendingUsers
+	if isFresh && s.healthChecker != nil {
+		s.healthChecker.CollectTelemetry(r.Context())
+	}
+
+	var stats *models.DashboardStatsResponse
+	if s.healthChecker != nil {
+		stats = s.healthChecker.GetLatestDashboardStats(r.Context())
+	}
+
+	if stats == nil {
+		users, _ := s.storage.ListUsers(r.Context())
+		allConfigs, _ := s.storage.ListAllClientConfigs(r.Context())
+		nodes, _ := s.storage.ListNodes(r.Context())
+		activeUsers := 0
+		pendingUsers := 0
+		for _, u := range users {
+			if u.IsActive {
+				activeUsers++
 			} else {
-				respCopy.PendingUsers = 0
-			}
-			s.dashCache.mu.RUnlock()
-			s.writeJSON(w, http.StatusOK, respCopy)
-			return
-		}
-		s.dashCache.mu.RUnlock()
-	}
-
-	// 1. Users metrics
-	users, err := s.storage.ListUsers(r.Context())
-	if err != nil {
-		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	totalUsers := len(users)
-	activeUsers := 0
-	pendingUsers := 0
-	for _, u := range users {
-		if u.IsActive {
-			activeUsers++
-		} else {
-			pendingUsers++
-		}
-	}
-
-	// 2. Client configs (total keys)
-	allConfigs, err := s.storage.ListAllClientConfigs(r.Context())
-	if err != nil {
-		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	totalKeys := len(allConfigs)
-
-	nodeKeyCountMap := make(map[int64]int)
-	cascadeKeyCount := 0
-	directKeyCount := 0
-	for _, cfg := range allConfigs {
-		nodeKeyCountMap[cfg.NodeID]++
-		if cfg.NodeType == "cascade" {
-			cascadeKeyCount++
-		} else {
-			directKeyCount++
-		}
-	}
-
-	// 3. Nodes stats & latency
-	nodes, err := s.storage.ListNodes(r.Context())
-	if err != nil {
-		s.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	totalNodes := len(nodes)
-	onlineNodes := 0
-	var totalLatencySum int64
-	var latencyCount int64
-
-	var totalTrafficBytes int64
-	var monthTrafficBytes int64
-	var cascadeTrafficBytes int64
-	var directTrafficBytes int64
-	activeDevicesOnline := 0
-
-	nodeDashboardList := []models.NodeDashboardInfo{}
-
-	for _, n := range nodes {
-		slaveCli := client.NewSlaveClient(n.APIURL, n.APIKey)
-		start := time.Now()
-		health, hErr := slaveCli.CheckHealth(r.Context())
-		latency := time.Since(start).Milliseconds()
-
-		isOnline := hErr == nil && health != nil && health.Status == "ok"
-		if isOnline {
-			onlineNodes++
-			totalLatencySum += latency
-			latencyCount++
-		} else {
-			latency = 0
-		}
-
-		var nodePeerCount int
-		var nodeTrafficBytes int64
-
-		stats, sErr := slaveCli.GetStats(r.Context())
-		if sErr == nil && stats != nil {
-			if stats.Peers != nil && len(stats.Peers) > 0 {
-				nodePeerCount = len(stats.Peers)
-				for _, peer := range stats.Peers {
-					peerTotal := peer.RxBytes + peer.TxBytes
-					nodeTrafficBytes += peerTotal
-					totalTrafficBytes += peerTotal
-					monthTrafficBytes += peer.MonthBytes
-
-					if n.Type == "cascade" {
-						cascadeTrafficBytes += peerTotal
-					} else {
-						directTrafficBytes += peerTotal
-					}
-
-					// Check active handshake (within 3 minutes / 180s)
-					if peer.IsOnline || (peer.LastHandshakeEpoch > 0 && (time.Now().Unix()-peer.LastHandshakeEpoch) <= 180) {
-						activeDevicesOnline++
-					}
-				}
-			} else if stats.TotalRx+stats.TotalTx > 0 {
-				nodeTrafficBytes = stats.TotalRx + stats.TotalTx
-				totalTrafficBytes += nodeTrafficBytes
-				monthTrafficBytes += nodeTrafficBytes
-				if n.Type == "cascade" {
-					cascadeTrafficBytes += nodeTrafficBytes
-				} else {
-					directTrafficBytes += nodeTrafficBytes
-				}
+				pendingUsers++
 			}
 		}
 
-		// Ensure peer count displays at least configured keys count for this node
-		if dbCount, ok := nodeKeyCountMap[n.ID]; ok && dbCount > nodePeerCount {
-			nodePeerCount = dbCount
+		stats = &models.DashboardStatsResponse{
+			TotalUsers:            len(users),
+			ActiveUsers:           activeUsers,
+			PendingUsers:          pendingUsers,
+			TotalKeys:             len(allConfigs),
+			TotalNodes:            len(nodes),
+			OnlineNodes:           len(nodes),
+			SystemStatus:          "operational",
+			GeneratedAt:           time.Now().UTC(),
+			TotalTrafficFormatted: "0 B",
+			MonthTrafficFormatted: "0 B",
 		}
-
-		nodeDashboardList = append(nodeDashboardList, models.NodeDashboardInfo{
-			ID:                    n.ID,
-			Name:                  n.Name,
-			Type:                  n.Type,
-			CountryCode:           n.CountryCode,
-			Online:                isOnline,
-			LatencyMs:             latency,
-			PeerCount:             nodePeerCount,
-			TotalTrafficFormatted: formatBytes(nodeTrafficBytes),
-		})
 	}
 
-	var avgLatencyMs int64
-	if latencyCount > 0 {
-		avgLatencyMs = totalLatencySum / latencyCount
+	respCopy := *stats
+	if claims == nil || claims.Role != models.RoleAdmin {
+		respCopy.PendingUsers = 0
 	}
 
-	// Calculate topology breakdown percentages
-	cascadePct := 50
-	directPct := 50
-	combinedTraffic := cascadeTrafficBytes + directTrafficBytes
-	if combinedTraffic > 0 {
-		cascadePct = int((cascadeTrafficBytes * 100) / combinedTraffic)
-		directPct = 100 - cascadePct
-	} else if (cascadeKeyCount + directKeyCount) > 0 {
-		cascadePct = int((cascadeKeyCount * 100) / (cascadeKeyCount + directKeyCount))
-		directPct = 100 - cascadePct
-	}
-
-	systemStatus := "operational"
-	if totalNodes > 0 && onlineNodes == 0 {
-		systemStatus = "outage"
-	} else if totalNodes > 0 && onlineNodes < totalNodes {
-		systemStatus = "degraded"
-	}
-
-	resp := models.DashboardStatsResponse{
-		TotalUsers:            totalUsers,
-		ActiveUsers:           activeUsers,
-		TotalKeys:             totalKeys,
-		ActiveDevicesOnline:   activeDevicesOnline,
-		TotalTrafficBytes:     totalTrafficBytes,
-		MonthTrafficBytes:     monthTrafficBytes,
-		TotalTrafficFormatted: formatBytes(totalTrafficBytes),
-		MonthTrafficFormatted: formatBytes(monthTrafficBytes),
-		TotalNodes:            totalNodes,
-		OnlineNodes:           onlineNodes,
-		AvgLatencyMs:          avgLatencyMs,
-		SystemStatus:          systemStatus,
-		TopologyBreakdown: models.TopologyTrafficBreakdown{
-			CascadeTrafficBytes:     cascadeTrafficBytes,
-			DirectTrafficBytes:      directTrafficBytes,
-			CascadeTrafficFormatted: formatBytes(cascadeTrafficBytes),
-			DirectTrafficFormatted:  formatBytes(directTrafficBytes),
-			CascadePercentage:       cascadePct,
-			DirectPercentage:        directPct,
-		},
-		Nodes:       nodeDashboardList,
-		GeneratedAt: time.Now(),
-	}
-
-	// Save to in-memory cache
-	s.dashCache.mu.Lock()
-	s.dashCache.data = &resp
-	s.dashCache.pendingUsers = pendingUsers
-	s.dashCache.cachedAt = resp.GeneratedAt
-	s.dashCache.mu.Unlock()
-
-	// Admin-only insights
-	if claims != nil && claims.Role == models.RoleAdmin {
-		resp.PendingUsers = pendingUsers
-	} else {
-		resp.PendingUsers = 0
-	}
-
-	s.writeJSON(w, http.StatusOK, resp)
+	s.writeJSON(w, http.StatusOK, respCopy)
 }
 
 // Billing Handlers
