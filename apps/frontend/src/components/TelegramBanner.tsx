@@ -55,10 +55,12 @@ export function TelegramBanner({ currentUser, onStatusChange }: TelegramBannerPr
   };
 
   const handleCopyCommand = () => {
-    navigator.clipboard.writeText(`/link ${currentUser.username}`);
-    setCopied(true);
-    toast.success(`Скопировано: /link ${currentUser.username}`);
-    setTimeout(() => setCopied(false), 2000);
+    if (status?.deep_link) {
+      navigator.clipboard.writeText(status.deep_link);
+      setCopied(true);
+      toast.success('Персональная ссылка на бота скопирована!');
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleCheckConnection = async () => {
@@ -181,13 +183,13 @@ export function TelegramBanner({ currentUser, onStatusChange }: TelegramBannerPr
             <ExternalLink className="w-3 h-3" />
           </a>
 
-          <Tooltip content={`Скопировать команду /link ${currentUser.username}`}>
+          <Tooltip content="Скопировать персональную ссылку для привязки">
             <button
               onClick={handleCopyCommand}
               className="flex items-center space-x-1.5 px-3 py-2.5 rounded-xl border border-[#1C3945] bg-[#0D222C] hover:bg-[#102833] hover:border-[#D9B96E]/40 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition cursor-pointer"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Скопировано' : '/link'}</span>
+              <span>{copied ? 'Скопировано' : 'Ссылка'}</span>
             </button>
           </Tooltip>
 
