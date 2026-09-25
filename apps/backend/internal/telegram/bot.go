@@ -19,6 +19,7 @@ import (
 
 // Bot manages Telegram notifications and command interaction.
 type Bot struct {
+	apiURL                   string
 	token                    string
 	botUsername              string
 	adminSecret              string
@@ -41,6 +42,7 @@ type Bot struct {
 
 // Config holds Telegram bot parameters.
 type Config struct {
+	APIURL                   string
 	Token                    string
 	BotUsername              string
 	AdminSecret              string
@@ -57,7 +59,13 @@ type Config struct {
 
 // NewBot creates a new Telegram Bot instance.
 func NewBot(cfg Config) *Bot {
+	apiURL := cfg.APIURL
+	if apiURL == "" {
+		apiURL = "https://api.telegram.org"
+	}
+
 	bot := &Bot{
+		apiURL:                   apiURL,
 		token:                    cfg.Token,
 		botUsername:              cfg.BotUsername,
 		adminSecret:              cfg.AdminSecret,
@@ -124,7 +132,14 @@ func (b *Bot) ValidateToken(token string) (username string, firstName string, er
 		return "", "", fmt.Errorf("token cannot be empty")
 	}
 
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/getMe", token)
+	b.mu.RLock()
+	apiBase := b.apiURL
+	b.mu.RUnlock()
+	if apiBase == "" {
+		apiBase = "https://api.telegram.org"
+	}
+
+	url := fmt.Sprintf("%s/bot%s/getMe", apiBase, token)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return "", "", err
@@ -276,10 +291,14 @@ func (b *Bot) pollUpdates(ctx context.Context) {
 		b.mu.RLock()
 		token := b.token
 		stopCh := b.stopChan
+		apiBase := b.apiURL
 		b.mu.RUnlock()
 
 		if token == "" {
 			return
+		}
+		if apiBase == "" {
+			apiBase = "https://api.telegram.org"
 		}
 
 		select {
@@ -290,7 +309,7 @@ func (b *Bot) pollUpdates(ctx context.Context) {
 		default:
 		}
 
-		url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?timeout=25&offset=%d", token, offset)
+		url := fmt.Sprintf("%s/bot%s/getUpdates?timeout=25&offset=%d", apiBase, token, offset)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
 			time.Sleep(3 * time.Second)
@@ -359,59 +378,85 @@ func (b *Bot) handleIncomingMessage(ctx context.Context, chatID int64, from *str
 	botUsername := b.botUsername
 	b.mu.RUnlock()
 
-	switch command {
-	case "/start":
-		if len(parts) > 1 {
-			param := parts[1]
-			if adminSecret != "" && param == adminSecret {
-				b.registerChat(ctx, chatID, nil, username, firstName, true)
-				_ = b.SendMessage(chatID, "✨ <b>Добро пожаловать в Avari Keys Alerts!</b>\n\nВаш чат успешно привязан с правами <b>Администратора</b>.\nВы будете получать оповещения о доступности серверов и событиях системы.\n\nИспользуйте /status для проверки серверов или /help для списка команд.", "HTML")
-				return
-			}
+	// 1. Check if this is a /start command with an individual link token or admin secret parameter
+	if command == "/start" && len(parts) > 1 {
+		param := parts[1]
 
-			// Check user link token e.g. link_username or bind_username or user_username
-			if strings.HasPrefix(param, "link_") || strings.HasPrefix(param, "bind_") || strings.HasPrefix(param, "user_") {
-				targetUser := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(param, "link_"), "bind_"), "user_")
-				linked := b.linkUserByUsername(ctx, chatID, username, firstName, targetUser)
-				if linked != nil {
-					_ = b.SendMessage(chatID, fmt.Sprintf("✨ <b>Добро пожаловать в Avari Keys!</b>\n\nВаш чат успешно привязан к аккаунту <b>%s</b>.\nВы будете получать уведомления о состоянии ключей и напоминания о взносах.\n\nИспользуйте /billing для проверки статуса взноса или /status для проверки сети.", linked.Username), "HTML")
-					return
-				}
+		// Admin secret matching
+		if adminSecret != "" && param == adminSecret {
+			b.registerChat(ctx, chatID, nil, username, firstName, true)
+			_ = b.SendMessage(chatID, "✨ <b>Добро пожаловать в Avari Keys Alerts!</b>\n\nВаш чат успешно привязан с правами <b>Администратора</b>.\nВы будете получать оповещения о доступности серверов и событиях системы.\n\nИспользуйте /status для проверки серверов или /help для списка команд.", "HTML")
+			return
+		}
+
+		// Individual user link token matching
+		cleanToken := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(param, "link_"), "bind_"), "user_")
+		if b.storage != nil && cleanToken != "" {
+			user, err := b.storage.GetUserByTelegramLinkToken(ctx, cleanToken)
+			if err == nil && user != nil && user.IsActive {
+				isAdmin := user.Role == models.RoleAdmin
+				_ = b.storage.SaveTelegramChat(ctx, models.TelegramChat{
+					ChatID:        chatID,
+					UserID:        &user.ID,
+					Username:      username,
+					FirstName:     firstName,
+					IsAdmin:       isAdmin,
+					AlertsEnabled: true,
+				})
+				_ = b.storage.ConsumeTelegramLinkToken(ctx, cleanToken)
+
+				msg := fmt.Sprintf("✨ <b>Добро пожаловать в Avari Keys!</b>\n\nВаш чат успешно привязан к аккаунту <b>%s</b>.\nВы будете получать уведомления о состоянии ключей и напоминания о взносах.\n\nИспользуйте /billing для проверки статуса взноса или /status для проверки сети.", user.Username)
+				_ = b.SendMessage(chatID, msg, "HTML")
+				return
 			}
 		}
 
-		b.registerChat(ctx, chatID, nil, username, firstName, false)
+		// Invalid or expired token -> respond with decoy for unknown users
+		_ = b.SendMessage(chatID, "Привет! Как дела?", "")
+		return
+	}
+
+	// 2. Check if the chat is already linked to an active user or admin
+	var currentChat *models.TelegramChat
+	if b.storage != nil {
+		currentChat, _ = b.storage.GetTelegramChatByChatID(ctx, chatID)
+	}
+
+	isAuthorized := false
+	if currentChat != nil {
+		if currentChat.IsAdmin {
+			isAuthorized = true
+		} else if currentChat.UserID != nil && b.storage != nil {
+			users, err := b.storage.ListUsers(ctx)
+			if err == nil {
+				for _, u := range users {
+					if u.ID == *currentChat.UserID && u.IsActive {
+						isAuthorized = true
+						break
+					}
+				}
+			}
+		}
+	}
+
+	// 3. If user is unknown / not linked: send simple polite decoy message
+	if !isAuthorized {
+		_ = b.SendMessage(chatID, "Привет! Как дела?", "")
+		return
+	}
+
+	// 4. Authorized user command handling
+	switch command {
+	case "/start":
 		msg := "🌿 <b>Avari Keys Bot (@" + botUsername + ")</b>\n\n" +
 			"Бот активен и готов присылать мгновенные уведомления о состоянии серверов и напоминания о кооперативных взносах.\n\n" +
 			"<b>Доступные команды:</b>\n" +
 			"💳 /billing — Статус взносов, расчет и реквизиты СБП\n" +
-			"🔗 /link &lt;логин&gt; — Привязать Telegram к вашему аккаунту\n" +
 			"📊 /status — Состояние и пинг всех серверов сети\n" +
 			"🌐 /nodes — Список серверов и маршрутизация\n" +
 			"🔔 /test — Проверить доставку оповещения\n" +
 			"❓ /help — Справка по командам"
 		_ = b.SendMessage(chatID, msg, "HTML")
-
-	case "/bind", "/link":
-		if len(parts) > 1 {
-			param := parts[1]
-			if adminSecret != "" && param == adminSecret {
-				b.registerChat(ctx, chatID, nil, username, firstName, true)
-				_ = b.SendMessage(chatID, "✅ <b>Успешно!</b> Чат привязан к системе оповещений администратора.", "HTML")
-			} else {
-				linked := b.linkUserByUsername(ctx, chatID, username, firstName, param)
-				if linked != nil {
-					_ = b.SendMessage(chatID, fmt.Sprintf("✅ <b>Успешно!</b> Чат привязан к аккаунту <b>%s</b>. Введите /billing для просмотра статуса взносов.", linked.Username), "HTML")
-				} else {
-					_ = b.SendMessage(chatID, fmt.Sprintf("❌ Пользователь «%s» не найден. Укажите точный логин: <code>/link &lt;username&gt;</code>", param), "HTML")
-				}
-			}
-		} else if adminSecret == "" {
-			b.registerChat(ctx, chatID, nil, username, firstName, true)
-			_ = b.SendMessage(chatID, "✅ Чат зарегистрирован в списке получателей уведомлений.", "HTML")
-		} else {
-			_ = b.SendMessage(chatID, "ℹ️ Для привязки аккаунта отправьте: <code>/link &lt;ваш_логин&gt;</code>", "HTML")
-		}
 
 	case "/billing", "/dues":
 		b.handleBillingCommand(ctx, chatID)
@@ -428,7 +473,6 @@ func (b *Bot) handleIncomingMessage(ctx context.Context, chatID int64, from *str
 	case "/help":
 		msg := "📖 <b>Справка Avari Keys Bot</b>\n\n" +
 			"• <b>/billing</b> — Статус взносов, расчет по ключам и реквизиты СБП\n" +
-			"• <b>/link &lt;логин&gt;</b> — Привязать Telegram к вашему аккаунту\n" +
 			"• <b>/status</b> — Текущий статус серверов и задержка (пинг)\n" +
 			"• <b>/nodes</b> — Список узлов и их конфигурация\n" +
 			"• <b>/test</b> — Тестовое оповещение о доставке\n" +
@@ -452,37 +496,6 @@ func (b *Bot) registerChat(ctx context.Context, chatID int64, userID *int64, use
 		IsAdmin:       isAdmin,
 		AlertsEnabled: true,
 	})
-}
-
-func (b *Bot) linkUserByUsername(ctx context.Context, chatID int64, tgUsername, tgFirstName, username string) *models.UserPublic {
-	if b.storage == nil {
-		return nil
-	}
-	users, err := b.storage.ListUsers(ctx)
-	if err != nil {
-		return nil
-	}
-	var target *models.UserPublic
-	for _, u := range users {
-		if strings.EqualFold(u.Username, strings.TrimSpace(username)) {
-			target = &u
-			break
-		}
-	}
-	if target == nil {
-		return nil
-	}
-
-	isAdmin := target.Role == models.RoleAdmin
-	_ = b.storage.SaveTelegramChat(ctx, models.TelegramChat{
-		ChatID:        chatID,
-		UserID:        &target.ID,
-		Username:      tgUsername,
-		FirstName:     tgFirstName,
-		IsAdmin:       isAdmin,
-		AlertsEnabled: true,
-	})
-	return target
 }
 
 func (b *Bot) handleBillingCommand(ctx context.Context, chatID int64) {
@@ -643,15 +656,41 @@ func (b *Bot) handleNodesCommand(ctx context.Context, chatID int64) {
 	_ = b.SendMessage(chatID, sb.String(), "HTML")
 }
 
+// ProcessMessage handles an incoming chat message (useful for direct testing and webhook integrations).
+func (b *Bot) ProcessMessage(ctx context.Context, chatID int64, fromUsername, fromFirstName, text string) {
+	var from *struct {
+		ID        int64  `json:"id"`
+		IsBot     bool   `json:"is_bot"`
+		FirstName string `json:"first_name"`
+		Username  string `json:"username"`
+	}
+	if fromUsername != "" || fromFirstName != "" {
+		from = &struct {
+			ID        int64  `json:"id"`
+			IsBot     bool   `json:"is_bot"`
+			FirstName string `json:"first_name"`
+			Username  string `json:"username"`
+		}{
+			FirstName: fromFirstName,
+			Username:  fromUsername,
+		}
+	}
+	b.handleIncomingMessage(ctx, chatID, from, text)
+}
+
 // SendMessage sends an individual text message via Telegram API.
 func (b *Bot) SendMessage(chatID int64, text string, parseMode string) error {
 	b.mu.RLock()
 	token := b.token
 	enabled := b.enabled
+	apiBase := b.apiURL
 	b.mu.RUnlock()
 
 	if !enabled || token == "" {
 		return fmt.Errorf("telegram bot is not configured or disabled")
+	}
+	if apiBase == "" {
+		apiBase = "https://api.telegram.org"
 	}
 
 	payload := map[string]any{
@@ -667,7 +706,7 @@ func (b *Bot) SendMessage(chatID int64, text string, parseMode string) error {
 		return err
 	}
 
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
+	url := fmt.Sprintf("%s/bot%s/sendMessage", apiBase, token)
 	resp, err := b.httpClient.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("failed to send telegram message: %w", err)

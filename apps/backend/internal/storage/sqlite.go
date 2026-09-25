@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -142,11 +143,19 @@ func (s *Storage) migrate() error {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
+	CREATE TABLE IF NOT EXISTS telegram_link_tokens (
+		token TEXT PRIMARY KEY,
+		user_id INTEGER NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 	CREATE INDEX IF NOT EXISTS idx_audit_logs_category ON audit_logs(category);
 	CREATE INDEX IF NOT EXISTS idx_billing_records_user_id ON billing_records(user_id);
 	CREATE INDEX IF NOT EXISTS idx_billing_records_created_at ON billing_records(created_at);
+	CREATE INDEX IF NOT EXISTS idx_telegram_link_tokens_user_id ON telegram_link_tokens(user_id);
 	`
 	if _, err := s.db.Exec(schema); err != nil {
 		return err
@@ -1143,6 +1152,89 @@ func (s *Storage) UpdateTelegramSettings(ctx context.Context, settings models.Te
 	}
 
 	return &settings, nil
+}
+
+// GetOrCreateTelegramLinkToken retrieves an existing link token for a user or generates a new one.
+func (s *Storage) GetOrCreateTelegramLinkToken(ctx context.Context, userID int64) (string, error) {
+	var token string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT token FROM telegram_link_tokens
+		WHERE user_id = ?
+		ORDER BY created_at DESC LIMIT 1
+	`, userID).Scan(&token)
+	if err == nil && token != "" {
+		return token, nil
+	}
+
+	return s.GenerateTelegramLinkToken(ctx, userID)
+}
+
+// GenerateTelegramLinkToken creates a new unique link token for a user.
+func (s *Storage) GenerateTelegramLinkToken(ctx context.Context, userID int64) (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("failed to generate random token: %w", err)
+	}
+	token := hex.EncodeToString(b)
+
+	// Clean any previous tokens for this user
+	_, _ = s.db.ExecContext(ctx, `DELETE FROM telegram_link_tokens WHERE user_id = ?`, userID)
+
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO telegram_link_tokens (token, user_id, created_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP)
+	`, token, userID)
+	if err != nil {
+		return "", fmt.Errorf("failed to save telegram link token: %w", err)
+	}
+
+	return token, nil
+}
+
+// GetUserByTelegramLinkToken finds an active user by telegram link token.
+func (s *Storage) GetUserByTelegramLinkToken(ctx context.Context, token string) (*models.User, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil, errors.New("empty token")
+	}
+
+	var u models.User
+	err := s.db.QueryRowContext(ctx, `
+		SELECT u.id, u.username, u.password_hash, u.role, u.is_active, u.created_at
+		FROM telegram_link_tokens t
+		JOIN users u ON u.id = t.user_id
+		WHERE t.token = ? AND u.is_active = 1
+		LIMIT 1
+	`, token).Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &u.IsActive, &u.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+// ConsumeTelegramLinkToken deletes a used link token.
+func (s *Storage) ConsumeTelegramLinkToken(ctx context.Context, token string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM telegram_link_tokens WHERE token = ?`, strings.TrimSpace(token))
+	return err
+}
+
+// GetTelegramChatByChatID retrieves a chat by its Telegram chat ID.
+func (s *Storage) GetTelegramChatByChatID(ctx context.Context, chatID int64) (*models.TelegramChat, error) {
+	var c models.TelegramChat
+	var uid sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT chat_id, user_id, username, first_name, is_admin, alerts_enabled, created_at
+		FROM telegram_chats
+		WHERE chat_id = ?
+		LIMIT 1
+	`, chatID).Scan(&c.ChatID, &uid, &c.Username, &c.FirstName, &c.IsAdmin, &c.AlertsEnabled, &c.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if uid.Valid {
+		c.UserID = &uid.Int64
+	}
+	return &c, nil
 }
 
 

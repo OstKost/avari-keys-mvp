@@ -396,5 +396,76 @@ func TestTelegramSettingsStorage(t *testing.T) {
 	}
 }
 
+func TestTelegramLinkTokensStorage(t *testing.T) {
+	store, cleanup := createTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := store.CreateUser(ctx, "teleuser", "pass123456")
+	if err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// 1. Initially user is not active, link token lookup should return error
+	token, err := store.GetOrCreateTelegramLinkToken(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("failed to get/create token: %v", err)
+	}
+	if token == "" {
+		t.Fatalf("expected non-empty token")
+	}
+
+	_, err = store.GetUserByTelegramLinkToken(ctx, token)
+	if err == nil {
+		t.Fatalf("expected error for inactive user token lookup")
+	}
+
+	// 2. Activate user
+	if err := store.SetUserActive(ctx, user.ID, true); err != nil {
+		t.Fatalf("failed to activate user: %v", err)
+	}
+
+	foundUser, err := store.GetUserByTelegramLinkToken(ctx, token)
+	if err != nil {
+		t.Fatalf("failed to find user by token: %v", err)
+	}
+	if foundUser.ID != user.ID || foundUser.Username != "teleuser" {
+		t.Fatalf("unexpected found user: %+v", foundUser)
+	}
+
+	// 3. Consume token
+	if err := store.ConsumeTelegramLinkToken(ctx, token); err != nil {
+		t.Fatalf("failed to consume token: %v", err)
+	}
+
+	_, err = store.GetUserByTelegramLinkToken(ctx, token)
+	if err == nil {
+		t.Fatalf("expected error after consuming token")
+	}
+
+	// 4. Test GetTelegramChatByChatID
+	chat := models.TelegramChat{
+		ChatID:        987654321,
+		UserID:        &user.ID,
+		Username:      "tguser99",
+		FirstName:     "Tele",
+		IsAdmin:       false,
+		AlertsEnabled: true,
+	}
+	if err := store.SaveTelegramChat(ctx, chat); err != nil {
+		t.Fatalf("failed to save telegram chat: %v", err)
+	}
+
+	fetchedChat, err := store.GetTelegramChatByChatID(ctx, 987654321)
+	if err != nil {
+		t.Fatalf("failed to get telegram chat by chat id: %v", err)
+	}
+	if fetchedChat.ChatID != 987654321 || *fetchedChat.UserID != user.ID || fetchedChat.Username != "tguser99" {
+		t.Fatalf("unexpected fetched chat: %+v", fetchedChat)
+	}
+}
+
 
 

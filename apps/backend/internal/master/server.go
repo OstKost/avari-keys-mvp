@@ -1770,7 +1770,8 @@ func (s *Server) handleGetUserTelegramStatus(w http.ResponseWriter, r *http.Requ
 		alertsEnabled = chat.AlertsEnabled
 	}
 
-	deepLink := fmt.Sprintf("https://t.me/%s?start=link_%s", botUsername, claims.Username)
+	token, _ := s.storage.GetOrCreateTelegramLinkToken(r.Context(), claims.UserID)
+	deepLink := fmt.Sprintf("https://t.me/%s?start=link_%s", botUsername, token)
 
 	s.writeJSON(w, http.StatusOK, models.UserTelegramStatusResponse{
 		BotUsername:      botUsername,
