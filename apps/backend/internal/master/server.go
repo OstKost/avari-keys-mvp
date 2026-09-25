@@ -39,6 +39,7 @@ type Config struct {
 	TelegramAdminChatID string
 	TelegramAdminSecret string
 	HealthCheckInterval time.Duration
+	HealthCheckTimeout  time.Duration
 }
 
 // Server is the Master Backend API server.
@@ -119,6 +120,7 @@ func NewServer(cfg Config, s *storage.Storage) *Server {
 		Storage:     s,
 		Bot:         srv.telegramBot,
 		Interval:    cfg.HealthCheckInterval,
+		Timeout:     cfg.HealthCheckTimeout,
 		LogActivity: func(category models.AuditLogCategory, action string, details string) {
 			_ = s.CreateAuditLog(context.Background(), &models.AuditLog{
 				Username:  "system_monitor",

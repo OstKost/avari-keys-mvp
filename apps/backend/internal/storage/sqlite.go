@@ -173,17 +173,6 @@ func (s *Storage) migrate() error {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
-
-	CREATE INDEX IF NOT EXISTS idx_client_configs_pubkey ON client_configs(public_key);
-	CREATE INDEX IF NOT EXISTS idx_client_configs_node_id ON client_configs(node_id);
-	CREATE INDEX IF NOT EXISTS idx_peer_traffic_daily_date ON peer_traffic_daily(date);
-	CREATE INDEX IF NOT EXISTS idx_node_traffic_daily_date ON node_traffic_daily(date);
-	CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
-	CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
-	CREATE INDEX IF NOT EXISTS idx_audit_logs_category ON audit_logs(category);
-	CREATE INDEX IF NOT EXISTS idx_billing_records_user_id ON billing_records(user_id);
-	CREATE INDEX IF NOT EXISTS idx_billing_records_created_at ON billing_records(created_at);
-	CREATE INDEX IF NOT EXISTS idx_telegram_link_tokens_user_id ON telegram_link_tokens(user_id);
 	`
 	if _, err := s.db.Exec(schema); err != nil {
 		return err
@@ -200,6 +189,22 @@ func (s *Storage) migrate() error {
 	_, _ = s.db.Exec(`ALTER TABLE client_configs ADD COLUMN total_tx_bytes INTEGER NOT NULL DEFAULT 0;`)
 	_, _ = s.db.Exec(`ALTER TABLE client_configs ADD COLUMN last_handshake_epoch INTEGER NOT NULL DEFAULT 0;`)
 	_, _ = s.db.Exec(`ALTER TABLE client_configs ADD COLUMN last_seen_at DATETIME DEFAULT NULL;`)
+
+	indexes := `
+	CREATE INDEX IF NOT EXISTS idx_client_configs_pubkey ON client_configs(public_key);
+	CREATE INDEX IF NOT EXISTS idx_client_configs_node_id ON client_configs(node_id);
+	CREATE INDEX IF NOT EXISTS idx_peer_traffic_daily_date ON peer_traffic_daily(date);
+	CREATE INDEX IF NOT EXISTS idx_node_traffic_daily_date ON node_traffic_daily(date);
+	CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+	CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+	CREATE INDEX IF NOT EXISTS idx_audit_logs_category ON audit_logs(category);
+	CREATE INDEX IF NOT EXISTS idx_billing_records_user_id ON billing_records(user_id);
+	CREATE INDEX IF NOT EXISTS idx_billing_records_created_at ON billing_records(created_at);
+	CREATE INDEX IF NOT EXISTS idx_telegram_link_tokens_user_id ON telegram_link_tokens(user_id);
+	`
+	if _, err := s.db.Exec(indexes); err != nil {
+		return err
+	}
 	return nil
 }
 
