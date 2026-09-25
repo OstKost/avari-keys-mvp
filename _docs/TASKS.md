@@ -20,6 +20,7 @@
 | | | | | [TASK-021](./tasks/TASK-021-secure-telegram-linking-and-decoy.md) |
 | | | | | [TASK-022](./tasks/TASK-022-stats-telemetry-redesign.md) |
 | | | | | [TASK-023](./tasks/TASK-023-telegram-user-approval-inline-buttons.md) |
+| | | | | [TASK-024](./tasks/TASK-024-healthcheck-resilience-and-lightweight-probe.md) |
 
 ---
 
@@ -41,6 +42,7 @@
 - **[TASK-021](./tasks/TASK-021-secure-telegram-linking-and-decoy.md)**: ✅ Безопасная привязка Telegram-бота по токену и Decoy-заглушка для неизвестных пользователей.
 - **[TASK-022](./tasks/TASK-022-stats-telemetry-redesign.md)**: ✅ Полный редизайн сбора статистики и телеметрии AmneziaWG (PublicKey, Delta Engine, SQLite, Worker).
 - **[TASK-023](./tasks/TASK-023-telegram-user-approval-inline-buttons.md)**: ✅ Модерация и одобрение новых пользователей через Inline-кнопки в Telegram-боте.
+- **[TASK-024](./tasks/TASK-024-healthcheck-resilience-and-lightweight-probe.md)**: ✅ Устойчивость HealthChecker к сетевым задержкам и легковесный опрос Slave API.
 
 
 
