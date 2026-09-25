@@ -44,11 +44,45 @@ func NewRealRunner(scriptPath, configsDir string) *RealRunner {
 	}
 }
 
+// hasActiveAWGInterface quickly checks if an AmneziaWG / WireGuard network interface is UP.
+func hasActiveAWGInterface() bool {
+	ifaces, err := net.Interfaces()
+	if err == nil {
+		for _, ifc := range ifaces {
+			name := strings.ToLower(ifc.Name)
+			if (strings.HasPrefix(name, "awg") || strings.HasPrefix(name, "wg") || strings.HasPrefix(name, "amnezia")) && (ifc.Flags&net.FlagUp != 0) {
+				return true
+			}
+		}
+	}
+	// Fallback to /proc/net/dev on Linux
+	if data, err := os.ReadFile("/proc/net/dev"); err == nil {
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "awg") || strings.HasPrefix(line, "wg") || strings.HasPrefix(line, "amnezia") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (r *RealRunner) CheckHealth(ctx context.Context) bool {
 	if _, err := os.Stat(r.scriptPath); err != nil {
 		return false
 	}
 
+	// 1. Fast lightweight check (sub-millisecond, zero process spawn)
+	if hasActiveAWGInterface() {
+		r.mu.Lock()
+		r.lastHealthVal = true
+		r.lastHealthTime = time.Now()
+		r.mu.Unlock()
+		return true
+	}
+
+	// 2. If quick check didn't find active interface, check cached status with rate limit
 	r.mu.RLock()
 	if time.Since(r.lastHealthTime) < 15*time.Second {
 		val := r.lastHealthVal
@@ -65,6 +99,7 @@ func (r *RealRunner) CheckHealth(ctx context.Context) bool {
 		return r.lastHealthVal
 	}
 
+	// 3. Fallback to full manage_amneziawg.sh status command if interface not active
 	cmd := exec.CommandContext(ctx, "bash", r.scriptPath, "status")
 	healthy := cmd.Run() == nil
 

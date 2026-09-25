@@ -93,6 +93,66 @@ func TestHealthCheckerTransitions(t *testing.T) {
 	_ = node
 }
 
+func TestHealthCheckerFailureThresholdAndRetry(t *testing.T) {
+	var requestCount atomic.Int32
+	var simulateTemporaryGlitch atomic.Bool
+	simulateTemporaryGlitch.Store(false)
+
+	// Mock Slave Node
+	mockSlave := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count := requestCount.Add(1)
+		if r.URL.Path == "/health" || r.URL.Path == "/api/v1/health" {
+			// If glitch is active, fail every odd request (attempt 1), succeed on retry (attempt 2)
+			if simulateTemporaryGlitch.Load() && count%2 == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(`{"status":"error"}`))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"ok","service":"avari-slave","version":"v0.2.0"}`))
+			return
+		}
+		if r.URL.Path == "/api/v1/stats" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"active_peers":0,"total_rx":0,"total_tx":0,"peers":{}}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer mockSlave.Close()
+
+	store, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	_, err := store.CreateNode(ctx, "Resilient Node", "direct", "DEU", "https://aeza.net", mockSlave.URL, "dummy_key", true)
+	if err != nil {
+		t.Fatalf("failed to create node: %v", err)
+	}
+
+	checker := monitor.NewHealthChecker(monitor.Config{
+		Storage:          store,
+		Interval:         50 * time.Millisecond,
+		Timeout:          200 * time.Millisecond,
+		FailureThreshold: 2,
+	})
+
+	// 1. Initial collection: node is online
+	checker.CollectTelemetry(ctx)
+	dash := checker.GetLatestDashboardStats(ctx)
+	if dash.OnlineNodes != 1 {
+		t.Fatalf("expected 1 online node initially, got %d", dash.OnlineNodes)
+	}
+
+	// 2. Enable transient glitch (1st attempt fails, retry succeeds)
+	simulateTemporaryGlitch.Store(true)
+	checker.CollectTelemetry(ctx)
+	dash = checker.GetLatestDashboardStats(ctx)
+	if dash.OnlineNodes != 1 {
+		t.Fatalf("expected node to remain online due to immediate retry, got %d", dash.OnlineNodes)
+	}
+}
+
 func TestTelemetryCollectorAndDeltaEngine(t *testing.T) {
 	var rawRx atomic.Int64
 	var rawTx atomic.Int64

@@ -3,6 +3,7 @@ package telegram_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -264,3 +265,205 @@ func TestTelegramBotSecurityAndLinking(t *testing.T) {
 		t.Fatalf("expected decoy response 'Привет! Как дела?' after logout, got: %q", getLastMessageText())
 	}
 }
+
+func TestTelegramBotUserApprovalCallbackQuery(t *testing.T) {
+	var mu sync.Mutex
+	var sentMessages []map[string]any
+	var answeredCallbacks []map[string]any
+	var editedMessages []map[string]any
+
+	mockTG := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		if strings.Contains(r.URL.Path, "sendMessage") {
+			var payload map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			sentMessages = append(sentMessages, payload)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok": true, "result": {"message_id": 101}}`))
+			return
+		}
+
+		if strings.Contains(r.URL.Path, "answerCallbackQuery") {
+			var payload map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			answeredCallbacks = append(answeredCallbacks, payload)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok": true, "result": true}`))
+			return
+		}
+
+		if strings.Contains(r.URL.Path, "editMessageText") {
+			var payload map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			editedMessages = append(editedMessages, payload)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok": true, "result": {"message_id": 101}}`))
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok": true, "result": []}`))
+	}))
+	defer mockTG.Close()
+
+	store, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// 1. Register admin chat
+	adminChatID := int64(111222333)
+	_ = store.SaveTelegramChat(ctx, models.TelegramChat{
+		ChatID:        adminChatID,
+		Username:      "lead_admin",
+		FirstName:     "Lead",
+		IsAdmin:       true,
+		AlertsEnabled: true,
+	})
+
+	// 2. Register regular user chat
+	regularUserChatID := int64(444555666)
+	_ = store.SaveTelegramChat(ctx, models.TelegramChat{
+		ChatID:        regularUserChatID,
+		Username:      "regular_joe",
+		FirstName:     "Joe",
+		IsAdmin:       false,
+		AlertsEnabled: true,
+	})
+
+	cfg := telegram.Config{
+		APIURL:      mockTG.URL,
+		Token:       "test_approval_token",
+		BotUsername: "ApprovalElfBot",
+		Storage:     store,
+	}
+	bot := telegram.NewBot(cfg)
+
+	// Create a new unapproved user
+	newUser, err := store.CreateUser(ctx, "frodo", "ringbearer123")
+	if err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+	if newUser.IsActive {
+		t.Fatalf("expected new user to be inactive initially")
+	}
+
+	// 3. Test NotifyNewUser sends inline buttons
+	bot.NotifyNewUser(*newUser)
+
+	mu.Lock()
+	if len(sentMessages) == 0 {
+		mu.Unlock()
+		t.Fatalf("expected message to be sent on NotifyNewUser")
+	}
+	lastMsg := sentMessages[len(sentMessages)-1]
+	mu.Unlock()
+
+	if lastMsg["reply_markup"] == nil {
+		t.Fatalf("expected reply_markup with inline buttons, got nil")
+	}
+
+	// 4. Test non-admin attempts to approve user -> permission denied
+	nonAdminCB := &telegram.TGCallbackQuery{
+		ID: "cb_nonadmin_1",
+		From: telegram.TGUser{
+			ID:        regularUserChatID,
+			Username:  "regular_joe",
+			FirstName: "Joe",
+		},
+		Message: &telegram.TGMessage{
+			MessageID: 101,
+			Chat: telegram.TGChat{
+				ID: adminChatID,
+			},
+		},
+		Data: fmt.Sprintf("approve_user:%d", newUser.ID),
+	}
+	bot.ProcessCallbackQuery(ctx, nonAdminCB)
+
+	// Verify user is still inactive
+	freshUser, _ := store.GetUserByID(ctx, newUser.ID)
+	if freshUser.IsActive {
+		t.Fatalf("user should not have been activated by non-admin")
+	}
+
+	mu.Lock()
+	if len(answeredCallbacks) == 0 || !strings.Contains(answeredCallbacks[len(answeredCallbacks)-1]["text"].(string), "нет прав") {
+		mu.Unlock()
+		t.Fatalf("expected unauthorized answer for non-admin callback")
+	}
+	mu.Unlock()
+
+	// 5. Test admin approves user -> activation successful
+	adminCB := &telegram.TGCallbackQuery{
+		ID: "cb_admin_1",
+		From: telegram.TGUser{
+			ID:        adminChatID,
+			Username:  "lead_admin",
+			FirstName: "Lead",
+		},
+		Message: &telegram.TGMessage{
+			MessageID: 101,
+			Chat: telegram.TGChat{
+				ID: adminChatID,
+			},
+		},
+		Data: fmt.Sprintf("approve_user:%d", newUser.ID),
+	}
+	bot.ProcessCallbackQuery(ctx, adminCB)
+
+	// Verify user is now active in database
+	freshUser, _ = store.GetUserByID(ctx, newUser.ID)
+	if !freshUser.IsActive {
+		t.Fatalf("expected user to be active after admin approval")
+	}
+
+	mu.Lock()
+	if len(answeredCallbacks) == 0 || !strings.Contains(answeredCallbacks[len(answeredCallbacks)-1]["text"].(string), "успешно одобрен") {
+		mu.Unlock()
+		t.Fatalf("expected success callback answer, got: %+v", answeredCallbacks)
+	}
+
+	if len(editedMessages) == 0 || !strings.Contains(editedMessages[len(editedMessages)-1]["text"].(string), "Одобрен") {
+		mu.Unlock()
+		t.Fatalf("expected message to be edited with approval status, got: %+v", editedMessages)
+	}
+	mu.Unlock()
+
+	// 6. Test admin rejects another user -> user remains inactive
+	userToReject, _ := store.CreateUser(ctx, "saruman", "isengard456")
+	rejectCB := &telegram.TGCallbackQuery{
+		ID: "cb_admin_2",
+		From: telegram.TGUser{
+			ID:        adminChatID,
+			Username:  "lead_admin",
+			FirstName: "Lead",
+		},
+		Message: &telegram.TGMessage{
+			MessageID: 102,
+			Chat: telegram.TGChat{
+				ID: adminChatID,
+			},
+		},
+		Data: fmt.Sprintf("reject_user:%d", userToReject.ID),
+	}
+	bot.ProcessCallbackQuery(ctx, rejectCB)
+
+	freshRejected, _ := store.GetUserByID(ctx, userToReject.ID)
+	if freshRejected.IsActive {
+		t.Fatalf("expected rejected user to remain inactive")
+	}
+
+	mu.Lock()
+	if len(editedMessages) == 0 || !strings.Contains(editedMessages[len(editedMessages)-1]["text"].(string), "Отклонен") {
+		mu.Unlock()
+		t.Fatalf("expected message to be edited with rejected status")
+	}
+	mu.Unlock()
+}
+
