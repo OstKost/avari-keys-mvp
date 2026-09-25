@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Sparkles, ArrowRight, Check, X, Smartphone, Zap, QrCode } from 'lucide-react';
+import { Sparkles, ArrowRight, ArrowLeft, Check, X, Smartphone, Zap, QrCode } from 'lucide-react';
 import { MascotAvatar } from './MascotAssistant';
 
 export interface OnboardingStep {
@@ -65,6 +65,10 @@ export function OnboardingTour({
 
   const currentStepData = ONBOARDING_STEPS[currentStepIndex];
   const isLast = currentStepIndex === ONBOARDING_STEPS.length - 1;
+
+  const handlePrev = () => {
+    setCurrentStepIndex((prev) => Math.max(prev - 1, 0));
+  };
 
   const handleNext = () => {
     if (isLast) {
@@ -134,17 +138,21 @@ export function OnboardingTour({
           )}
 
           {/* Progress Bar & Buttons */}
-          <div className="flex items-center justify-between pt-2 border-t border-[#1C3945]/70">
-            <div className="flex space-x-1.5">
+          <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 pt-3 border-t border-[#1C3945]/70">
+            <div className="flex items-center space-x-1.5" role="tablist" aria-label="Шаги обучения">
               {ONBOARDING_STEPS.map((_, idx) => (
-                <div
+                <button
                   key={idx}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                  type="button"
+                  onClick={() => setCurrentStepIndex(idx)}
+                  title={`Перейти к шагу ${idx + 1}`}
+                  aria-label={`Шаг ${idx + 1}`}
+                  className={`h-1.5 sm:h-2 rounded-full transition-all duration-300 cursor-pointer focus:outline-none ${
                     idx === currentStepIndex
                       ? 'w-6 bg-[#D9B96E]'
                       : idx < currentStepIndex
-                      ? 'w-3 bg-[#6EA8C4]'
-                      : 'w-2 bg-[#1C3945]'
+                      ? 'w-3 bg-[#6EA8C4] hover:bg-[#D9B96E]/80'
+                      : 'w-2 bg-[#1C3945] hover:bg-[#6EA8C4]/60'
                   }`}
                 />
               ))}
@@ -152,14 +160,26 @@ export function OnboardingTour({
 
             <div className="flex items-center space-x-2">
               <button
+                type="button"
                 onClick={handleSkip}
-                className="text-xs font-mono uppercase tracking-wider text-[#A8B4B7] hover:text-[#F2F0E8] px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+                className="text-xs font-mono uppercase tracking-wider text-[#A8B4B7] hover:text-[#F2F0E8] px-2 sm:px-2.5 py-1.5 rounded-lg transition cursor-pointer"
               >
                 Пропустить
               </button>
+              {currentStepIndex > 0 && (
+                <button
+                  type="button"
+                  onClick={handlePrev}
+                  className="text-xs font-mono uppercase tracking-wider text-[#D9E1E3] hover:text-[#F2F0E8] bg-[#102833] hover:bg-[#1C3945] border border-[#1C3945] hover:border-[#D9B96E]/40 px-3 py-2 rounded-xl flex items-center space-x-1.5 transition cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Назад</span>
+                </button>
+              )}
               <button
+                type="button"
                 onClick={handleNext}
-                className="bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold py-2 px-4 rounded-xl text-xs uppercase tracking-wider font-mono shadow-md shadow-[#D9B96E]/20 flex items-center space-x-1.5 transition cursor-pointer"
+                className="bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold py-2 px-3.5 sm:px-4 rounded-xl text-xs uppercase tracking-wider font-mono shadow-md shadow-[#D9B96E]/20 flex items-center space-x-1.5 transition cursor-pointer"
               >
                 {isLast ? (
                   <>
