@@ -1049,7 +1049,7 @@ PersistentKeepalive = 25`;
       telegram_chat_id: sub ? sub.chat_id : undefined,
       telegram_username: sub ? sub.username : undefined,
       alerts_enabled: sub ? sub.alerts_enabled : false,
-      deep_link: `https://t.me/${botName}?start=link_${mockCurrentUser.username}`,
+      deep_link: `https://t.me/${botName}?start=link_mock_sec_${mockCurrentUser.id}_tkn`,
     };
   },
 

@@ -17,6 +17,7 @@
 | | | | | [TASK-018](./tasks/TASK-018-mobile-tablet-responsive.md) |
 | | | | | [TASK-019](./tasks/TASK-019-stats-tg-billing-settings-fixes.md) |
 | | | | | [TASK-020](./tasks/TASK-020-telegram-user-banner-and-linking.md) |
+| | | | | [TASK-021](./tasks/TASK-021-secure-telegram-linking-and-decoy.md) |
 
 ---
 
@@ -35,4 +36,6 @@
 - **[TASK-018](./tasks/TASK-018-mobile-tablet-responsive.md)**: ✅ Адаптация интерфейса под мобильные устройства (320px–640px) и планшеты (640px–1024px).
 - **[TASK-019](./tasks/TASK-019-stats-tg-billing-settings-fixes.md)**: ✅ Метрики трафика через Curve25519 деривацию, Telegram бот фиксы и напоминания, расчет взносов, страница Настройки.
 - **[TASK-020](./tasks/TASK-020-telegram-user-banner-and-linking.md)**: ✅ Баннер-приглашение в Telegram-бота над ключами, персональная привязка deep link и оповещения.
+- **[TASK-021](./tasks/TASK-021-secure-telegram-linking-and-decoy.md)**: ✅ Безопасная привязка Telegram-бота по токену и Decoy-заглушка для неизвестных пользователей.
+
 

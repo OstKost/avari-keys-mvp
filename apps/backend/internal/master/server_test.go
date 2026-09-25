@@ -793,8 +793,14 @@ func TestUserTelegramEndpoints(t *testing.T) {
 	if uStatus.IsLinked {
 		t.Fatalf("expected user to not be linked initially")
 	}
-	if !strings.Contains(uStatus.DeepLink, "link_alice") {
-		t.Fatalf("expected deep link to contain link_alice, got %s", uStatus.DeepLink)
+	if !strings.Contains(uStatus.DeepLink, "start=link_") {
+		t.Fatalf("expected deep link to contain start=link_, got %s", uStatus.DeepLink)
+	}
+
+	tokenPart := strings.TrimPrefix(uStatus.DeepLink[strings.Index(uStatus.DeepLink, "start=link_")+11:], "")
+	foundUser, err := store.GetUserByTelegramLinkToken(ctx, tokenPart)
+	if err != nil || foundUser.ID != user.ID {
+		t.Fatalf("expected valid token resolving to user %d, got err=%v, foundUser=%+v", user.ID, err, foundUser)
 	}
 
 	// 2. Link user chat
