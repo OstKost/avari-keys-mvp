@@ -176,6 +176,8 @@ export interface BillingStatus {
   last_paid_at?: string;
   snoozed_until?: string;
   status: 'paid' | 'due' | 'snoozed';
+  key_count?: number;
+  recommended_amount?: number;
   history: BillingRecord[];
 }
 
@@ -193,6 +195,7 @@ export interface BillingRequisites {
 
 export interface TelegramChat {
   chat_id: number;
+  user_id?: number;
   username: string;
   first_name: string;
   is_admin: boolean;
@@ -208,6 +211,7 @@ export interface TelegramSettings {
   notify_on_node_down: boolean;
   notify_on_node_recover: boolean;
   notify_on_new_user: boolean;
+  notify_on_billing_reminders?: boolean;
 }
 
 export interface TelegramStatusResponse {

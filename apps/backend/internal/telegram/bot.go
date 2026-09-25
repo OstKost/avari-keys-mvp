@@ -19,13 +19,14 @@ import (
 
 // Bot manages Telegram notifications and command interaction.
 type Bot struct {
-	token               string
-	botUsername         string
-	adminSecret         string
-	enabled             bool
-	notifyOnNodeDown    bool
-	notifyOnNodeRecover bool
-	notifyOnNewUser     bool
+	token                    string
+	botUsername              string
+	adminSecret              string
+	enabled                  bool
+	notifyOnNodeDown         bool
+	notifyOnNodeRecover      bool
+	notifyOnNewUser          bool
+	notifyOnBillingReminders bool
 
 	httpClient  *http.Client
 	storage     *storage.Storage
@@ -40,33 +41,35 @@ type Bot struct {
 
 // Config holds Telegram bot parameters.
 type Config struct {
-	Token               string
-	BotUsername         string
-	AdminSecret         string
-	AdminChatID         string
-	Enabled             bool
-	NotifyOnNodeDown    bool
-	NotifyOnNodeRecover bool
-	NotifyOnNewUser     bool
-	Storage             *storage.Storage
-	NodeLister          func(ctx context.Context) ([]models.NodeWithStatus, error)
-	StatsLister         func(ctx context.Context) (*models.DashboardStatsResponse, error)
+	Token                    string
+	BotUsername              string
+	AdminSecret              string
+	AdminChatID              string
+	Enabled                  bool
+	NotifyOnNodeDown         bool
+	NotifyOnNodeRecover      bool
+	NotifyOnNewUser          bool
+	NotifyOnBillingReminders bool
+	Storage                  *storage.Storage
+	NodeLister               func(ctx context.Context) ([]models.NodeWithStatus, error)
+	StatsLister              func(ctx context.Context) (*models.DashboardStatsResponse, error)
 }
 
 // NewBot creates a new Telegram Bot instance.
 func NewBot(cfg Config) *Bot {
 	bot := &Bot{
-		token:               cfg.Token,
-		botUsername:         cfg.BotUsername,
-		adminSecret:         cfg.AdminSecret,
-		enabled:             cfg.Enabled || cfg.Token != "",
-		notifyOnNodeDown:    true,
-		notifyOnNodeRecover: true,
-		notifyOnNewUser:     true,
-		httpClient:          &http.Client{Timeout: 35 * time.Second},
-		storage:             cfg.Storage,
-		nodeLister:          cfg.NodeLister,
-		statsLister:         cfg.StatsLister,
+		token:                    cfg.Token,
+		botUsername:              cfg.BotUsername,
+		adminSecret:              cfg.AdminSecret,
+		enabled:                  cfg.Enabled || cfg.Token != "",
+		notifyOnNodeDown:         true,
+		notifyOnNodeRecover:      true,
+		notifyOnNewUser:          true,
+		notifyOnBillingReminders: true,
+		httpClient:               &http.Client{Timeout: 35 * time.Second},
+		storage:                  cfg.Storage,
+		nodeLister:               cfg.NodeLister,
+		statsLister:              cfg.StatsLister,
 	}
 
 	if bot.botUsername == "" {
@@ -104,13 +107,14 @@ func (b *Bot) GetSettings() models.TelegramSettings {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return models.TelegramSettings{
-		Enabled:             b.enabled,
-		BotToken:            b.token,
-		BotUsername:         b.botUsername,
-		AdminSecret:         b.adminSecret,
-		NotifyOnNodeDown:    b.notifyOnNodeDown,
-		NotifyOnNodeRecover: b.notifyOnNodeRecover,
-		NotifyOnNewUser:     b.notifyOnNewUser,
+		Enabled:                  b.enabled,
+		BotToken:                 b.token,
+		BotUsername:              b.botUsername,
+		AdminSecret:              b.adminSecret,
+		NotifyOnNodeDown:         b.notifyOnNodeDown,
+		NotifyOnNodeRecover:      b.notifyOnNodeRecover,
+		NotifyOnNewUser:          b.notifyOnNewUser,
+		NotifyOnBillingReminders: b.notifyOnBillingReminders,
 	}
 }
 
@@ -170,6 +174,7 @@ func (b *Bot) UpdateConfig(ctx context.Context, s models.TelegramSettings) error
 	b.notifyOnNodeDown = s.NotifyOnNodeDown
 	b.notifyOnNodeRecover = s.NotifyOnNodeRecover
 	b.notifyOnNewUser = s.NotifyOnNewUser
+	b.notifyOnBillingReminders = s.NotifyOnBillingReminders
 
 	if b.botUsername == "" {
 		b.botUsername = "AvariElfBot"
@@ -188,7 +193,8 @@ func (b *Bot) UpdateConfig(ctx context.Context, s models.TelegramSettings) error
 			b.stopChan = make(chan struct{})
 			b.isRunning = true
 			b.wg.Add(1)
-			go b.pollUpdates(ctx)
+			// Always run polling with long-lived background context
+			go b.pollUpdates(context.Background())
 			log.Printf("[TELEGRAM] Hot-reloaded and started polling worker for @%s", b.botUsername)
 		}
 	}
@@ -213,7 +219,8 @@ func (b *Bot) Start(ctx context.Context) {
 	b.stopChan = make(chan struct{})
 	b.isRunning = true
 	b.wg.Add(1)
-	go b.pollUpdates(ctx)
+	// Always run polling with long-lived background context
+	go b.pollUpdates(context.Background())
 	log.Printf("[TELEGRAM] Bot @%s started successfully (Polling)", b.botUsername)
 }
 
@@ -354,32 +361,60 @@ func (b *Bot) handleIncomingMessage(ctx context.Context, chatID int64, from *str
 
 	switch command {
 	case "/start":
-		if len(parts) > 1 && adminSecret != "" && parts[1] == adminSecret {
-			b.registerChat(ctx, chatID, username, firstName, true)
-			_ = b.SendMessage(chatID, "✨ <b>Добро пожаловать в Avari Keys Alerts!</b>\n\nВаш чат успешно привязан с правами <b>Администратора</b>.\nВы будете получать оповещения о доступности серверов и событиях системы.\n\nИспользуйте /status для проверки серверов или /help для списка команд.", "HTML")
-			return
+		if len(parts) > 1 {
+			param := parts[1]
+			if adminSecret != "" && param == adminSecret {
+				b.registerChat(ctx, chatID, nil, username, firstName, true)
+				_ = b.SendMessage(chatID, "✨ <b>Добро пожаловать в Avari Keys Alerts!</b>\n\nВаш чат успешно привязан с правами <b>Администратора</b>.\nВы будете получать оповещения о доступности серверов и событиях системы.\n\nИспользуйте /status для проверки серверов или /help для списка команд.", "HTML")
+				return
+			}
+
+			// Check user link token e.g. link_username or bind_username or user_username
+			if strings.HasPrefix(param, "link_") || strings.HasPrefix(param, "bind_") || strings.HasPrefix(param, "user_") {
+				targetUser := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(param, "link_"), "bind_"), "user_")
+				linked := b.linkUserByUsername(ctx, chatID, username, firstName, targetUser)
+				if linked != nil {
+					_ = b.SendMessage(chatID, fmt.Sprintf("✨ <b>Добро пожаловать в Avari Keys!</b>\n\nВаш чат успешно привязан к аккаунту <b>%s</b>.\nВы будете получать уведомления о состоянии ключей и напоминания о взносах.\n\nИспользуйте /billing для проверки статуса взноса или /status для проверки сети.", linked.Username), "HTML")
+					return
+				}
+			}
 		}
 
-		b.registerChat(ctx, chatID, username, firstName, true)
-		msg := "🌿 <b>Avari Keys Monitor Bot (@" + botUsername + ")</b>\n\n" +
-			"Бот активен и готов присылать мгновенные уведомления о состоянии серверов AmneziaWG (Cascade & Direct).\n\n" +
+		b.registerChat(ctx, chatID, nil, username, firstName, false)
+		msg := "🌿 <b>Avari Keys Bot (@" + botUsername + ")</b>\n\n" +
+			"Бот активен и готов присылать мгновенные уведомления о состоянии серверов и напоминания о кооперативных взносах.\n\n" +
 			"<b>Доступные команды:</b>\n" +
-			"📊 /status — Состояние и пинг всех серверов\n" +
+			"💳 /billing — Статус взносов, расчет и реквизиты СБП\n" +
+			"🔗 /link &lt;логин&gt; — Привязать Telegram к вашему аккаунту\n" +
+			"📊 /status — Состояние и пинг всех серверов сети\n" +
 			"🌐 /nodes — Список серверов и маршрутизация\n" +
-			"🔔 /test — Проверить доставку уведомления\n" +
+			"🔔 /test — Проверить доставку оповещения\n" +
 			"❓ /help — Справка по командам"
 		_ = b.SendMessage(chatID, msg, "HTML")
 
-	case "/bind":
-		if len(parts) > 1 && adminSecret != "" && parts[1] == adminSecret {
-			b.registerChat(ctx, chatID, username, firstName, true)
-			_ = b.SendMessage(chatID, "✅ <b>Успешно!</b> Чат привязан к системе оповещений администратора.", "HTML")
+	case "/bind", "/link":
+		if len(parts) > 1 {
+			param := parts[1]
+			if adminSecret != "" && param == adminSecret {
+				b.registerChat(ctx, chatID, nil, username, firstName, true)
+				_ = b.SendMessage(chatID, "✅ <b>Успешно!</b> Чат привязан к системе оповещений администратора.", "HTML")
+			} else {
+				linked := b.linkUserByUsername(ctx, chatID, username, firstName, param)
+				if linked != nil {
+					_ = b.SendMessage(chatID, fmt.Sprintf("✅ <b>Успешно!</b> Чат привязан к аккаунту <b>%s</b>. Введите /billing для просмотра статуса взносов.", linked.Username), "HTML")
+				} else {
+					_ = b.SendMessage(chatID, fmt.Sprintf("❌ Пользователь «%s» не найден. Укажите точный логин: <code>/link &lt;username&gt;</code>", param), "HTML")
+				}
+			}
 		} else if adminSecret == "" {
-			b.registerChat(ctx, chatID, username, firstName, true)
+			b.registerChat(ctx, chatID, nil, username, firstName, true)
 			_ = b.SendMessage(chatID, "✅ Чат зарегистрирован в списке получателей уведомлений.", "HTML")
 		} else {
-			_ = b.SendMessage(chatID, "❌ Неверный секретный ключ привязки. Используйте: <code>/bind &lt;secret&gt;</code>", "HTML")
+			_ = b.SendMessage(chatID, "ℹ️ Для привязки аккаунта отправьте: <code>/link &lt;ваш_логин&gt;</code>", "HTML")
 		}
+
+	case "/billing", "/dues":
+		b.handleBillingCommand(ctx, chatID)
 
 	case "/status":
 		b.handleStatusCommand(ctx, chatID)
@@ -392,10 +427,12 @@ func (b *Bot) handleIncomingMessage(ctx context.Context, chatID int64, from *str
 
 	case "/help":
 		msg := "📖 <b>Справка Avari Keys Bot</b>\n\n" +
-			"• <b>/status</b> — Текущий статус серверов, задержка (пинг), общее кол-во ключей\n" +
+			"• <b>/billing</b> — Статус взносов, расчет по ключам и реквизиты СБП\n" +
+			"• <b>/link &lt;логин&gt;</b> — Привязать Telegram к вашему аккаунту\n" +
+			"• <b>/status</b> — Текущий статус серверов и задержка (пинг)\n" +
 			"• <b>/nodes</b> — Список узлов и их конфигурация\n" +
-			"• <b>/test</b> — Тестовое оповещение о сбое и восстановлении\n" +
-			"• <b>/start</b> — Перезапустить бота / обновить профиль"
+			"• <b>/test</b> — Тестовое оповещение о доставке\n" +
+			"• <b>/start</b> — Главное меню"
 		_ = b.SendMessage(chatID, msg, "HTML")
 
 	default:
@@ -403,17 +440,124 @@ func (b *Bot) handleIncomingMessage(ctx context.Context, chatID int64, from *str
 	}
 }
 
-func (b *Bot) registerChat(ctx context.Context, chatID int64, username, firstName string, isAdmin bool) {
+func (b *Bot) registerChat(ctx context.Context, chatID int64, userID *int64, username, firstName string, isAdmin bool) {
 	if b.storage == nil {
 		return
 	}
 	_ = b.storage.SaveTelegramChat(ctx, models.TelegramChat{
 		ChatID:        chatID,
+		UserID:        userID,
 		Username:      username,
 		FirstName:     firstName,
 		IsAdmin:       isAdmin,
 		AlertsEnabled: true,
 	})
+}
+
+func (b *Bot) linkUserByUsername(ctx context.Context, chatID int64, tgUsername, tgFirstName, username string) *models.UserPublic {
+	if b.storage == nil {
+		return nil
+	}
+	users, err := b.storage.ListUsers(ctx)
+	if err != nil {
+		return nil
+	}
+	var target *models.UserPublic
+	for _, u := range users {
+		if strings.EqualFold(u.Username, strings.TrimSpace(username)) {
+			target = &u
+			break
+		}
+	}
+	if target == nil {
+		return nil
+	}
+
+	isAdmin := target.Role == models.RoleAdmin
+	_ = b.storage.SaveTelegramChat(ctx, models.TelegramChat{
+		ChatID:        chatID,
+		UserID:        &target.ID,
+		Username:      tgUsername,
+		FirstName:     tgFirstName,
+		IsAdmin:       isAdmin,
+		AlertsEnabled: true,
+	})
+	return target
+}
+
+func (b *Bot) handleBillingCommand(ctx context.Context, chatID int64) {
+	if b.storage == nil {
+		_ = b.SendMessage(chatID, "⚠️ База данных биллинга недоступна.", "")
+		return
+	}
+
+	chats, _ := b.storage.ListTelegramChats(ctx)
+	var linkedUserID *int64
+	for _, c := range chats {
+		if c.ChatID == chatID && c.UserID != nil {
+			linkedUserID = c.UserID
+			break
+		}
+	}
+
+	if linkedUserID == nil {
+		msg := "ℹ️ <b>Привязка аккаунта к Telegram</b>\n\n" +
+			"Ваш Telegram-чат пока не привязан к аккаунту Avari Keys.\n" +
+			"Чтобы привязать аккаунт и проверять взносы, отправьте:\n" +
+			"<code>/link &lt;ваш_логин&gt;</code>\n\n" +
+			"<i>Например: <code>/link Forve</code></i>"
+		_ = b.SendMessage(chatID, msg, "HTML")
+		return
+	}
+
+	status, err := b.storage.GetBillingStatus(ctx, *linkedUserID)
+	if err != nil {
+		_ = b.SendMessage(chatID, fmt.Sprintf("⚠️ Ошибка получения данных биллинга: %v", err), "")
+		return
+	}
+
+	reqs, _ := b.storage.GetBillingRequisites(ctx)
+	phone := "+7 (999) 000-00-00"
+	bank := "Т-Банк / Сбербанк"
+	if reqs != nil {
+		if reqs.SBPPhone != "" {
+			phone = reqs.SBPPhone
+		}
+		if reqs.SBPBank != "" {
+			bank = reqs.SBPBank
+		}
+	}
+
+	statusEmoji := "🟢"
+	statusText := "Оплачено"
+	if status.IsDue {
+		statusEmoji = "🔴"
+		statusText = "Требуется взнос"
+	} else if status.Status == "snoozed" {
+		statusEmoji = "🟡"
+		statusText = "Отложено"
+	}
+
+	dueText := fmt.Sprintf("осталось <b>%d дн.</b> (до %s)", status.DaysRemaining, status.NextDueAt.Format("02.01.2006"))
+	if status.IsDue || status.DaysRemaining <= 0 {
+		dueText = fmt.Sprintf("<b>Срок наступил (%s)</b>", status.NextDueAt.Format("02.01.2006"))
+	}
+
+	msg := fmt.Sprintf(
+		"💳 <b>Статус взносов Avari Keys</b>\n"+
+			"━━━━━━━━━━━━━━━━━━━━━\n"+
+			"Статус: %s <b>%s</b>\n"+
+			"🔑 Активных VPN-ключей: <b>%d</b>\n"+
+			"💰 Рекомендуемый взнос: <b>%.0f ₽ / мес</b>\n"+
+			"<i>(Базовый тариф: 200 ₽ за 3 ключа + 30 ₽ за каждый доп. ключ)</i>\n\n"+
+			"⏳ Срок взноса: %s\n\n"+
+			"📱 <b>Реквизиты для перевода (СБП):</b>\n"+
+			"├ Телефон: <code>%s</code>\n"+
+			"└ Банк: <b>%s</b>\n\n"+
+			"<i>Сумма взноса является добровольной и ориентировочной. Спасибо за поддержку сети! ✨</i>",
+		statusEmoji, statusText, status.KeyCount, status.RecommendedAmount, dueText, phone, bank,
+	)
+	_ = b.SendMessage(chatID, msg, "HTML")
 }
 
 func (b *Bot) handleStatusCommand(ctx context.Context, chatID int64) {
@@ -655,6 +799,7 @@ func (b *Bot) SendTestAlert(chatID int64) error {
 			"━━━━━━━━━━━━━━━━━━━━━\n"+
 			"✅ Бот успешно подключен к Master-серверу.\n"+
 			"📡 Оповещения о статусе серверов и падениях настроены.\n"+
+			"💳 Напоминания о взносах активны.\n"+
 			"⏱ <b>Время:</b> %s",
 		botUsername,
 		time.Now().Format("02.01.2006 15:04:05"),
@@ -664,4 +809,92 @@ func (b *Bot) SendTestAlert(chatID int64) error {
 		return b.SendMessage(chatID, msg, "HTML")
 	}
 	return b.BroadcastAlert(msg)
+}
+
+// SendBillingReminder sends a personal dues reminder to a user's Telegram chat.
+func (b *Bot) SendBillingReminder(chatID int64, username string, keyCount int, amount float64, daysRemaining int, reqs *models.BillingRequisites) error {
+	b.mu.RLock()
+	notify := b.notifyOnBillingReminders
+	b.mu.RUnlock()
+
+	if !notify {
+		return nil
+	}
+
+	phone := "+7 (999) 000-00-00"
+	bank := "Т-Банк / Сбербанк"
+	if reqs != nil {
+		if reqs.SBPPhone != "" {
+			phone = reqs.SBPPhone
+		}
+		if reqs.SBPBank != "" {
+			bank = reqs.SBPBank
+		}
+	}
+
+	dueText := "срок оплаты наступил!"
+	if daysRemaining > 0 {
+		dueText = fmt.Sprintf("осталось <b>%d дн.</b>", daysRemaining)
+	}
+
+	msg := fmt.Sprintf(
+		"🌿 <b>[Avari Keys] Напоминание о кооперативном взносе</b>\n"+
+			"━━━━━━━━━━━━━━━━━━━━━\n"+
+			"Здравствуйте, <b>%s</b>!\n\n"+
+			"Подходит срок ежемесячного взноса за серверную инфраструктуру Avari Keys (%s).\n\n"+
+			"🔑 Ваших активных ключей: <b>%d</b>\n"+
+			"💳 Рекомендуемый взнос: <b>%.0f ₽</b>\n"+
+			"<i>(Базовый тариф: 200 ₽ за 3 ключа + 30 ₽ за каждый доп. ключ)</i>\n\n"+
+			"📱 <b>Реквизиты для взноса (СБП):</b>\n"+
+			"├ Телефон: <code>%s</code>\n"+
+			"└ Банк: <b>%s</b>\n\n"+
+			"<i>Взнос является добровольной поддержкой серверной инфраструктуры. Спасибо за участие в сети! ✨</i>",
+		username, dueText, keyCount, amount, phone, bank,
+	)
+	return b.SendMessage(chatID, msg, "HTML")
+}
+
+// BroadcastBillingReminders checks users needing payment and sends notifications.
+func (b *Bot) BroadcastBillingReminders(ctx context.Context) error {
+	if !b.IsEnabled() || b.storage == nil {
+		return nil
+	}
+
+	b.mu.RLock()
+	notify := b.notifyOnBillingReminders
+	b.mu.RUnlock()
+
+	if !notify {
+		return nil
+	}
+
+	users, err := b.storage.ListUsers(ctx)
+	if err != nil {
+		return err
+	}
+
+	reqs, _ := b.storage.GetBillingRequisites(ctx)
+
+	for _, u := range users {
+		if !u.IsActive {
+			continue
+		}
+
+		chat, err := b.storage.GetTelegramChatByUserID(ctx, u.ID)
+		if err != nil || chat == nil || !chat.AlertsEnabled {
+			continue
+		}
+
+		st, sErr := b.storage.GetBillingStatus(ctx, u.ID)
+		if sErr != nil {
+			continue
+		}
+
+		// Send reminder if 3 days or less remaining or overdue
+		if st.IsDue || st.DaysRemaining <= 3 {
+			_ = b.SendBillingReminder(chat.ChatID, u.Username, st.KeyCount, st.RecommendedAmount, st.DaysRemaining, reqs)
+		}
+	}
+
+	return nil
 }

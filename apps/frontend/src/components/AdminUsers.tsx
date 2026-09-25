@@ -116,10 +116,10 @@ export function AdminUsers() {
         <div>
           <h3 className="font-serif text-xl font-bold text-[#F2F0E8] flex items-center space-x-2">
             <Users className="w-5 h-5 text-[#D9B96E]" />
-            <span>Модерация пользователей</span>
+            <span>Пользователи</span>
           </h3>
           <p className="text-sm text-[#A8B4B7] mt-1 font-sans">
-            Активация и управление доступом зарегистрированных пользователей системы.
+            Управление учетными записями, активация и назначение ролей пользователей системы.
           </p>
         </div>
       </div>
