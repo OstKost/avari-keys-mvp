@@ -17,6 +17,7 @@ import {
   TelegramStatusResponse,
   TelegramSettings,
   TelegramChat,
+  UserTelegramStatus,
 } from '../types';
 
 // In-memory mock storage for standalone FE development
@@ -1035,6 +1036,27 @@ PersistentKeepalive = 25`;
       success: true,
       message: `Тестовое оповещение успешно отправлено в Telegram @${mockTelegramSettings.bot_username || 'AvariElfBot'}`,
     };
+  },
+
+  async getUserTelegramStatus(): Promise<UserTelegramStatus> {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const sub = mockTelegramSubscribers.find((s) => s.user_id === mockCurrentUser.id || s.username === mockCurrentUser.username);
+    const botName = mockTelegramSettings.bot_username || 'AvariElfBot';
+    return {
+      bot_username: botName,
+      bot_enabled: mockTelegramSettings.enabled,
+      is_linked: !!sub,
+      telegram_chat_id: sub ? sub.chat_id : undefined,
+      telegram_username: sub ? sub.username : undefined,
+      alerts_enabled: sub ? sub.alerts_enabled : false,
+      deep_link: `https://t.me/${botName}?start=link_${mockCurrentUser.username}`,
+    };
+  },
+
+  async unlinkUserTelegram(): Promise<{ success: boolean; message: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    mockTelegramSubscribers = mockTelegramSubscribers.filter((s) => s.user_id !== mockCurrentUser.id && s.username !== mockCurrentUser.username);
+    return { success: true, message: 'Telegram успешно отвязан от вашего аккаунта' };
   },
 };
 

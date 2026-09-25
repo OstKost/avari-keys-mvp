@@ -16,6 +16,7 @@
 | | | | | [TASK-010](./tasks/TASK-010-mascot-assistant.md) |
 | | | | | [TASK-018](./tasks/TASK-018-mobile-tablet-responsive.md) |
 | | | | | [TASK-019](./tasks/TASK-019-stats-tg-billing-settings-fixes.md) |
+| | | | | [TASK-020](./tasks/TASK-020-telegram-user-banner-and-linking.md) |
 
 ---
 
@@ -33,4 +34,5 @@
 - **[TASK-010](./tasks/TASK-010-mascot-assistant.md)**: ✅ Интерактивный UI-помощник (Маскот), онбординг первого ключа и база знаний FAQ.
 - **[TASK-018](./tasks/TASK-018-mobile-tablet-responsive.md)**: ✅ Адаптация интерфейса под мобильные устройства (320px–640px) и планшеты (640px–1024px).
 - **[TASK-019](./tasks/TASK-019-stats-tg-billing-settings-fixes.md)**: ✅ Метрики трафика через Curve25519 деривацию, Telegram бот фиксы и напоминания, расчет взносов, страница Настройки.
+- **[TASK-020](./tasks/TASK-020-telegram-user-banner-and-linking.md)**: ✅ Баннер-приглашение в Telegram-бота над ключами, персональная привязка deep link и оповещения.
 

@@ -756,6 +756,89 @@ func TestTelegramAdminEndpoints(t *testing.T) {
 	}
 }
 
+func TestUserTelegramEndpoints(t *testing.T) {
+	masterSrv, _, store, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	handler := masterSrv.Handler()
+
+	ctx := context.Background()
+	user, err := store.CreateUser(ctx, "alice", "alicePassword123!")
+	if err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+	_ = store.SetUserActive(ctx, user.ID, true)
+
+	loginBody, _ := json.Marshal(models.LoginRequest{Username: "alice", Password: "alicePassword123!"})
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewReader(loginBody))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	var loginResp models.LoginResponse
+	_ = json.NewDecoder(rec.Body).Decode(&loginResp)
+	token := loginResp.Token
+
+	// 1. GET /api/v1/user/telegram initially not linked
+	req = httptest.NewRequest("GET", "/api/v1/user/telegram", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var uStatus models.UserTelegramStatusResponse
+	if err := json.NewDecoder(rec.Body).Decode(&uStatus); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if uStatus.IsLinked {
+		t.Fatalf("expected user to not be linked initially")
+	}
+	if !strings.Contains(uStatus.DeepLink, "link_alice") {
+		t.Fatalf("expected deep link to contain link_alice, got %s", uStatus.DeepLink)
+	}
+
+	// 2. Link user chat
+	_ = store.SaveTelegramChat(ctx, models.TelegramChat{
+		ChatID:        123456789,
+		UserID:        &user.ID,
+		Username:      "alice_tg",
+		FirstName:     "Alice",
+		AlertsEnabled: true,
+	})
+
+	// 3. GET /api/v1/user/telegram again
+	req = httptest.NewRequest("GET", "/api/v1/user/telegram", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	_ = json.NewDecoder(rec.Body).Decode(&uStatus)
+	if !uStatus.IsLinked || uStatus.TelegramUsername != "alice_tg" {
+		t.Fatalf("expected linked user status, got %+v", uStatus)
+	}
+
+	// 4. POST /api/v1/user/telegram/unlink
+	req = httptest.NewRequest("POST", "/api/v1/user/telegram/unlink", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for unlink, got %d", rec.Code)
+	}
+
+	// Verify unlinked
+	req = httptest.NewRequest("GET", "/api/v1/user/telegram", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	_ = json.NewDecoder(rec.Body).Decode(&uStatus)
+	if uStatus.IsLinked {
+		t.Fatalf("expected unlinked status after unlink call")
+	}
+}
+
 
 
 
