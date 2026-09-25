@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Key, Server, Users, LogOut, Plus, QrCode as QrIcon, Trash2, Smartphone, Laptop, AlertCircle, Sparkles, ShieldCheck, User as UserIcon, ScrollText, Radio, CreditCard } from 'lucide-react';
+import { Key, Server, Users, LogOut, Plus, QrCode as QrIcon, Trash2, Smartphone, Laptop, AlertCircle, Sparkles, ShieldCheck, User as UserIcon, ScrollText, Radio, CreditCard, Settings } from 'lucide-react';
 import { api, isMockMode, setMockMode } from './api/client';
 import { User, NodePublic, ClientConfigSummary, ClientConfigDetail, BillingStatus } from './types';
 import { AuthModal } from './components/AuthModal';
@@ -11,11 +11,13 @@ import { AdminUsers } from './components/AdminUsers';
 import { AdminNodes } from './components/AdminNodes';
 import { AdminAllKeys } from './components/AdminAllKeys';
 import { AdminAuditLogs } from './components/AdminAuditLogs';
+import { AdminSettings } from './components/AdminSettings';
 import { NetworkDashboard } from './components/NetworkDashboard';
 import { Loader } from './components/Loader';
 import { UserProfile } from './components/UserProfile';
 import { BillingPage } from './components/BillingPage';
 import { BillingReminderModal } from './components/BillingReminderModal';
+import { TelegramBanner } from './components/TelegramBanner';
 import { Tooltip } from './components/Tooltip';
 import { formatNodeRouting } from './utils/country';
 import { FloatingMascot, MascotFaqModal } from './components/MascotAssistant';
@@ -25,7 +27,7 @@ export default function App() {
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'keys' | 'dashboard' | 'nodes' | 'users' | 'all-keys' | 'logs' | 'profile' | 'billing'>('keys');
+  const [activeTab, setActiveTab] = useState<'keys' | 'dashboard' | 'nodes' | 'users' | 'all-keys' | 'logs' | 'profile' | 'billing' | 'settings'>('keys');
 
   // Keys State
   const [keys, setKeys] = useState<ClientConfigSummary[]>([]);
@@ -324,7 +326,7 @@ export default function App() {
                 }`}
               >
                 <Users className="w-4 h-4" />
-                <span>Модерация</span>
+                <span>Пользователи</span>
               </button>
 
               <button
@@ -349,6 +351,18 @@ export default function App() {
               >
                 <ScrollText className="w-4 h-4" />
                 <span>Логи действий</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`flex-shrink-0 whitespace-nowrap flex items-center space-x-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-medium text-xs sm:text-sm uppercase tracking-wider font-mono transition duration-200 ${
+                  activeTab === 'settings'
+                    ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold shadow-lg shadow-[#D9B96E]/20'
+                    : 'text-[#A8B4B7] hover:text-[#F2F0E8] bg-[#0A1D26] hover:bg-[#102833] border border-[#1C3945]'
+                }`}
+              >
+                <Settings className="w-4 h-4" />
+                <span>Настройки</span>
               </button>
             </>
           )}
@@ -409,6 +423,8 @@ export default function App() {
                 </button>
               </div>
 
+              {/* Telegram Bot Alerts Invitation Banner */}
+              <TelegramBanner currentUser={currentUser} />
 
               {error && (
                 <div className="flex items-center space-x-2 bg-rose-950/60 border border-rose-800/80 text-rose-300 text-sm p-4 rounded-xl mb-6 shadow-lg">
@@ -566,6 +582,7 @@ export default function App() {
           {activeTab === 'users' && <AdminUsers />}
           {activeTab === 'all-keys' && <AdminAllKeys />}
           {activeTab === 'logs' && <AdminAuditLogs />}
+          {activeTab === 'settings' && <AdminSettings />}
           {activeTab === 'billing' && <BillingPage currentUser={currentUser} />}
           {activeTab === 'profile' && <UserProfile user={currentUser} onUserUpdated={(u) => setCurrentUser(u)} />}
         </div>
@@ -585,6 +602,8 @@ export default function App() {
       {billingStatus?.is_due && !dismissedReminder && (
         <BillingReminderModal
           daysRemaining={billingStatus.days_remaining}
+          recommendedAmount={billingStatus.recommended_amount}
+          keyCount={billingStatus.key_count}
           onPay={async (note) => {
             const updated = await api.payDues(0, note);
             setBillingStatus(updated);

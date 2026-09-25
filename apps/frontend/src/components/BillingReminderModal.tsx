@@ -3,6 +3,8 @@ import { CreditCard, Clock, CheckCircle2, ShieldCheck, Sparkles } from 'lucide-r
 
 interface BillingReminderModalProps {
   daysRemaining: number;
+  recommendedAmount?: number;
+  keyCount?: number;
   onPay: (note?: string) => Promise<void>;
   onSnooze: (days?: number) => Promise<void>;
   onOpenBillingTab: () => void;
@@ -10,6 +12,8 @@ interface BillingReminderModalProps {
 
 export function BillingReminderModal({
   daysRemaining,
+  recommendedAmount = 200,
+  keyCount = 0,
   onPay,
   onSnooze,
   onOpenBillingTab,
@@ -66,14 +70,21 @@ export function BillingReminderModal({
             Уважаемый хранитель! Наступил очередной 30-дневный период для внесения кооперативного взноса на поддержание серверов и сетевой инфраструктуры Avari Keys.
           </p>
 
-          <div className="bg-[#06141B] border border-[#1C3945] rounded-2xl p-4 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <ShieldCheck className="w-5 h-5 text-[#D9B96E]" />
-              <span className="text-xs font-mono text-[#A8B4B7]">Статус взноса:</span>
+          <div className="bg-[#06141B] border border-[#1C3945] rounded-2xl p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <ShieldCheck className="w-4 h-4 text-[#D9B96E]" />
+                <span className="text-xs font-mono text-[#A8B4B7]">Статус взноса:</span>
+              </div>
+              <span className="text-xs font-mono font-bold text-amber-400">
+                {daysRemaining <= 0 ? 'Срок внесения наступил' : `Осталось ${daysRemaining} дн.`}
+              </span>
             </div>
-            <span className="text-xs font-mono font-bold text-amber-400">
-              {daysRemaining <= 0 ? 'Срок внесения наступил' : `Осталось ${daysRemaining} дн.`}
-            </span>
+
+            <div className="flex items-center justify-between pt-2 border-t border-[#1C3945]">
+              <span className="text-xs font-mono text-[#A8B4B7]">Рекомендуемый размер ({keyCount} кл.):</span>
+              <span className="text-xs font-mono font-bold text-[#F0D48D]">{recommendedAmount} ₽</span>
+            </div>
           </div>
         </div>
 

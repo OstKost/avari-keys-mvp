@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/ecdh"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -270,7 +272,7 @@ func (r *RealRunner) GetStats(ctx context.Context) (*models.StatsSummaryResponse
 		Peers: make(map[string]models.PeerStats),
 	}
 
-	// 1. Build Client Mappings from server configs & client config files
+	// 1. Build Client Mappings from server configs & client config files (with Curve25519 pubkey derivation)
 	pubkeyToName, ipToName, knownClients := r.buildClientMappings()
 
 	// 2. Query AWG/WG dump data from system CLI
@@ -288,7 +290,6 @@ func (r *RealRunner) GetStats(ctx context.Context) (*models.StatsSummaryResponse
 
 		tokens := strings.Split(trimmed, "\t")
 		if len(tokens) < 8 {
-			// Fallback: try whitespace split
 			tokens = strings.Fields(trimmed)
 		}
 
@@ -412,6 +413,14 @@ func (r *RealRunner) GetStats(ctx context.Context) (*models.StatsSummaryResponse
 		}
 	}
 
+	// 5. If peer stats total is 0, attempt interface-level counter fallback from /proc/net/dev
+	if totalRx+totalTx == 0 {
+		if devRx, devTx, devErr := r.readProcNetDevStats(); devErr == nil && devRx+devTx > 0 {
+			totalRx = devRx
+			totalTx = devTx
+		}
+	}
+
 	res.ActivePeers = activePeersCount
 	res.TotalRx = totalRx
 	res.TotalTx = totalTx
@@ -420,38 +429,111 @@ func (r *RealRunner) GetStats(ctx context.Context) (*models.StatsSummaryResponse
 	return res, nil
 }
 
+// readProcNetDevStats reads aggregate RX/TX bytes for awg/wg interfaces from /proc/net/dev.
+func (r *RealRunner) readProcNetDevStats() (int64, int64, error) {
+	file, err := os.Open("/proc/net/dev")
+	if err != nil {
+		return 0, 0, err
+	}
+	defer file.Close()
+
+	var totalRx, totalTx int64
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.Contains(line, ":") {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		iface := strings.TrimSpace(parts[0])
+		if !strings.HasPrefix(iface, "awg") && !strings.HasPrefix(iface, "wg") && !strings.HasPrefix(iface, "amnezia") {
+			continue
+		}
+		fields := strings.Fields(parts[1])
+		if len(fields) >= 9 {
+			rx, _ := strconv.ParseInt(fields[0], 10, 64)
+			tx, _ := strconv.ParseInt(fields[8], 10, 64)
+			totalRx += rx
+			totalTx += tx
+		}
+	}
+	return totalRx, totalTx, nil
+}
+
+// findAWGBinaries locates available awg / wg executables.
+func findAWGBinaries() []string {
+	candidates := []string{
+		"awg",
+		"/usr/bin/awg",
+		"/usr/local/bin/awg",
+		"/usr/sbin/awg",
+		"/bin/awg",
+		"wg",
+		"/usr/bin/wg",
+		"/usr/local/bin/wg",
+		"/usr/sbin/wg",
+		"/bin/wg",
+	}
+	var existing []string
+	seen := make(map[string]bool)
+	for _, c := range candidates {
+		path := c
+		if !filepath.IsAbs(c) {
+			if looked, err := exec.LookPath(c); err == nil {
+				path = looked
+			} else {
+				continue
+			}
+		} else {
+			if _, err := os.Stat(path); err != nil {
+				continue
+			}
+		}
+		if !seen[path] {
+			seen[path] = true
+			existing = append(existing, path)
+		}
+	}
+	return existing
+}
+
 // fetchAWGDump queries awg/wg dump command for all active interfaces.
 func (r *RealRunner) fetchAWGDump(ctx context.Context) []string {
-	commands := [][]string{
-		{"awg", "show", "all", "dump"},
-		{"wg", "show", "all", "dump"},
-		{"awg", "show", "awg0", "dump"},
-		{"wg", "show", "wg0", "dump"},
-		{"awg", "show", "awg1", "dump"},
-		{"awg", "show", "awg2", "dump"},
-		{"awg", "show", "awg3", "dump"},
+	binaries := findAWGBinaries()
+	if len(binaries) == 0 {
+		binaries = []string{"awg", "wg"}
+	}
+
+	// Detect candidate interfaces dynamically
+	interfaces := []string{"all", "awg0", "awg1", "awg2", "awg3", "wg0"}
+	if ifaces, err := net.Interfaces(); err == nil {
+		for _, ifc := range ifaces {
+			name := strings.ToLower(ifc.Name)
+			if strings.HasPrefix(name, "awg") || strings.HasPrefix(name, "wg") || strings.HasPrefix(name, "amnezia") {
+				interfaces = append(interfaces, ifc.Name)
+			}
+		}
 	}
 
 	var allLines []string
 	seenPubkeys := make(map[string]bool)
 
-	for _, cmdArgs := range commands {
-		cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)
-		var out bytes.Buffer
-		cmd.Stdout = &out
-		if cmd.Run() == nil && out.Len() > 0 {
-			scanner := bufio.NewScanner(&out)
+	for _, bin := range binaries {
+		// First try 'show all dump'
+		cmdAll := exec.CommandContext(ctx, bin, "show", "all", "dump")
+		var outAll bytes.Buffer
+		cmdAll.Stdout = &outAll
+		if cmdAll.Run() == nil && outAll.Len() > 0 {
+			scanner := bufio.NewScanner(&outAll)
 			for scanner.Scan() {
-				line := scanner.Text()
-				trimmed := strings.TrimSpace(line)
-				if trimmed == "" {
+				line := strings.TrimSpace(scanner.Text())
+				if line == "" {
 					continue
 				}
-				tokens := strings.Split(trimmed, "\t")
+				tokens := strings.Split(line, "\t")
 				if len(tokens) < 8 {
-					tokens = strings.Fields(trimmed)
+					tokens = strings.Fields(line)
 				}
-				// Skip interface header lines (interface rows have 4 or 5 tokens without endpoint/allowed-ips)
 				if len(tokens) >= 8 {
 					pubkey := tokens[0]
 					if len(tokens) >= 9 {
@@ -464,9 +546,58 @@ func (r *RealRunner) fetchAWGDump(ctx context.Context) []string {
 				}
 			}
 		}
+
+		// Also try explicit interface dump
+		for _, iface := range interfaces {
+			if iface == "all" {
+				continue
+			}
+			cmd := exec.CommandContext(ctx, bin, "show", iface, "dump")
+			var out bytes.Buffer
+			cmd.Stdout = &out
+			if cmd.Run() == nil && out.Len() > 0 {
+				scanner := bufio.NewScanner(&out)
+				for scanner.Scan() {
+					line := strings.TrimSpace(scanner.Text())
+					if line == "" {
+						continue
+					}
+					tokens := strings.Split(line, "\t")
+					if len(tokens) < 8 {
+						tokens = strings.Fields(line)
+					}
+					if len(tokens) >= 8 {
+						pubkey := tokens[0]
+						if len(tokens) >= 9 {
+							pubkey = tokens[1]
+						}
+						if !seenPubkeys[pubkey] {
+							seenPubkeys[pubkey] = true
+							allLines = append(allLines, line)
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return allLines
+}
+
+// derivePubKeyFromPrivateKey computes Curve25519 public key in Base64 from private key Base64.
+func derivePubKeyFromPrivateKey(privKeyBase64 string) (string, error) {
+	privBytes, err := base64.StdEncoding.DecodeString(strings.TrimSpace(privKeyBase64))
+	if err != nil {
+		return "", err
+	}
+	if len(privBytes) != 32 {
+		return "", fmt.Errorf("invalid private key length: %d bytes (expected 32)", len(privBytes))
+	}
+	privKey, err := ecdh.X25519().NewPrivateKey(privBytes)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(privKey.PublicKey().Bytes()), nil
 }
 
 // buildClientMappings builds pubkey -> clientName and IP -> clientName mappings from server and client configs.
@@ -477,7 +608,72 @@ func (r *RealRunner) buildClientMappings() (map[string]string, map[string]string
 
 	scriptDir := filepath.Dir(r.scriptPath)
 
-	// 1. Scan server config files (awg0.conf, awg1.conf, etc.)
+	// 1. Scan client config files first (direct Curve25519 derivation from PrivateKey)
+	clientDirs := []string{
+		"/root/awg/clients",
+		"/root/awg",
+		"/etc/amnezia/amneziawg/clients",
+		"/etc/amnezia/amneziawg",
+		"/opt/avari-keys/clients",
+		r.configsDir,
+		filepath.Join(scriptDir, "clients"),
+		scriptDir,
+	}
+
+	for _, dir := range clientDirs {
+		matches, err := filepath.Glob(filepath.Join(dir, "*.conf"))
+		if err != nil {
+			continue
+		}
+		for _, confPath := range matches {
+			base := filepath.Base(confPath)
+			if strings.HasPrefix(base, "awg") || strings.HasPrefix(base, "wg") {
+				// Server interface config, skip in client scan
+				continue
+			}
+			clientName := strings.TrimSuffix(base, ".conf")
+			knownClients[clientName] = true
+
+			f, err := os.Open(confPath)
+			if err != nil {
+				continue
+			}
+			scanner := bufio.NewScanner(f)
+			var inInterface bool
+			for scanner.Scan() {
+				line := strings.TrimSpace(scanner.Text())
+				if strings.EqualFold(line, "[Interface]") {
+					inInterface = true
+				} else if strings.HasPrefix(line, "[") {
+					inInterface = false
+				}
+
+				if inInterface && strings.HasPrefix(line, "PrivateKey") {
+					parts := strings.SplitN(line, "=", 2)
+					if len(parts) == 2 {
+						privKey := strings.TrimSpace(parts[1])
+						if pubKey, err := derivePubKeyFromPrivateKey(privKey); err == nil && pubKey != "" {
+							pubkeyToName[pubKey] = clientName
+						}
+					}
+				} else if strings.HasPrefix(line, "Address") {
+					parts := strings.SplitN(line, "=", 2)
+					if len(parts) == 2 {
+						ips := strings.Split(parts[1], ",")
+						for _, ip := range ips {
+							clean := strings.TrimSpace(strings.Split(strings.TrimSpace(ip), "/")[0])
+							if clean != "" {
+								ipToName[clean] = clientName
+							}
+						}
+					}
+				}
+			}
+			_ = f.Close()
+		}
+	}
+
+	// 2. Scan server config files (awg0.conf, awg1.conf, etc.)
 	serverConfDirs := []string{
 		"/etc/amnezia/amneziawg",
 		"/etc/wireguard",
@@ -493,7 +689,6 @@ func (r *RealRunner) buildClientMappings() (map[string]string, map[string]string
 			continue
 		}
 		for _, confPath := range matches {
-			// Skip client configs in clients/ subfolder
 			if strings.Contains(confPath, "/clients/") {
 				continue
 			}
@@ -505,17 +700,27 @@ func (r *RealRunner) buildClientMappings() (map[string]string, map[string]string
 			var currentClient string
 			for scanner.Scan() {
 				line := strings.TrimSpace(scanner.Text())
-				if strings.HasPrefix(line, "### Client ") || strings.HasPrefix(line, "# Client ") {
-					parts := strings.Fields(line)
-					if len(parts) >= 3 {
-						currentClient = parts[2]
+				if strings.HasPrefix(line, "### Client") || strings.HasPrefix(line, "# Client") ||
+					strings.HasPrefix(line, "### client") || strings.HasPrefix(line, "# client") ||
+					strings.HasPrefix(line, "### BEGIN_PEER") || strings.HasPrefix(line, "# BEGIN_PEER") {
+					cleaned := strings.TrimLeft(line, "# ")
+					cleaned = strings.TrimPrefix(cleaned, "Client")
+					cleaned = strings.TrimPrefix(cleaned, "client")
+					cleaned = strings.TrimPrefix(cleaned, "BEGIN_PEER")
+					cleaned = strings.TrimPrefix(cleaned, ":")
+					cleaned = strings.TrimPrefix(cleaned, "=")
+					currentClient = strings.TrimSpace(cleaned)
+					if currentClient != "" {
 						knownClients[currentClient] = true
 					}
-				} else if strings.HasPrefix(line, "### BEGIN_PEER ") || strings.HasPrefix(line, "# BEGIN_PEER ") {
-					parts := strings.Fields(line)
-					if len(parts) >= 3 {
-						currentClient = parts[2]
-						knownClients[currentClient] = true
+				} else if strings.HasPrefix(line, "[Peer]") {
+					// Check inline peer comment if any: [Peer] # client_name
+					if idx := strings.Index(line, "#"); idx != -1 {
+						candidate := strings.TrimSpace(line[idx+1:])
+						if candidate != "" {
+							currentClient = candidate
+							knownClients[currentClient] = true
+						}
 					}
 				} else if strings.HasPrefix(line, "PublicKey") && currentClient != "" {
 					parts := strings.SplitN(line, "=", 2)
@@ -542,56 +747,9 @@ func (r *RealRunner) buildClientMappings() (map[string]string, map[string]string
 		}
 	}
 
-	// 2. Scan client config files
-	clientDirs := []string{
-		"/root/awg/clients",
-		"/root/awg",
-		"/etc/amnezia/amneziawg/clients",
-		"/opt/avari-keys/clients",
-		r.configsDir,
-		filepath.Join(scriptDir, "clients"),
-	}
-
-	for _, dir := range clientDirs {
-		matches, err := filepath.Glob(filepath.Join(dir, "*.conf"))
-		if err != nil {
-			continue
-		}
-		for _, confPath := range matches {
-			base := filepath.Base(confPath)
-			if base == "awg0.conf" || base == "awg1.conf" || base == "awg2.conf" || base == "awg3.conf" || base == "wg0.conf" {
-				continue
-			}
-			clientName := strings.TrimSuffix(base, ".conf")
-			knownClients[clientName] = true
-
-			// Read Address IP from client conf
-			f, err := os.Open(confPath)
-			if err != nil {
-				continue
-			}
-			scanner := bufio.NewScanner(f)
-			for scanner.Scan() {
-				line := strings.TrimSpace(scanner.Text())
-				if strings.HasPrefix(line, "Address") {
-					parts := strings.SplitN(line, "=", 2)
-					if len(parts) == 2 {
-						ips := strings.Split(parts[1], ",")
-						for _, ip := range ips {
-							clean := strings.TrimSpace(strings.Split(strings.TrimSpace(ip), "/")[0])
-							if clean != "" {
-								ipToName[clean] = clientName
-							}
-						}
-					}
-				}
-			}
-			_ = f.Close()
-		}
-	}
-
 	return pubkeyToName, ipToName, knownClients
 }
+
 
 func (r *RealRunner) RestartAWG(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "systemctl", "restart", "awg-quick@awg0")

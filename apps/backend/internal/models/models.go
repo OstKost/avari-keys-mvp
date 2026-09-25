@@ -171,13 +171,15 @@ type BillingRecord struct {
 
 // BillingStatusResponse represents current user's dues state and reminder countdown.
 type BillingStatusResponse struct {
-	IsDue         bool            `json:"is_due"`
-	DaysRemaining int             `json:"days_remaining"`
-	NextDueAt     time.Time       `json:"next_due_at"`
-	LastPaidAt    *time.Time      `json:"last_paid_at,omitempty"`
-	SnoozedUntil  *time.Time      `json:"snoozed_until,omitempty"`
-	Status        string          `json:"status"` // "paid", "due", "snoozed"
-	History       []BillingRecord `json:"history"`
+	IsDue             bool            `json:"is_due"`
+	DaysRemaining     int             `json:"days_remaining"`
+	NextDueAt         time.Time       `json:"next_due_at"`
+	LastPaidAt        *time.Time      `json:"last_paid_at,omitempty"`
+	SnoozedUntil      *time.Time      `json:"snoozed_until,omitempty"`
+	Status            string          `json:"status"` // "paid", "due", "snoozed"
+	KeyCount          int             `json:"key_count"`
+	RecommendedAmount float64         `json:"recommended_amount"`
+	History           []BillingRecord `json:"history"`
 }
 
 // PayDuesRequest DTO for confirming dues payment.
@@ -292,9 +294,10 @@ type BillingRequisites struct {
 	SBPBank  string `json:"sbp_bank"`
 }
 
-// TelegramChat represents a subscribed Telegram chat for admin alerts.
+// TelegramChat represents a subscribed Telegram chat for admin alerts or user notifications.
 type TelegramChat struct {
 	ChatID        int64     `json:"chat_id"`
+	UserID        *int64    `json:"user_id,omitempty"`
 	Username      string    `json:"username"`
 	FirstName     string    `json:"first_name"`
 	IsAdmin       bool      `json:"is_admin"`
@@ -304,13 +307,14 @@ type TelegramChat struct {
 
 // TelegramSettings represents configurable Telegram Bot settings in Master Backend.
 type TelegramSettings struct {
-	Enabled             bool   `json:"enabled"`
-	BotToken            string `json:"bot_token"`
-	BotUsername         string `json:"bot_username"`
-	AdminSecret         string `json:"admin_secret"`
-	NotifyOnNodeDown    bool   `json:"notify_on_node_down"`
-	NotifyOnNodeRecover bool   `json:"notify_on_node_recover"`
-	NotifyOnNewUser     bool   `json:"notify_on_new_user"`
+	Enabled                  bool   `json:"enabled"`
+	BotToken                 string `json:"bot_token"`
+	BotUsername              string `json:"bot_username"`
+	AdminSecret              string `json:"admin_secret"`
+	NotifyOnNodeDown         bool   `json:"notify_on_node_down"`
+	NotifyOnNodeRecover      bool   `json:"notify_on_node_recover"`
+	NotifyOnNewUser          bool   `json:"notify_on_new_user"`
+	NotifyOnBillingReminders bool   `json:"notify_on_billing_reminders"`
 }
 
 // TelegramStatusResponse represents the current status of the Telegram bot.
@@ -330,6 +334,17 @@ type TelegramTestAlertRequest struct {
 // TelegramSubscriberToggleRequest for enabling/disabling subscriber alerts.
 type TelegramSubscriberToggleRequest struct {
 	AlertsEnabled bool `json:"alerts_enabled"`
+}
+
+// UserTelegramStatusResponse represents user-specific Telegram integration status and deep link.
+type UserTelegramStatusResponse struct {
+	BotUsername      string `json:"bot_username"`
+	BotEnabled       bool   `json:"bot_enabled"`
+	IsLinked         bool   `json:"is_linked"`
+	TelegramChatID   *int64 `json:"telegram_chat_id,omitempty"`
+	TelegramUsername string `json:"telegram_username,omitempty"`
+	AlertsEnabled    bool   `json:"alerts_enabled"`
+	DeepLink         string `json:"deep_link"`
 }
 
 

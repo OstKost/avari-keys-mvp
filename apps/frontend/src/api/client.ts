@@ -15,6 +15,7 @@ import {
   BillingRequisites,
   TelegramStatusResponse,
   TelegramSettings,
+  UserTelegramStatus,
 } from '../types';
 
 import { mockApi } from './mockClient';
@@ -488,6 +489,21 @@ const realApi = {
 
   async sendTelegramTestAlert(): Promise<{ success: boolean; message: string }> {
     const res = await fetch(`${API_BASE}/admin/telegram/test`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<{ success: boolean; message: string }>(res);
+  },
+
+  async getUserTelegramStatus(): Promise<UserTelegramStatus> {
+    const res = await fetch(`${API_BASE}/user/telegram`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<UserTelegramStatus>(res);
+  },
+
+  async unlinkUserTelegram(): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/user/telegram/unlink`, {
       method: 'POST',
       headers: getAuthHeaders(),
     });

@@ -29,10 +29,6 @@ func main() {
 	jwtSecret := os.Getenv("JWT_SECRET")
 
 	tgToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	if tgToken == "" {
-		// Default token for AvariElfBot
-		tgToken = "8402833005:AAEZ4eJ6KKb0qErWK05gLnIrS1lyjY3b_i4"
-	}
 
 	tgUsername := os.Getenv("TELEGRAM_BOT_USERNAME")
 	if tgUsername == "" {
