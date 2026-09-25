@@ -244,4 +244,23 @@ func TestTelegramBotSecurityAndLinking(t *testing.T) {
 	if err != nil || adminChat == nil || !adminChat.IsAdmin {
 		t.Fatalf("expected admin chat to be saved as admin, got: %+v, err: %v", adminChat, err)
 	}
+
+	// 10. Linked user logs out: /logout
+	bot.ProcessMessage(ctx, validUserChatID, "king_aragorn", "Aragorn", "/logout")
+	lastText = getLastMessageText()
+	if !strings.Contains(lastText, "Ваш Telegram-чат успешно отвязан") {
+		t.Fatalf("expected logout confirmation message, got: %q", lastText)
+	}
+
+	// Verify chat is deleted from DB
+	unlinkedChat, _ := store.GetTelegramChatByChatID(ctx, validUserChatID)
+	if unlinkedChat != nil {
+		t.Fatalf("expected chat to be deleted after /logout")
+	}
+
+	// Now that user is logged out, subsequent message must receive decoy response
+	bot.ProcessMessage(ctx, validUserChatID, "king_aragorn", "Aragorn", "/start")
+	if getLastMessageText() != "Привет! Как дела?" {
+		t.Fatalf("expected decoy response 'Привет! Как дела?' after logout, got: %q", getLastMessageText())
+	}
 }

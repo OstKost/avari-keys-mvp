@@ -455,7 +455,17 @@ func (b *Bot) handleIncomingMessage(ctx context.Context, chatID int64, from *str
 			"📊 /status — Состояние и пинг всех серверов сети\n" +
 			"🌐 /nodes — Список серверов и маршрутизация\n" +
 			"🔔 /test — Проверить доставку оповещения\n" +
+			"🚪 /logout — Отвязать Telegram-чат от аккаунта\n" +
 			"❓ /help — Справка по командам"
+		_ = b.SendMessage(chatID, msg, "HTML")
+
+	case "/logout", "/unlink", "/disconnect":
+		if b.storage != nil {
+			_ = b.storage.DeleteTelegramChat(ctx, chatID)
+		}
+		msg := "👋 <b>Чат отвязан</b>\n\n" +
+			"Ваш Telegram-чат успешно отвязан от учетной записи Avari Keys.\n" +
+			"Чтобы подключиться снова, перейдите в веб-панель и нажмите кнопку подключения по персональной ссылке."
 		_ = b.SendMessage(chatID, msg, "HTML")
 
 	case "/billing", "/dues":
@@ -475,6 +485,7 @@ func (b *Bot) handleIncomingMessage(ctx context.Context, chatID int64, from *str
 			"• <b>/billing</b> — Статус взносов, расчет по ключам и реквизиты СБП\n" +
 			"• <b>/status</b> — Текущий статус серверов и задержка (пинг)\n" +
 			"• <b>/nodes</b> — Список узлов и их конфигурация\n" +
+			"• <b>/logout</b> — Отвязать Telegram-чат от учетной записи\n" +
 			"• <b>/test</b> — Тестовое оповещение о доставке\n" +
 			"• <b>/start</b> — Главное меню"
 		_ = b.SendMessage(chatID, msg, "HTML")
