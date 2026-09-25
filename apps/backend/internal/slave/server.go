@@ -126,7 +126,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		Status:       "ok",
 		Service:      "avari-slave",
 		AWGAvailable: healthy,
-		Version:      "v0.2.0",
+		Version:      "v0.2.4",
 	})
 }
 
