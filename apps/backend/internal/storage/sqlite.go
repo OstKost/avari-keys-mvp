@@ -156,6 +156,7 @@ func (s *Storage) migrate() error {
 	_, _ = s.db.Exec(`ALTER TABLE nodes ADD COLUMN country_code TEXT NOT NULL DEFAULT '';`)
 	_, _ = s.db.Exec(`ALTER TABLE nodes ADD COLUMN provider_url TEXT NOT NULL DEFAULT '';`)
 	_, _ = s.db.Exec(`ALTER TABLE users ADD COLUMN billing_snoozed_until DATETIME DEFAULT NULL;`)
+	_, _ = s.db.Exec(`ALTER TABLE telegram_chats ADD COLUMN user_id INTEGER DEFAULT NULL;`)
 	return nil
 }
 
@@ -905,14 +906,24 @@ func (s *Storage) GetBillingStatus(ctx context.Context, userID int64) (*models.B
 		status = "paid"
 	}
 
+	var keyCount int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM client_configs WHERE user_id = ?`, userID).Scan(&keyCount)
+
+	recommendedAmount := 200.0
+	if keyCount > 3 {
+		recommendedAmount = 200.0 + float64(keyCount-3)*30.0
+	}
+
 	return &models.BillingStatusResponse{
-		IsDue:         isDue,
-		DaysRemaining: daysRemaining,
-		NextDueAt:     nextDueAt,
-		LastPaidAt:    lastPaidAt,
-		SnoozedUntil:  snoozedUntil,
-		Status:        status,
-		History:       history,
+		IsDue:             isDue,
+		DaysRemaining:     daysRemaining,
+		NextDueAt:         nextDueAt,
+		LastPaidAt:        lastPaidAt,
+		SnoozedUntil:      snoozedUntil,
+		Status:            status,
+		KeyCount:          keyCount,
+		RecommendedAmount: recommendedAmount,
+		History:           history,
 	}, nil
 }
 
@@ -1015,20 +1026,21 @@ func (s *Storage) UpdateBillingRequisites(ctx context.Context, req models.Billin
 // Telegram Chat Subscribers
 func (s *Storage) SaveTelegramChat(ctx context.Context, chat models.TelegramChat) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO telegram_chats (chat_id, username, first_name, is_admin, alerts_enabled, created_at)
-		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO telegram_chats (chat_id, user_id, username, first_name, is_admin, alerts_enabled, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(chat_id) DO UPDATE SET
+			user_id = COALESCE(excluded.user_id, telegram_chats.user_id),
 			username = excluded.username,
 			first_name = excluded.first_name,
 			is_admin = excluded.is_admin,
 			alerts_enabled = excluded.alerts_enabled
-	`, chat.ChatID, chat.Username, chat.FirstName, chat.IsAdmin, chat.AlertsEnabled)
+	`, chat.ChatID, chat.UserID, chat.Username, chat.FirstName, chat.IsAdmin, chat.AlertsEnabled)
 	return err
 }
 
 func (s *Storage) ListTelegramChats(ctx context.Context) ([]models.TelegramChat, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT chat_id, username, first_name, is_admin, alerts_enabled, created_at
+		SELECT chat_id, user_id, username, first_name, is_admin, alerts_enabled, created_at
 		FROM telegram_chats
 		ORDER BY created_at ASC
 	`)
@@ -1040,8 +1052,12 @@ func (s *Storage) ListTelegramChats(ctx context.Context) ([]models.TelegramChat,
 	var chats []models.TelegramChat
 	for rows.Next() {
 		var c models.TelegramChat
-		if err := rows.Scan(&c.ChatID, &c.Username, &c.FirstName, &c.IsAdmin, &c.AlertsEnabled, &c.CreatedAt); err != nil {
+		var uid sql.NullInt64
+		if err := rows.Scan(&c.ChatID, &uid, &c.Username, &c.FirstName, &c.IsAdmin, &c.AlertsEnabled, &c.CreatedAt); err != nil {
 			return nil, err
+		}
+		if uid.Valid {
+			c.UserID = &uid.Int64
 		}
 		chats = append(chats, c)
 	}
@@ -1049,6 +1065,24 @@ func (s *Storage) ListTelegramChats(ctx context.Context) ([]models.TelegramChat,
 		chats = []models.TelegramChat{}
 	}
 	return chats, nil
+}
+
+func (s *Storage) GetTelegramChatByUserID(ctx context.Context, userID int64) (*models.TelegramChat, error) {
+	var c models.TelegramChat
+	var uid sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT chat_id, user_id, username, first_name, is_admin, alerts_enabled, created_at
+		FROM telegram_chats
+		WHERE user_id = ? AND alerts_enabled = 1
+		LIMIT 1
+	`, userID).Scan(&c.ChatID, &uid, &c.Username, &c.FirstName, &c.IsAdmin, &c.AlertsEnabled, &c.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if uid.Valid {
+		c.UserID = &uid.Int64
+	}
+	return &c, nil
 }
 
 func (s *Storage) DeleteTelegramChat(ctx context.Context, chatID int64) error {

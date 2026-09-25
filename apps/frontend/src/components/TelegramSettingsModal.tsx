@@ -214,7 +214,7 @@ export function TelegramSettingsModal({ isOpen, onClose, onSaved }: TelegramSett
                 <div className="relative">
                   <input
                     type={showToken ? 'text' : 'password'}
-                    placeholder="8402833005:AAEZ4eJ6KKb0qErWK05gLnIrS1lyjY3b_i4"
+                    placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
                     value={botToken}
                     onChange={(e) => setBotToken(e.target.value)}
                     className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl pl-3.5 pr-10 py-2.5 text-sm text-[#F2F0E8] font-mono focus:outline-none placeholder:text-slate-600"

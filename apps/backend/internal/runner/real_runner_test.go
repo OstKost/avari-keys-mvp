@@ -39,10 +39,11 @@ AllowedIPs = 10.7.0.3/32, 10.7.0.4/32
 `
 	_ = os.WriteFile(filepath.Join(tmpDir, "awg0.conf"), []byte(serverConf), 0644)
 
-	// Create a dummy client config u3_tablet.conf
+	// Create a dummy client config u3_tablet.conf with valid 32-byte base64 PrivateKey
+	// privKey: "WHSK...=" (32 bytes) -> derived pubKey will map to u3_tablet
 	clientConf := `[Interface]
 Address = 10.7.0.5/32
-PrivateKey = TabletPrivKey=
+PrivateKey = 4C8A79Qp9iB+YF8p8Xq4rK7j+Fh9V5y9H2eF5nB1Q4A=
 [Peer]
 PublicKey = ServerPubKey=
 `
@@ -50,6 +51,12 @@ PublicKey = ServerPubKey=
 
 	runner := NewRealRunner(scriptPath, clientsDir)
 	pubkeys, ips, known := runner.buildClientMappings()
+
+	// Verify derived pubkey exists for u3_tablet
+	derivedPub, err := derivePubKeyFromPrivateKey("4C8A79Qp9iB+YF8p8Xq4rK7j+Fh9V5y9H2eF5nB1Q4A=")
+	if err != nil || derivedPub == "" || pubkeys[derivedPub] != "u3_tablet" {
+		t.Errorf("expected derived pubkey mapping for u3_tablet, got '%s' (pubkey: %s)", pubkeys[derivedPub], derivedPub)
+	}
 
 	if pubkeys["Client1PubKey12345="] != "u1_phone" {
 		t.Errorf("expected pubkey mapping for u1_phone, got '%s'", pubkeys["Client1PubKey12345="])

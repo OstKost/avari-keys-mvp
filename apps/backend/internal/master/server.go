@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1088,6 +1089,11 @@ func (s *Server) handleAdminListAllKeys(w http.ResponseWriter, r *http.Request) 
 
 		filtered = append(filtered, k)
 	}
+
+	// Guarantee reverse sort by ID (newest keys first)
+	sort.SliceStable(filtered, func(i, j int) bool {
+		return filtered[i].ID > filtered[j].ID
+	})
 
 	// Pagination
 	page := 1

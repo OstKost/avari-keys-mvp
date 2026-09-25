@@ -88,6 +88,10 @@ func (h *HealthChecker) run(ctx context.Context) {
 	ticker := time.NewTicker(h.interval)
 	defer ticker.Stop()
 
+	// Periodic billing reminder check (every 12 hours)
+	billingTicker := time.NewTicker(12 * time.Hour)
+	defer billingTicker.Stop()
+
 	for {
 		select {
 		case <-h.stopChan:
@@ -96,6 +100,10 @@ func (h *HealthChecker) run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			h.checkNodes(ctx, false)
+		case <-billingTicker.C:
+			if h.bot != nil {
+				_ = h.bot.BroadcastBillingReminders(ctx)
+			}
 		}
 	}
 }

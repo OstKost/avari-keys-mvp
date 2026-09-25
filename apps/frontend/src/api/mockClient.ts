@@ -652,6 +652,9 @@ PersistentKeepalive = 25`;
       });
     }
 
+    // Sort ID descending
+    filtered.sort((a, b) => b.id - a.id);
+
     const page = params?.page && params.page > 0 ? params.page : 1;
     const limit = params?.limit && params.limit > 0 ? params.limit : 10;
     const totalCount = filtered.length;
@@ -884,6 +887,10 @@ PersistentKeepalive = 25`;
       status = 'paid';
     }
 
+    const userKeys = mockKeys.filter((k) => k.user_id === user.id);
+    const keyCount = userKeys.length;
+    const recommendedAmount = keyCount <= 3 ? 200 : 200 + (keyCount - 3) * 30;
+
     return {
       is_due: isDue,
       days_remaining: daysRemaining,
@@ -891,6 +898,8 @@ PersistentKeepalive = 25`;
       last_paid_at: lastPaidAt,
       snoozed_until: snoozedUntil,
       status: status,
+      key_count: keyCount,
+      recommended_amount: recommendedAmount,
       history: history,
     };
   },
@@ -1032,7 +1041,7 @@ PersistentKeepalive = 25`;
 // Mock state helpers
 let mockTelegramSettings: TelegramSettings = {
   enabled: true,
-  bot_token: '8402833005:AAEZ4eJ6KKb0qErWK05gLnIrS1lyjY3b_i4',
+  bot_token: '123456789:AAFakeTokenForDevelopmentOnly_XYZ',
   bot_username: 'AvariElfBot',
   admin_secret: 'elfsecret123',
   notify_on_node_down: true,

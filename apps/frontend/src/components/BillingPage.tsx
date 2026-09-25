@@ -12,8 +12,7 @@ import {
   Check,
   RefreshCw,
   Users,
-  Pencil,
-  Save,
+  Key,
 } from 'lucide-react';
 import { User, BillingStatus, AdminBillingSummary, BillingRequisites } from '../types';
 import { api } from '../api/client';
@@ -44,12 +43,6 @@ export function BillingPage({ currentUser }: BillingPageProps) {
     sbp_phone: '+7 (999) 000-00-00',
     sbp_bank: 'Т-Банк / Сбербанк',
   });
-  const [isEditingRequisites, setIsEditingRequisites] = useState(false);
-  const [editRequisitesForm, setEditRequisitesForm] = useState<BillingRequisites>({
-    sbp_phone: '',
-    sbp_bank: '',
-  });
-  const [savingRequisites, setSavingRequisites] = useState(false);
 
   // Admin filter
   const [searchFilter, setSearchFilter] = useState('');
@@ -80,28 +73,9 @@ export function BillingPage({ currentUser }: BillingPageProps) {
     loadData();
   }, [currentUser]);
 
-  const handleStartEditRequisites = () => {
-    setEditRequisitesForm({ ...requisites });
-    setIsEditingRequisites(true);
-  };
-
-  const handleCancelEditRequisites = () => {
-    setIsEditingRequisites(false);
-  };
-
-  const handleSaveRequisites = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      setSavingRequisites(true);
-      const updated = await api.updateBillingRequisites(editRequisitesForm);
-      setRequisites(updated);
-      setIsEditingRequisites(false);
-      toast.success('Реквизиты успешно сохранены!');
-    } catch (err: any) {
-      toast.error(err.message || 'Ошибка сохранения реквизитов');
-    } finally {
-      setSavingRequisites(false);
-    }
+  const handleOpenPayModal = () => {
+    setPayAmount(billingStatus?.recommended_amount ? String(billingStatus.recommended_amount) : '200');
+    setShowPayModal(true);
   };
 
   const handleCopy = (text: string, fieldName: string) => {
@@ -326,7 +300,7 @@ export function BillingPage({ currentUser }: BillingPageProps) {
 
               <div className="mt-6 space-y-2">
                 <button
-                  onClick={() => setShowPayModal(true)}
+                  onClick={handleOpenPayModal}
                   className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] hover:from-[#F0D48D] hover:to-[#D9B96E] text-[#06141B] font-bold text-xs uppercase tracking-wider font-mono py-3 px-4 rounded-xl shadow-lg shadow-[#D9B96E]/20 hover:shadow-[#D9B96E]/40 transition duration-200 cursor-pointer"
                 >
                   <CheckCircle2 className="w-4 h-4" />
@@ -356,122 +330,96 @@ export function BillingPage({ currentUser }: BillingPageProps) {
             </div>
           </div>
 
-          {/* Compact Requisites Card */}
-          {isEditingRequisites ? (
-            <div className="bg-[#0A1D26]/90 border border-[#D9B96E]/40 rounded-2xl p-5 backdrop-blur-md max-w-md shadow-xl">
-              <div className="flex items-center space-x-2.5 mb-3.5 pb-2.5 border-b border-[#1C3945]/70">
-                <div className="p-1.5 rounded-lg bg-[#102833] text-[#D9B96E] border border-[#1C3945]">
-                  <Wallet className="w-4 h-4" />
-                </div>
-                <span className="text-xs font-mono uppercase tracking-wider text-[#D9B96E] font-bold">
-                  Редактирование реквизитов (СБП)
-                </span>
-              </div>
-
-              <form onSubmit={handleSaveRequisites} className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-mono text-[#A8B4B7] mb-1">
-                    Номер телефона или карты
-                  </label>
-                  <input
-                    type="text"
-                    value={editRequisitesForm.sbp_phone}
-                    onChange={(e) =>
-                      setEditRequisitesForm({ ...editRequisitesForm, sbp_phone: e.target.value })
-                    }
-                    placeholder="+7 (999) 000-00-00"
-                    className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3 py-2 text-xs text-[#F2F0E8] font-mono focus:outline-none transition"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-mono text-[#A8B4B7] mb-1">
-                    Банк / Получатель
-                  </label>
-                  <input
-                    type="text"
-                    value={editRequisitesForm.sbp_bank}
-                    onChange={(e) =>
-                      setEditRequisitesForm({ ...editRequisitesForm, sbp_bank: e.target.value })
-                    }
-                    placeholder="Т-Банк / Сбербанк"
-                    className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3 py-2 text-xs text-[#F2F0E8] font-mono focus:outline-none transition"
-                    required
-                  />
-                </div>
-
-                <div className="flex items-center justify-end space-x-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={handleCancelEditRequisites}
-                    disabled={savingRequisites}
-                    className="px-3 py-1.5 rounded-lg border border-[#1C3945] text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] hover:bg-[#102833] transition cursor-pointer"
-                  >
-                    Отмена
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={savingRequisites}
-                    className="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] font-bold text-xs font-mono uppercase tracking-wider shadow-md hover:shadow-[#D9B96E]/30 transition disabled:opacity-50 cursor-pointer"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>{savingRequisites ? 'Сохранение...' : 'Сохранить'}</span>
-                  </button>
-                </div>
-              </form>
-            </div>
-          ) : (
-            <div className="bg-[#0A1D26]/90 border border-[#1C3945] hover:border-[#D9B96E]/40 rounded-2xl p-5 backdrop-blur-md max-w-md shadow-xl flex flex-col justify-between transition group">
+          {/* 2-Column Section: Requisites & Recommended Dues Breakdown */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Requisites Card */}
+            <div className="bg-[#0A1D26]/90 border border-[#1C3945] hover:border-[#D9B96E]/40 rounded-3xl p-6 backdrop-blur-md shadow-xl flex flex-col justify-between transition group">
               <div>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="p-1.5 rounded-lg bg-[#102833] text-[#D9B96E] border border-[#1C3945] group-hover:border-[#D9B96E]/40 transition">
-                      <Wallet className="w-4 h-4" />
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 rounded-xl bg-[#102833] text-[#D9B96E] border border-[#1C3945] group-hover:border-[#D9B96E]/40 transition">
+                      <Wallet className="w-5 h-5" />
                     </div>
                     <div>
                       <span className="text-xs font-mono uppercase tracking-wider text-[#A8B4B7]">
                         Реквизиты для взноса
                       </span>
-                      <span className="text-[11px] font-mono text-[#718187] block">СБП / Карта РФ</span>
+                      <span className="text-xs font-mono text-[#718187] block">СБП / Карта РФ</span>
                     </div>
                   </div>
-
-                  {currentUser.role === 'admin' && (
-                    <Tooltip content="Редактировать реквизиты">
-                      <button
-                        onClick={handleStartEditRequisites}
-                        aria-label="Редактировать реквизиты"
-                        className="p-1.5 rounded-lg border border-[#1C3945] bg-[#102833] text-[#D9B96E] hover:bg-[#1C3945] hover:text-[#F0D48D] transition shadow-sm cursor-pointer"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                    </Tooltip>
-                  )}
                 </div>
 
-                <div className="bg-[#06141B]/80 rounded-xl p-3 border border-[#1C3945]/70 mb-3.5">
-                  <div className="font-mono text-sm sm:text-base font-bold text-[#F2F0E8] select-all tracking-wide">
+                <div className="bg-[#06141B]/80 rounded-2xl p-4 border border-[#1C3945]/70 mb-4">
+                  <div className="font-mono text-base sm:text-lg font-bold text-[#F2F0E8] select-all tracking-wide">
                     {requisites.sbp_phone}
                   </div>
-                  <div className="text-xs font-mono text-[#D9B96E] mt-0.5 font-medium">
+                  <div className="text-xs font-mono text-[#D9B96E] mt-1 font-medium">
                     {requisites.sbp_bank}
                   </div>
                 </div>
               </div>
 
-              <button
-                onClick={() => handleCopy(requisites.sbp_phone, 'sbp')}
-                className="self-start flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-[#1C3945] bg-[#102833] hover:bg-[#163442] hover:border-[#D9B96E]/40 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition cursor-pointer"
-              >
-                {copiedField === 'sbp' ? (
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                ) : (
-                  <Copy className="w-3.5 h-3.5" />
+              <div className="flex items-center justify-between pt-2 border-t border-[#1C3945]/60">
+                <button
+                  onClick={() => handleCopy(requisites.sbp_phone, 'sbp')}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-[#1C3945] bg-[#102833] hover:bg-[#163442] hover:border-[#D9B96E]/40 text-xs font-mono text-[#A8B4B7] hover:text-[#F2F0E8] transition cursor-pointer"
+                >
+                  {copiedField === 'sbp' ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  <span>{copiedField === 'sbp' ? 'Скопировано' : 'Скопировать номер'}</span>
+                </button>
+
+                {currentUser.role === 'admin' && (
+                  <span className="text-[11px] font-mono text-[#718187]">
+                    Редактирование: во вкладке «Настройки»
+                  </span>
                 )}
-                <span>{copiedField === 'sbp' ? 'Скопировано' : 'Скопировать номер'}</span>
-              </button>
+              </div>
             </div>
-          )}
+
+            {/* Recommended Dues Card */}
+            <div className="bg-[#0A1D26]/90 border border-[#1C3945] hover:border-[#D9B96E]/40 rounded-3xl p-6 backdrop-blur-md shadow-xl flex flex-col justify-between transition">
+              <div>
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="p-2 rounded-xl bg-amber-500/10 text-[#D9B96E] border border-amber-500/20">
+                    <Key className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-mono uppercase tracking-wider text-[#A8B4B7]">
+                      Рекомендуемый взнос
+                    </span>
+                    <span className="text-xs font-mono text-[#D9B96E] block font-semibold">
+                      Расчет от активных ключей
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-[#06141B]/80 rounded-2xl p-4 border border-[#1C3945]/70 mb-4">
+                  <div className="flex items-baseline space-x-2">
+                    <span className="text-2xl sm:text-3xl font-serif font-bold text-[#F0D48D]">
+                      {billingStatus?.recommended_amount ?? 200} ₽
+                    </span>
+                    <span className="text-xs font-mono text-[#A8B4B7]">/ месяц</span>
+                  </div>
+                  <div className="text-xs font-mono text-[#A8B4B7] mt-1">
+                    У вас активно: <strong className="text-[#F2F0E8]">{billingStatus?.key_count ?? 0}</strong>{' '}
+                    {(billingStatus?.key_count ?? 0) === 1
+                      ? 'ключ'
+                      : [2, 3, 4].includes(billingStatus?.key_count ?? 0)
+                      ? 'ключа'
+                      : 'ключей'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#102833]/50 border border-[#1C3945] text-xs text-[#A8B4B7] font-sans">
+                💡 <strong className="text-[#F2F0E8]">Формула:</strong> 200 ₽ за первые 3 ключа + 30 ₽ за каждый последующий. Сумма добровольная и служит ориентиром для покрытия расходов.
+              </div>
+            </div>
+          </div>
 
           {/* User History Table */}
           <div className="bg-[#0A1D26]/80 border border-[#1C3945] rounded-3xl p-6 sm:p-8">
@@ -693,12 +641,19 @@ export function BillingPage({ currentUser }: BillingPageProps) {
 
             <div className="space-y-4 mb-6">
               <div>
-                <label className="block text-xs font-mono uppercase text-[#A8B4B7] mb-1.5">
-                  Сумма (необязательно, ₽)
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-mono uppercase text-[#A8B4B7]">
+                    Сумма (необязательно, ₽)
+                  </label>
+                  {billingStatus?.recommended_amount && (
+                    <span className="text-[11px] font-mono text-[#D9B96E]">
+                      Рекомендуется: {billingStatus.recommended_amount} ₽
+                    </span>
+                  )}
+                </div>
                 <input
                   type="number"
-                  placeholder="Например, 150"
+                  placeholder={billingStatus?.recommended_amount ? String(billingStatus.recommended_amount) : '200'}
                   value={payAmount}
                   onChange={(e) => setPayAmount(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-[#06141B] border border-[#1C3945] rounded-xl text-sm font-mono text-[#F2F0E8] focus:outline-none focus:border-[#D9B96E]/60 transition"
