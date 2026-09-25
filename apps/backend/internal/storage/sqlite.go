@@ -1333,9 +1333,6 @@ func (s *Storage) GetTelegramSettings(ctx context.Context) (*models.TelegramSett
 		secret := os.Getenv("TELEGRAM_ADMIN_SECRET")
 
 		enabled := token != ""
-		if username == "" && token != "" {
-			username = "AvariElfBot"
-		}
 
 		return &models.TelegramSettings{
 			Enabled:             enabled,

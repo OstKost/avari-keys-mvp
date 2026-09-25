@@ -29,12 +29,7 @@ func main() {
 	jwtSecret := os.Getenv("JWT_SECRET")
 
 	tgToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-
 	tgUsername := os.Getenv("TELEGRAM_BOT_USERNAME")
-	if tgUsername == "" {
-		tgUsername = "AvariElfBot"
-	}
-
 	tgAdminChatID := os.Getenv("TELEGRAM_ADMIN_CHAT_ID")
 	tgAdminSecret := os.Getenv("TELEGRAM_ADMIN_SECRET")
 

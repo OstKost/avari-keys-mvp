@@ -52,8 +52,9 @@ func setupTestEnvironment(t *testing.T) (*master.Server, *httptest.Server, *stor
 	}
 
 	masterSrv := master.NewServer(master.Config{
-		Port:      "8080",
-		JWTSecret: "test-jwt-secret-xyz",
+		Port:                "8080",
+		JWTSecret:           "test-jwt-secret-xyz",
+		TelegramBotUsername: "AvariTestBot",
 	}, store)
 
 	cleanup := func() {

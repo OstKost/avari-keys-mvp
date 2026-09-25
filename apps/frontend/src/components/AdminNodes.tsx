@@ -429,9 +429,15 @@ export function AdminNodes() {
                 <span className="font-serif font-bold text-[#F2F0E8] text-base">
                   Оповещения в Telegram
                 </span>
-                <span className="text-xs font-mono text-[#D9B96E] bg-[#102833] px-2 py-0.5 rounded-md border border-[#1C3945]">
-                  @{telegramStatus?.bot_username || 'AvariElfBot'}
-                </span>
+                {telegramStatus?.bot_username ? (
+                  <span className="text-xs font-mono text-[#D9B96E] bg-[#102833] px-2 py-0.5 rounded-md border border-[#1C3945]">
+                    @{telegramStatus.bot_username}
+                  </span>
+                ) : (
+                  <span className="text-xs font-mono text-[#718187] bg-[#102833] px-2 py-0.5 rounded-md border border-[#1C3945]">
+                    Не настроен
+                  </span>
+                )}
                 {telegramStatus?.enabled ? (
                   <span className="inline-flex items-center space-x-1 text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -467,16 +473,18 @@ export function AdminNodes() {
               <span>Настройки бота</span>
             </button>
 
-            <a
-              href={`https://t.me/${telegramStatus?.bot_username || 'AvariElfBot'}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center space-x-1.5 text-xs font-mono uppercase tracking-wider bg-[#102833] hover:bg-[#1C3945] text-[#A8B4B7] hover:text-[#F2F0E8] px-3.5 py-2 rounded-xl border border-[#1C3945] transition cursor-pointer"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Открыть бота</span>
-              <ExternalLink className="w-3 h-3 opacity-60" />
-            </a>
+            {telegramStatus?.bot_username ? (
+              <a
+                href={`https://t.me/${telegramStatus.bot_username}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center space-x-1.5 text-xs font-mono uppercase tracking-wider bg-[#102833] hover:bg-[#1C3945] text-[#A8B4B7] hover:text-[#F2F0E8] px-3.5 py-2 rounded-xl border border-[#1C3945] transition cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Открыть бота</span>
+                <ExternalLink className="w-3 h-3 opacity-60" />
+              </a>
+            ) : null}
 
             <button
               onClick={handleSendTelegramTestAlert}

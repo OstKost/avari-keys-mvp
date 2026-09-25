@@ -1201,7 +1201,7 @@ PersistentKeepalive = 25`;
     await new Promise((resolve) => setTimeout(resolve, 200));
     return {
       enabled: mockTelegramSettings.enabled,
-      bot_username: mockTelegramSettings.bot_username || 'AvariElfBot',
+      bot_username: mockTelegramSettings.bot_username || 'AvariKeysBot',
       settings: { ...mockTelegramSettings },
       subscribers: [...mockTelegramSubscribers],
       total_subscribers: mockTelegramSubscribers.length,
@@ -1238,14 +1238,14 @@ PersistentKeepalive = 25`;
     await new Promise((resolve) => setTimeout(resolve, 500));
     return {
       success: true,
-      message: `Тестовое оповещение успешно отправлено в Telegram @${mockTelegramSettings.bot_username || 'AvariElfBot'}`,
+      message: `Тестовое оповещение успешно отправлено в Telegram @${mockTelegramSettings.bot_username || 'AvariKeysBot'}`,
     };
   },
 
   async getUserTelegramStatus(): Promise<UserTelegramStatus> {
     await new Promise((resolve) => setTimeout(resolve, 150));
     const sub = mockTelegramSubscribers.find((s) => s.user_id === mockCurrentUser.id || s.username === mockCurrentUser.username);
-    const botName = mockTelegramSettings.bot_username || 'AvariElfBot';
+    const botName = mockTelegramSettings.bot_username || 'AvariKeysBot';
     return {
       bot_username: botName,
       bot_enabled: mockTelegramSettings.enabled,
@@ -1268,8 +1268,8 @@ PersistentKeepalive = 25`;
 let mockTelegramSettings: TelegramSettings = {
   enabled: true,
   bot_token: '123456789:AAFakeTokenForDevelopmentOnly_XYZ',
-  bot_username: 'AvariElfBot',
-  admin_secret: 'elfsecret123',
+  bot_username: 'AvariKeysBot',
+  admin_secret: 'secret123',
   notify_on_node_down: true,
   notify_on_node_recover: true,
   notify_on_new_user: true,
