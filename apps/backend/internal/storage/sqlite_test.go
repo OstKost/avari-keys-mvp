@@ -2,6 +2,7 @@ package storage_test
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -548,6 +549,55 @@ func TestTelemetryStorageAndMonthlyDelta(t *testing.T) {
 	}
 }
 
+func TestSchemaUpgradeFromLegacyDatabase(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "avari-legacy-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+	dbPath := filepath.Join(tmpDir, "legacy.db")
 
+	// Create legacy database manually without public_key in client_configs
+	rawDB, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("failed to open raw db: %v", err)
+	}
+	legacySchema := `
+	CREATE TABLE users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		username TEXT UNIQUE NOT NULL,
+		password_hash TEXT NOT NULL,
+		role TEXT NOT NULL DEFAULT 'user',
+		is_active INTEGER NOT NULL DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE TABLE nodes (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		type TEXT NOT NULL,
+		api_url TEXT NOT NULL,
+		api_key TEXT NOT NULL,
+		is_active INTEGER NOT NULL DEFAULT 1,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE TABLE client_configs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		node_id INTEGER NOT NULL,
+		client_name TEXT NOT NULL,
+		device_name TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+	if _, err := rawDB.Exec(legacySchema); err != nil {
+		t.Fatalf("failed to setup legacy schema: %v", err)
+	}
+	_ = rawDB.Close()
 
-
+	// Now initialize NewSQLiteStorage on this legacy DB
+	store, err := storage.NewSQLiteStorage(dbPath)
+	if err != nil {
+		t.Fatalf("failed to migrate legacy database: %v", err)
+	}
+	defer store.Close()
+}
