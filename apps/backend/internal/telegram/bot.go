@@ -254,32 +254,62 @@ func (b *Bot) Stop() {
 	log.Printf("[TELEGRAM] Bot @%s stopped", b.botUsername)
 }
 
-// tgUpdate represents incoming Telegram Update.
-type tgUpdate struct {
-	UpdateID int64 `json:"update_id"`
-	Message  *struct {
-		MessageID int64 `json:"message_id"`
-		From      *struct {
-			ID        int64  `json:"id"`
-			IsBot     bool   `json:"is_bot"`
-			FirstName string `json:"first_name"`
-			Username  string `json:"username"`
-		} `json:"from"`
-		Chat struct {
-			ID        int64  `json:"id"`
-			Type      string `json:"type"`
-			Title     string `json:"title,omitempty"`
-			Username  string `json:"username,omitempty"`
-			FirstName string `json:"first_name,omitempty"`
-		} `json:"chat"`
-		Text string `json:"text"`
-		Date int64  `json:"date"`
-	} `json:"message"`
+// InlineKeyboardButton represents an inline keyboard button in Telegram Bot API.
+type InlineKeyboardButton struct {
+	Text         string `json:"text"`
+	CallbackData string `json:"callback_data,omitempty"`
+	URL          string `json:"url,omitempty"`
 }
 
-type tgUpdatesResponse struct {
+// InlineKeyboardMarkup represents inline keyboard reply markup.
+type InlineKeyboardMarkup struct {
+	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"`
+}
+
+// TGUser represents Telegram user object.
+type TGUser struct {
+	ID        int64  `json:"id"`
+	IsBot     bool   `json:"is_bot"`
+	FirstName string `json:"first_name"`
+	Username  string `json:"username"`
+}
+
+// TGChat represents Telegram chat object.
+type TGChat struct {
+	ID        int64  `json:"id"`
+	Type      string `json:"type"`
+	Title     string `json:"title,omitempty"`
+	Username  string `json:"username,omitempty"`
+	FirstName string `json:"first_name,omitempty"`
+}
+
+// TGMessage represents Telegram message object.
+type TGMessage struct {
+	MessageID int64   `json:"message_id"`
+	From      *TGUser `json:"from,omitempty"`
+	Chat      TGChat  `json:"chat"`
+	Text      string  `json:"text,omitempty"`
+	Date      int64   `json:"date,omitempty"`
+}
+
+// TGCallbackQuery represents incoming Telegram Callback Query (inline button click).
+type TGCallbackQuery struct {
+	ID      string     `json:"id"`
+	From    TGUser     `json:"from"`
+	Message *TGMessage `json:"message,omitempty"`
+	Data    string     `json:"data"`
+}
+
+// TGUpdate represents incoming Telegram Update.
+type TGUpdate struct {
+	UpdateID      int64            `json:"update_id"`
+	Message       *TGMessage       `json:"message,omitempty"`
+	CallbackQuery *TGCallbackQuery `json:"callback_query,omitempty"`
+}
+
+type TGUpdatesResponse struct {
 	OK     bool       `json:"ok"`
-	Result []tgUpdate `json:"result"`
+	Result []TGUpdate `json:"result"`
 }
 
 func (b *Bot) pollUpdates(ctx context.Context) {
@@ -334,7 +364,7 @@ func (b *Bot) pollUpdates(ctx context.Context) {
 			continue
 		}
 
-		var updateRes tgUpdatesResponse
+		var updateRes TGUpdatesResponse
 		if err := json.Unmarshal(body, &updateRes); err != nil || !updateRes.OK {
 			time.Sleep(2 * time.Second)
 			continue
@@ -345,16 +375,14 @@ func (b *Bot) pollUpdates(ctx context.Context) {
 			if upd.Message != nil && upd.Message.Text != "" {
 				b.handleIncomingMessage(ctx, upd.Message.Chat.ID, upd.Message.From, upd.Message.Text)
 			}
+			if upd.CallbackQuery != nil {
+				b.handleCallbackQuery(ctx, upd.CallbackQuery)
+			}
 		}
 	}
 }
 
-func (b *Bot) handleIncomingMessage(ctx context.Context, chatID int64, from *struct {
-	ID        int64  `json:"id"`
-	IsBot     bool   `json:"is_bot"`
-	FirstName string `json:"first_name"`
-	Username  string `json:"username"`
-}, text string) {
+func (b *Bot) handleIncomingMessage(ctx context.Context, chatID int64, from *TGUser, text string) {
 	username := ""
 	firstName := ""
 	if from != nil {
@@ -669,19 +697,9 @@ func (b *Bot) handleNodesCommand(ctx context.Context, chatID int64) {
 
 // ProcessMessage handles an incoming chat message (useful for direct testing and webhook integrations).
 func (b *Bot) ProcessMessage(ctx context.Context, chatID int64, fromUsername, fromFirstName, text string) {
-	var from *struct {
-		ID        int64  `json:"id"`
-		IsBot     bool   `json:"is_bot"`
-		FirstName string `json:"first_name"`
-		Username  string `json:"username"`
-	}
+	var from *TGUser
 	if fromUsername != "" || fromFirstName != "" {
-		from = &struct {
-			ID        int64  `json:"id"`
-			IsBot     bool   `json:"is_bot"`
-			FirstName string `json:"first_name"`
-			Username  string `json:"username"`
-		}{
+		from = &TGUser{
 			FirstName: fromFirstName,
 			Username:  fromUsername,
 		}
@@ -689,8 +707,172 @@ func (b *Bot) ProcessMessage(ctx context.Context, chatID int64, fromUsername, fr
 	b.handleIncomingMessage(ctx, chatID, from, text)
 }
 
+// ProcessCallbackQuery processes an incoming callback query directly (useful for testing or webhook mode).
+func (b *Bot) ProcessCallbackQuery(ctx context.Context, cb *TGCallbackQuery) {
+	b.handleCallbackQuery(ctx, cb)
+}
+
+func (b *Bot) handleCallbackQuery(ctx context.Context, cb *TGCallbackQuery) {
+	if cb == nil {
+		return
+	}
+
+	// 1. Verify caller authorization: must be registered admin
+	var currentChat *models.TelegramChat
+	if b.storage != nil {
+		currentChat, _ = b.storage.GetTelegramChatByChatID(ctx, cb.From.ID)
+	}
+
+	isAdmin := false
+	if currentChat != nil && currentChat.IsAdmin {
+		isAdmin = true
+	}
+
+	if !isAdmin {
+		_ = b.AnswerCallbackQuery(cb.ID, "⛔ У вас нет прав администратора для выполнения этого действия", true)
+		return
+	}
+
+	adminName := cb.From.Username
+	if adminName == "" {
+		adminName = cb.From.FirstName
+	}
+	if adminName == "" {
+		adminName = fmt.Sprintf("ID#%d", cb.From.ID)
+	}
+
+	// 2. Route callback action
+	switch {
+	case strings.HasPrefix(cb.Data, "approve_user:"):
+		idStr := strings.TrimPrefix(cb.Data, "approve_user:")
+		userID, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			_ = b.AnswerCallbackQuery(cb.ID, "Некорректный ID пользователя", true)
+			return
+		}
+
+		if b.storage == nil {
+			_ = b.AnswerCallbackQuery(cb.ID, "База данных недоступна", true)
+			return
+		}
+
+		user, err := b.storage.GetUserByID(ctx, userID)
+		if err != nil || user == nil {
+			_ = b.AnswerCallbackQuery(cb.ID, "Пользователь не найден", true)
+			return
+		}
+
+		if user.IsActive {
+			_ = b.AnswerCallbackQuery(cb.ID, fmt.Sprintf("Пользователь @%s уже активирован", user.Username), false)
+			if cb.Message != nil {
+				updatedText := fmt.Sprintf(
+					"👤 <b>[Avari Keys] Новый пользователь!</b>\n"+
+						"━━━━━━━━━━━━━━━━━━━━━\n"+
+						"Пользователь: <b>@%s</b> (ID #%d)\n"+
+						"Статус: 🟢 <b>Одобрен</b> (модератор: @%s)\n"+
+						"Дата: %s",
+					user.Username,
+					user.ID,
+					adminName,
+					user.CreatedAt.Format("02.01.2006 15:04:05"),
+				)
+				_ = b.EditMessageText(cb.Message.Chat.ID, cb.Message.MessageID, updatedText, "HTML", InlineKeyboardMarkup{InlineKeyboard: [][]InlineKeyboardButton{}})
+			}
+			return
+		}
+
+		if err := b.storage.SetUserActive(ctx, userID, true); err != nil {
+			_ = b.AnswerCallbackQuery(cb.ID, fmt.Sprintf("Ошибка активации: %v", err), true)
+			return
+		}
+
+		_ = b.storage.CreateAuditLog(ctx, &models.AuditLog{
+			Username: "tg:@" + adminName,
+			Action:   "admin_user_activate_tg",
+			Category: models.CategoryAdmin,
+			Details:  fmt.Sprintf("Пользователь «%s» (ID #%d) активирован администратором через Telegram (@%s)", user.Username, user.ID, adminName),
+		})
+
+		_ = b.AnswerCallbackQuery(cb.ID, fmt.Sprintf("✅ Пользователь @%s успешно одобрен!", user.Username), false)
+
+		if cb.Message != nil {
+			updatedText := fmt.Sprintf(
+				"👤 <b>[Avari Keys] Новый пользователь!</b>\n"+
+					"━━━━━━━━━━━━━━━━━━━━━\n"+
+					"Пользователь: <b>@%s</b> (ID #%d)\n"+
+					"Статус: 🟢 <b>Одобрен</b> (модератор: @%s)\n"+
+					"Дата: %s",
+				user.Username,
+				user.ID,
+				adminName,
+				user.CreatedAt.Format("02.01.2006 15:04:05"),
+			)
+			_ = b.EditMessageText(cb.Message.Chat.ID, cb.Message.MessageID, updatedText, "HTML", InlineKeyboardMarkup{InlineKeyboard: [][]InlineKeyboardButton{}})
+		}
+
+		// Notify user if their Telegram account is linked
+		userChat, _ := b.storage.GetTelegramChatByUserID(ctx, user.ID)
+		if userChat != nil {
+			_ = b.SendMessage(userChat.ChatID, "🎉 <b>Ваш аккаунт активирован!</b>\n\nАдминистратор подтвердил вашу учетную запись в Avari Keys.\nТеперь вы можете перейти в панель управления и создать VPN-ключ.", "HTML")
+		}
+
+	case strings.HasPrefix(cb.Data, "reject_user:"):
+		idStr := strings.TrimPrefix(cb.Data, "reject_user:")
+		userID, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			_ = b.AnswerCallbackQuery(cb.ID, "Некорректный ID пользователя", true)
+			return
+		}
+
+		if b.storage == nil {
+			_ = b.AnswerCallbackQuery(cb.ID, "База данных недоступна", true)
+			return
+		}
+
+		user, err := b.storage.GetUserByID(ctx, userID)
+		if err != nil || user == nil {
+			_ = b.AnswerCallbackQuery(cb.ID, "Пользователь не найден", true)
+			return
+		}
+
+		_ = b.storage.SetUserActive(ctx, userID, false)
+
+		_ = b.storage.CreateAuditLog(ctx, &models.AuditLog{
+			Username: "tg:@" + adminName,
+			Action:   "admin_user_reject_tg",
+			Category: models.CategoryAdmin,
+			Details:  fmt.Sprintf("Пользователю «%s» (ID #%d) отказано в активации через Telegram (@%s)", user.Username, user.ID, adminName),
+		})
+
+		_ = b.AnswerCallbackQuery(cb.ID, fmt.Sprintf("❌ Пользователь @%s отклонен", user.Username), false)
+
+		if cb.Message != nil {
+			updatedText := fmt.Sprintf(
+				"👤 <b>[Avari Keys] Новый пользователь!</b>\n"+
+					"━━━━━━━━━━━━━━━━━━━━━\n"+
+					"Пользователь: <b>@%s</b> (ID #%d)\n"+
+					"Статус: 🔴 <b>Отклонен</b> (модератор: @%s)\n"+
+					"Дата: %s",
+				user.Username,
+				user.ID,
+				adminName,
+				user.CreatedAt.Format("02.01.2006 15:04:05"),
+			)
+			_ = b.EditMessageText(cb.Message.Chat.ID, cb.Message.MessageID, updatedText, "HTML", InlineKeyboardMarkup{InlineKeyboard: [][]InlineKeyboardButton{}})
+		}
+
+	default:
+		_ = b.AnswerCallbackQuery(cb.ID, "Неизвестное действие", false)
+	}
+}
+
 // SendMessage sends an individual text message via Telegram API.
 func (b *Bot) SendMessage(chatID int64, text string, parseMode string) error {
+	return b.SendMessageWithMarkup(chatID, text, parseMode, nil)
+}
+
+// SendMessageWithMarkup sends an individual text message with optional reply_markup via Telegram API.
+func (b *Bot) SendMessageWithMarkup(chatID int64, text string, parseMode string, markup any) error {
 	b.mu.RLock()
 	token := b.token
 	enabled := b.enabled
@@ -710,6 +892,9 @@ func (b *Bot) SendMessage(chatID int64, text string, parseMode string) error {
 	}
 	if parseMode != "" {
 		payload["parse_mode"] = parseMode
+	}
+	if markup != nil {
+		payload["reply_markup"] = markup
 	}
 
 	body, err := json.Marshal(payload)
@@ -732,8 +917,105 @@ func (b *Bot) SendMessage(chatID int64, text string, parseMode string) error {
 	return nil
 }
 
+// AnswerCallbackQuery sends a response to an incoming callback query.
+func (b *Bot) AnswerCallbackQuery(callbackQueryID, text string, showAlert bool) error {
+	b.mu.RLock()
+	token := b.token
+	enabled := b.enabled
+	apiBase := b.apiURL
+	b.mu.RUnlock()
+
+	if !enabled || token == "" {
+		return fmt.Errorf("telegram bot is not configured or disabled")
+	}
+	if apiBase == "" {
+		apiBase = "https://api.telegram.org"
+	}
+
+	payload := map[string]any{
+		"callback_query_id": callbackQueryID,
+	}
+	if text != "" {
+		payload["text"] = text
+	}
+	if showAlert {
+		payload["show_alert"] = true
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("%s/bot%s/answerCallbackQuery", apiBase, token)
+	resp, err := b.httpClient.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to answer callback query: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("telegram API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+// EditMessageText edits existing message text and optionally updates or removes reply_markup.
+func (b *Bot) EditMessageText(chatID, messageID int64, text, parseMode string, markup any) error {
+	b.mu.RLock()
+	token := b.token
+	enabled := b.enabled
+	apiBase := b.apiURL
+	b.mu.RUnlock()
+
+	if !enabled || token == "" {
+		return fmt.Errorf("telegram bot is not configured or disabled")
+	}
+	if apiBase == "" {
+		apiBase = "https://api.telegram.org"
+	}
+
+	payload := map[string]any{
+		"chat_id":    chatID,
+		"message_id": messageID,
+		"text":       text,
+	}
+	if parseMode != "" {
+		payload["parse_mode"] = parseMode
+	}
+	if markup != nil {
+		payload["reply_markup"] = markup
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("%s/bot%s/editMessageText", apiBase, token)
+	resp, err := b.httpClient.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to edit message text: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("telegram API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
 // BroadcastAlert sends an alert to all registered subscribers.
 func (b *Bot) BroadcastAlert(text string) error {
+	return b.BroadcastAlertWithMarkup(text, nil)
+}
+
+// BroadcastAlertWithMarkup sends an alert with optional inline markup to registered admin subscribers.
+func (b *Bot) BroadcastAlertWithMarkup(text string, markup any) error {
 	if !b.IsEnabled() || b.storage == nil {
 		return nil
 	}
@@ -748,7 +1030,7 @@ func (b *Bot) BroadcastAlert(text string) error {
 		if !c.AlertsEnabled {
 			continue
 		}
-		if err := b.SendMessage(c.ChatID, text, "HTML"); err != nil {
+		if err := b.SendMessageWithMarkup(c.ChatID, text, "HTML", markup); err != nil {
 			log.Printf("[TELEGRAM] Failed to send alert to chat %d: %v", c.ChatID, err)
 			lastErr = err
 		}
@@ -814,7 +1096,7 @@ func (b *Bot) NotifyNodeRecovered(node models.Node, latencyMs int64) {
 	_ = b.BroadcastAlert(msg)
 }
 
-// NotifyNewUser sends an alert about new user registration pending approval.
+// NotifyNewUser sends an alert about new user registration pending approval with inline action buttons.
 func (b *Bot) NotifyNewUser(user models.User) {
 	b.mu.RLock()
 	notify := b.notifyOnNewUser
@@ -830,12 +1112,22 @@ func (b *Bot) NotifyNewUser(user models.User) {
 			"Пользователь: <b>@%s</b> (ID #%d)\n"+
 			"Статус: 🟡 <b>Ожидает модерации</b>\n"+
 			"Дата: %s\n\n"+
-			"<i>Перейдите в панель администратора для активации учетной записи.</i>",
+			"<i>Нажмите кнопку ниже или используйте веб-панель для модерации.</i>",
 		user.Username,
 		user.ID,
 		user.CreatedAt.Format("02.01.2006 15:04:05"),
 	)
-	_ = b.BroadcastAlert(msg)
+
+	keyboard := InlineKeyboardMarkup{
+		InlineKeyboard: [][]InlineKeyboardButton{
+			{
+				{Text: "✅ Одобрить", CallbackData: fmt.Sprintf("approve_user:%d", user.ID)},
+				{Text: "❌ Отклонить", CallbackData: fmt.Sprintf("reject_user:%d", user.ID)},
+			},
+		},
+	}
+
+	_ = b.BroadcastAlertWithMarkup(msg, keyboard)
 }
 
 // SendTestAlert sends a test message to a specific chat or broadcasts.
