@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/models"
 	"github.com/OstKost/avari-keys-mvp/apps/backend/internal/storage"
@@ -466,6 +467,87 @@ func TestTelegramLinkTokensStorage(t *testing.T) {
 		t.Fatalf("unexpected fetched chat: %+v", fetchedChat)
 	}
 }
+
+func TestTelemetryStorageAndMonthlyDelta(t *testing.T) {
+	store, cleanup := createTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// 1. Create User, Node, and ClientConfig with PublicKey
+	user, err := store.CreateUser(ctx, "tele_test_user", "password123")
+	if err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+	node, err := store.CreateNode(ctx, "Test Node S1", "direct", "NLD", "https://aeza.net", "http://127.0.0.1:8080", "secret", false)
+	if err != nil {
+		t.Fatalf("failed to create node: %v", err)
+	}
+
+	cfg, err := store.CreateClientConfig(ctx, user.ID, node.ID, "u1_iphone", "iPhone", "pubkeyBase64==", "10.7.0.2")
+	if err != nil {
+		t.Fatalf("failed to create client config: %v", err)
+	}
+	if cfg.PublicKey != "pubkeyBase64==" || cfg.AllocatedIP != "10.7.0.2" {
+		t.Fatalf("expected PublicKey and AllocatedIP set, got %+v", cfg)
+	}
+
+	// 2. Record first batch of telemetry (100MB RX, 50MB TX, handshake 30s ago)
+	now := time.Now().Unix()
+	handshake1 := now - 30
+	err = store.RecordPeerTelemetry(ctx, cfg.ID, 100*1024*1024, 50*1024*1024, handshake1, true)
+	if err != nil {
+		t.Fatalf("failed to record peer telemetry: %v", err)
+	}
+
+	err = store.RecordNodeTelemetry(ctx, node.ID, 100*1024*1024, 50*1024*1024)
+	if err != nil {
+		t.Fatalf("failed to record node telemetry: %v", err)
+	}
+
+	// 3. Verify updated config
+	updatedCfg, err := store.GetClientConfigByID(ctx, cfg.ID)
+	if err != nil {
+		t.Fatalf("failed to get client config: %v", err)
+	}
+	if updatedCfg.TotalTrafficBytes != 150*1024*1024 {
+		t.Fatalf("expected 150MB total traffic, got %d", updatedCfg.TotalTrafficBytes)
+	}
+	if updatedCfg.MonthTrafficBytes != 150*1024*1024 {
+		t.Fatalf("expected 150MB month traffic, got %d", updatedCfg.MonthTrafficBytes)
+	}
+	if !updatedCfg.IsOnline {
+		t.Fatalf("expected client to be online")
+	}
+
+	// 4. Record second batch of telemetry (additional 50MB RX, 20MB TX)
+	err = store.RecordPeerTelemetry(ctx, cfg.ID, 50*1024*1024, 20*1024*1024, now-10, true)
+	if err != nil {
+		t.Fatalf("failed to record second peer telemetry: %v", err)
+	}
+
+	updatedCfg2, err := store.GetClientConfigByID(ctx, cfg.ID)
+	if err != nil {
+		t.Fatalf("failed to get client config: %v", err)
+	}
+	expectedTotal := int64(220 * 1024 * 1024)
+	if updatedCfg2.TotalTrafficBytes != expectedTotal {
+		t.Fatalf("expected %d total traffic, got %d", expectedTotal, updatedCfg2.TotalTrafficBytes)
+	}
+	if updatedCfg2.MonthTrafficBytes != expectedTotal {
+		t.Fatalf("expected %d month traffic, got %d", expectedTotal, updatedCfg2.MonthTrafficBytes)
+	}
+
+	// 5. Test Month Traffic Map
+	monthMap, err := store.GetMonthTrafficMap(ctx, time.Now().UTC().Format("2006-01"))
+	if err != nil {
+		t.Fatalf("failed to get month traffic map: %v", err)
+	}
+	if monthMap[cfg.ID] != expectedTotal {
+		t.Fatalf("expected %d in monthMap for client %d, got %d", expectedTotal, cfg.ID, monthMap[cfg.ID])
+	}
+}
+
 
 
 

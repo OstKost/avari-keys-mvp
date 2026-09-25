@@ -18,6 +18,7 @@
 | | | | | [TASK-019](./tasks/TASK-019-stats-tg-billing-settings-fixes.md) |
 | | | | | [TASK-020](./tasks/TASK-020-telegram-user-banner-and-linking.md) |
 | | | | | [TASK-021](./tasks/TASK-021-secure-telegram-linking-and-decoy.md) |
+| | | | | [TASK-022](./tasks/TASK-022-stats-telemetry-redesign.md) |
 
 ---
 
@@ -37,5 +38,7 @@
 - **[TASK-019](./tasks/TASK-019-stats-tg-billing-settings-fixes.md)**: ✅ Метрики трафика через Curve25519 деривацию, Telegram бот фиксы и напоминания, расчет взносов, страница Настройки.
 - **[TASK-020](./tasks/TASK-020-telegram-user-banner-and-linking.md)**: ✅ Баннер-приглашение в Telegram-бота над ключами, персональная привязка deep link и оповещения.
 - **[TASK-021](./tasks/TASK-021-secure-telegram-linking-and-decoy.md)**: ✅ Безопасная привязка Telegram-бота по токену и Decoy-заглушка для неизвестных пользователей.
+- **[TASK-022](./tasks/TASK-022-stats-telemetry-redesign.md)**: ✅ Полный редизайн сбора статистики и телеметрии AmneziaWG (PublicKey, Delta Engine, SQLite, Worker).
+
 
 

@@ -18,7 +18,7 @@ export function AdminAllKeys() {
   const [search, setSearch] = useState('');
   const [selectedNodeId, setSelectedNodeId] = useState<number | undefined>(undefined);
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -95,6 +95,11 @@ export function AdminAllKeys() {
   const handleNodeFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value ? Number(e.target.value) : undefined;
     setSelectedNodeId(val);
+    setPage(1);
+  };
+
+  const handleLimitChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setLimit(Number(e.target.value));
     setPage(1);
   };
 
@@ -240,29 +245,65 @@ export function AdminAllKeys() {
 
       {/* Pagination Bar */}
       {totalCount > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 py-1 text-sm text-[#A8B4B7] font-mono">
-          <div>
-            Показано {(page - 1) * limit + 1}–{Math.min(page * limit, totalCount)} из {totalCount} ключей
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-2 text-sm text-[#A8B4B7] font-mono">
+          <div className="flex flex-wrap items-center gap-3">
+            <div>
+              Показано {(page - 1) * limit + 1}–{Math.min(page * limit, totalCount)} из {totalCount} ключей
+            </div>
+            <div className="flex items-center space-x-2 text-xs text-[#718187]">
+              <span>По:</span>
+              <select
+                value={limit}
+                onChange={handleLimitChange}
+                className="bg-[#06141B] border border-[#1C3945] rounded-lg px-2 py-1 text-xs text-[#D9B96E] font-mono focus:outline-none cursor-pointer"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
           </div>
 
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="flex items-center space-x-1 px-3.5 py-2 rounded-lg border border-[#1C3945] bg-[#102833] hover:bg-[#1C3945] text-[#F2F0E8] disabled:opacity-40 disabled:hover:bg-[#102833] transition"
+              className="flex items-center space-x-1 px-3.5 py-2 rounded-lg border border-[#1C3945] bg-[#102833] hover:bg-[#1C3945] text-[#F2F0E8] disabled:opacity-40 disabled:hover:bg-[#102833] disabled:cursor-not-allowed cursor-pointer transition shadow-sm"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Назад</span>
             </button>
 
-            <div className="px-3.5 py-2 rounded-lg bg-[#06141B] border border-[#1C3945] text-sm font-mono font-bold text-[#D9B96E]">
-              {page} / {totalPages}
+            {/* Page number buttons */}
+            <div className="flex items-center space-x-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                .map((p, idx, arr) => {
+                  const prev = arr[idx - 1];
+                  const showEllipsis = prev && p - prev > 1;
+                  return (
+                    <div key={p} className="flex items-center space-x-1">
+                      {showEllipsis && <span className="px-1 text-[#718187]">...</span>}
+                      <button
+                        onClick={() => setPage(p)}
+                        className={`min-w-[36px] h-9 px-2.5 rounded-lg border text-sm font-mono font-bold transition cursor-pointer ${
+                          page === p
+                            ? 'bg-gradient-to-r from-[#F0D48D] via-[#D9B96E] to-[#A98A48] text-[#06141B] border-[#D9B96E] shadow-md shadow-[#D9B96E]/20'
+                            : 'bg-[#06141B] border-[#1C3945] text-[#A8B4B7] hover:text-[#F2F0E8] hover:bg-[#102833]'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    </div>
+                  );
+                })}
             </div>
 
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="flex items-center space-x-1 px-3.5 py-2 rounded-lg border border-[#1C3945] bg-[#102833] hover:bg-[#1C3945] text-[#F2F0E8] disabled:opacity-40 disabled:hover:bg-[#102833] transition"
+              className="flex items-center space-x-1 px-3.5 py-2 rounded-lg border border-[#1C3945] bg-[#102833] hover:bg-[#1C3945] text-[#F2F0E8] disabled:opacity-40 disabled:hover:bg-[#102833] disabled:cursor-not-allowed cursor-pointer transition shadow-sm"
             >
               <span>Вперед</span>
               <ChevronRight className="w-4 h-4" />
