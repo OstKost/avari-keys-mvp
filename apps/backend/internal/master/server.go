@@ -241,7 +241,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, models.HealthResponse{
 		Status:  "ok",
 		Service: "avari-master",
-		Version: "v0.2.4",
+		Version: "v0.4.3",
 	})
 }
 
@@ -1380,20 +1380,25 @@ func (s *Server) handleAdminGetTelegramStatus(w http.ResponseWriter, r *http.Req
 	}
 
 	botUsername := s.cfg.TelegramBotUsername
-	if botUsername == "" {
-		botUsername = "AvariElfBot"
-	}
-
 	var settings *models.TelegramSettings
+	isEnabled := false
 	if s.telegramBot != nil {
 		snap := s.telegramBot.GetSettings()
 		settings = &snap
 		if snap.BotUsername != "" {
 			botUsername = snap.BotUsername
 		}
+		isEnabled = s.telegramBot.IsEnabled()
+	} else {
+		dbSettings, err := s.storage.GetTelegramSettings(r.Context())
+		if err == nil && dbSettings != nil {
+			settings = dbSettings
+			if dbSettings.BotUsername != "" {
+				botUsername = dbSettings.BotUsername
+			}
+			isEnabled = dbSettings.Enabled
+		}
 	}
-
-	isEnabled := s.telegramBot != nil && s.telegramBot.IsEnabled()
 
 	s.writeJSON(w, http.StatusOK, models.TelegramStatusResponse{
 		Enabled:          isEnabled,
@@ -1539,15 +1544,20 @@ func (s *Server) handleGetUserTelegramStatus(w http.ResponseWriter, r *http.Requ
 	claims, _ := auth.GetUserFromContext(r.Context())
 
 	botUsername := s.cfg.TelegramBotUsername
-	if botUsername == "" {
-		botUsername = "AvariElfBot"
-	}
 	botEnabled := false
 	if s.telegramBot != nil {
 		snap := s.telegramBot.GetSettings()
 		botEnabled = s.telegramBot.IsEnabled()
 		if snap.BotUsername != "" {
 			botUsername = snap.BotUsername
+		}
+	} else {
+		dbSettings, err := s.storage.GetTelegramSettings(r.Context())
+		if err == nil && dbSettings != nil {
+			if dbSettings.BotUsername != "" {
+				botUsername = dbSettings.BotUsername
+			}
+			botEnabled = dbSettings.Enabled
 		}
 	}
 
@@ -1563,7 +1573,10 @@ func (s *Server) handleGetUserTelegramStatus(w http.ResponseWriter, r *http.Requ
 	}
 
 	token, _ := s.storage.GetOrCreateTelegramLinkToken(r.Context(), claims.UserID)
-	deepLink := fmt.Sprintf("https://t.me/%s?start=link_%s", botUsername, token)
+	deepLink := ""
+	if botUsername != "" {
+		deepLink = fmt.Sprintf("https://t.me/%s?start=link_%s", botUsername, token)
+	}
 
 	s.writeJSON(w, http.StatusOK, models.UserTelegramStatusResponse{
 		BotUsername:      botUsername,

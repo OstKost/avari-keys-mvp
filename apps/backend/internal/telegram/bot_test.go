@@ -150,7 +150,7 @@ func TestTelegramBotSecurityAndLinking(t *testing.T) {
 	cfg := telegram.Config{
 		APIURL:      mockTG.URL,
 		Token:       "secret_token_123",
-		BotUsername: "AvariElfBot",
+		BotUsername: "AvariKeysBot",
 		AdminSecret: "AdminAccessSecretCode",
 		Storage:     store,
 	}

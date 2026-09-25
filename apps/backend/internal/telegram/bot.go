@@ -80,10 +80,6 @@ func NewBot(cfg Config) *Bot {
 		statsLister:              cfg.StatsLister,
 	}
 
-	if bot.botUsername == "" {
-		bot.botUsername = "AvariElfBot"
-	}
-
 	// Auto-register initial admin chat if provided in env
 	if cfg.AdminChatID != "" && cfg.Storage != nil {
 		if id, err := strconv.ParseInt(cfg.AdminChatID, 10, 64); err == nil && id != 0 {
@@ -190,10 +186,6 @@ func (b *Bot) UpdateConfig(ctx context.Context, s models.TelegramSettings) error
 	b.notifyOnNodeRecover = s.NotifyOnNodeRecover
 	b.notifyOnNewUser = s.NotifyOnNewUser
 	b.notifyOnBillingReminders = s.NotifyOnBillingReminders
-
-	if b.botUsername == "" {
-		b.botUsername = "AvariElfBot"
-	}
 
 	// Hot reload polling worker if token or enabled status changed
 	if tokenChanged || enabledChanged {
@@ -476,7 +468,11 @@ func (b *Bot) handleIncomingMessage(ctx context.Context, chatID int64, from *TGU
 	// 4. Authorized user command handling
 	switch command {
 	case "/start":
-		msg := "🌿 <b>Avari Keys Bot (@" + botUsername + ")</b>\n\n" +
+		botHeader := "🌿 <b>Avari Keys Bot</b>"
+		if botUsername != "" {
+			botHeader = "🌿 <b>Avari Keys Bot (@" + botUsername + ")</b>"
+		}
+		msg := botHeader + "\n\n" +
 			"Бот активен и готов присылать мгновенные уведомления о состоянии серверов и напоминания о кооперативных взносах.\n\n" +
 			"<b>Доступные команды:</b>\n" +
 			"💳 /billing — Статус взносов, расчет и реквизиты СБП\n" +

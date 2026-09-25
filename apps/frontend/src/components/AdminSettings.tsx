@@ -36,7 +36,7 @@ export function AdminSettings() {
   // --- Telegram Settings State ---
   const [tgEnabled, setTgEnabled] = useState(true);
   const [botToken, setBotToken] = useState('');
-  const [botUsername, setBotUsername] = useState('AvariElfBot');
+  const [botUsername, setBotUsername] = useState('');
   const [adminSecret, setAdminSecret] = useState('');
   const [notifyOnNodeDown, setNotifyOnNodeDown] = useState(true);
   const [notifyOnNodeRecover, setNotifyOnNodeRecover] = useState(true);
@@ -64,7 +64,7 @@ export function AdminSettings() {
       if (tgSettings) {
         setTgEnabled(tgSettings.enabled);
         setBotToken(tgSettings.bot_token || '');
-        setBotUsername(tgSettings.bot_username || 'AvariElfBot');
+        setBotUsername(tgSettings.bot_username || '');
         setAdminSecret(tgSettings.admin_secret || '');
         setNotifyOnNodeDown(tgSettings.notify_on_node_down ?? true);
         setNotifyOnNodeRecover(tgSettings.notify_on_node_recover ?? true);
@@ -321,7 +321,7 @@ export function AdminSettings() {
                     <span className="absolute left-3.5 top-2.5 text-[#718187] font-mono text-sm">@</span>
                     <input
                       type="text"
-                      placeholder="AvariElfBot"
+                      placeholder="например: AvariKeysBot"
                       value={botUsername}
                       onChange={(e) => setBotUsername(e.target.value)}
                       className="w-full bg-[#0A1D26] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl pl-8 pr-3.5 py-2.5 text-sm text-[#F2F0E8] font-mono focus:outline-none placeholder:text-slate-600 transition"
@@ -336,7 +336,7 @@ export function AdminSettings() {
                   </label>
                   <input
                     type="text"
-                    placeholder="elfsecret123"
+                    placeholder="например: secret123"
                     value={adminSecret}
                     onChange={(e) => setAdminSecret(e.target.value)}
                     className="w-full bg-[#0A1D26] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] font-mono focus:outline-none placeholder:text-slate-600 transition"

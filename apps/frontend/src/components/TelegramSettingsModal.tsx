@@ -34,7 +34,7 @@ export function TelegramSettingsModal({ isOpen, onClose, onSaved }: TelegramSett
   // Settings State
   const [enabled, setEnabled] = useState(true);
   const [botToken, setBotToken] = useState('');
-  const [botUsername, setBotUsername] = useState('AvariElfBot');
+  const [botUsername, setBotUsername] = useState('');
   const [adminSecret, setAdminSecret] = useState('');
   const [notifyOnNodeDown, setNotifyOnNodeDown] = useState(true);
   const [notifyOnNodeRecover, setNotifyOnNodeRecover] = useState(true);
@@ -57,7 +57,7 @@ export function TelegramSettingsModal({ isOpen, onClose, onSaved }: TelegramSett
         if (settings) {
           setEnabled(settings.enabled);
           setBotToken(settings.bot_token || '');
-          setBotUsername(settings.bot_username || 'AvariElfBot');
+          setBotUsername(settings.bot_username || '');
           setAdminSecret(settings.admin_secret || '');
           setNotifyOnNodeDown(settings.notify_on_node_down ?? true);
           setNotifyOnNodeRecover(settings.notify_on_node_recover ?? true);
@@ -250,7 +250,7 @@ export function TelegramSettingsModal({ isOpen, onClose, onSaved }: TelegramSett
                   </label>
                   <input
                     type="text"
-                    placeholder="AvariElfBot"
+                    placeholder="например: AvariKeysBot"
                     value={botUsername}
                     onChange={(e) => setBotUsername(e.target.value)}
                     className="w-full bg-[#06141B] border border-[#1C3945] focus:border-[#D9B96E] rounded-xl px-3.5 py-2.5 text-sm text-[#F2F0E8] font-mono focus:outline-none"
